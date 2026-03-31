@@ -44,7 +44,6 @@ import EnvironmentNavigator from './EnvironmentNavigator.vue'
 import DownloadTasksPopover from './DownloadTasksPopover.vue'
 import LLMModelContent from './LLMModelContent.vue'
 import TTSContent from './TTSContent.vue'
-import ASRContent from './ASRContent.vue'
 import FFmpegContent from './FFmpegContent.vue'
 import CloudModelsContent from './CloudModelsContent.vue'
 import ImageGenContent from './ImageGenContent.vue'
@@ -69,8 +68,6 @@ const currentContentComponent = computed(() => {
       return LLMModelContent
     case 'tts':
       return TTSContent
-    case 'asr':
-      return ASRContent
     case 'ffmpeg':
       return FFmpegContent
     case 'cloud':
@@ -219,4 +216,3 @@ const handleClose = () => {
   background: var(--color-text-disabled);
 }
 </style>
-

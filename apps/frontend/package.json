@@ -27,9 +27,9 @@
     "lint:boundaries": "node ./scripts/check-boundaries.mjs"
   },
   "dependencies": {
-    "@dawnchat/auth-bridge": "workspace:*",
-    "@dawnchat/shared-protocol": "workspace:*",
-    "@dawnchat/shared-ui": "workspace:*",
+    "@dawnchat/auth-bridge": "npm:@dawnchat/auth-bridge@^0.2.0",
+    "@dawnchat/shared-protocol": "npm:@dawnchat/shared-protocol@^0.6.0",
+    "@dawnchat/shared-ui": "npm:@dawnchat/shared-ui@^0.2.0",
     "@opencode-ai/sdk": "^1.2.27",
     "@supabase/supabase-js": "^2.81.1",
     "@tauri-apps/api": "^2.8.5",

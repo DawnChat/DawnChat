@@ -11,10 +11,7 @@
       "@test/*": ["src/test/*"],
       "@mocks/*": ["src/test/mocks/*"],
       "@fixtures/*": ["src/test/mocks/fixtures/*"],
-      "@utils/*": ["src/test/utils/*"],
-      "@dawnchat/auth-bridge": ["../../dawnchat-plugins/auth-bridge/src/index.ts"],
-      "@dawnchat/shared-protocol": ["../../dawnchat-plugins/shared-protocol/src/index.ts"],
-      "@dawnchat/shared-ui": ["../../dawnchat-plugins/shared-ui/src/index.ts"]
+      "@utils/*": ["src/test/utils/*"]
     },
 
     /* Bundler mode */

@@ -26,8 +26,6 @@ dependencies = [
     "pyyaml (>=6.0.1,<7.0.0)",
     "instructware-tools (>=0.1.0,<1.0.0)",
     "ripgrep (>=15.0.0,<20.0.0)",
-    # ASR 依赖 (Whisper)
-    "faster-whisper (>=1.1.0,<2.0.0)",
     "json-repair (>=0.55.1,<1.0.0)",
     "Pillow>=10.0.0",
     "scenedetect>=0.6.6",

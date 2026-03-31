@@ -254,13 +254,6 @@ export const useEnvironmentStore = defineStore('environment', () => {
         badge: status.llm.activeDownloads > 0 ? status.llm.activeDownloads : undefined
       },
       {
-        id: 'asr' as EnvironmentCategory,
-        icon: 'Mic',
-        label: t.value.models.asr.title,
-        status: getItemStatus(status.asr.ready, status.asr.activeDownloads),
-        badge: status.asr.activeDownloads > 0 ? status.asr.activeDownloads : undefined
-      },
-      {
         id: 'ffmpeg' as EnvironmentCategory,
         icon: 'Film',
         label: t.value.models.ffmpeg.title,

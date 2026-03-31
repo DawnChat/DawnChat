@@ -201,14 +201,14 @@ importers:
   apps/frontend:
     dependencies:
       '@dawnchat/auth-bridge':
-        specifier: workspace:*
-        version: link:../../dawnchat-plugins/auth-bridge
+        specifier: npm:@dawnchat/auth-bridge@^0.2.0
+        version: 0.2.0
       '@dawnchat/shared-protocol':
-        specifier: workspace:*
-        version: link:../../dawnchat-plugins/shared-protocol
+        specifier: npm:@dawnchat/shared-protocol@^0.6.0
+        version: 0.6.0
       '@dawnchat/shared-ui':
-        specifier: workspace:*
-        version: link:../../dawnchat-plugins/shared-ui
+        specifier: npm:@dawnchat/shared-ui@^0.2.0
+        version: 0.2.0(lucide-vue-next@0.562.0(vue@3.5.24(typescript@5.9.3)))(vue@3.5.24(typescript@5.9.3))
       '@opencode-ai/sdk':
         specifier: ^1.2.27
         version: 1.2.27
@@ -540,8 +540,20 @@ packages:
     peerDependencies:
       '@capacitor/core': '>=8.0.0'
 
+  '@dawnchat/auth-bridge@0.2.0':
+    resolution: {integrity: sha512-5E2QHG535/75AohwDaJBIk6hfOj0zERYNzuxY6etUKp0KfsEGKv4CrOPRGwP/4urPIGytDR2pUHBacMRLiUppA==}
+
+  '@dawnchat/shared-protocol@0.1.0':
+    resolution: {integrity: sha512-pgacj+7/Dam6GLA41XtnjSPwkjIFPeAV0ZSK1l4oBsZkPjhDNN/41Bx+R80DhrEOTTQbA7O37uJeNhDeDoCubQ==}
+
   '@dawnchat/shared-protocol@0.6.0':
     resolution: {integrity: sha512-nLoykpyLgp0JhUmLTXMDo0u9tGpT51etzMcgU+p0ziWlxMPyHb0qiRupkNX6KUHbTGhVgUQDiC46cbgUrsSogw==}
+
+  '@dawnchat/shared-ui@0.2.0':
+    resolution: {integrity: sha512-PePEy8jNCTr2efov9OVtCAyO4gZfAunkqm1xw26Kco4t/Uj1KcyO+oyEat5cis76ivhBbb7S7ece8CT20IP/tg==}
+    peerDependencies:
+      lucide-vue-next: ^0.562.0
+      vue: ^3.5.0
 
   '@esbuild/aix-ppc64@0.25.12':
     resolution: {integrity: sha512-Hhmwd6CInZ3dwpuGTF8fJG6yoWmsToE+vYgD4nytZVxcu1ulHpUQRAB1UJ8+N1Am3Mz4+xOByoQoSZf4D+CpkA==}
@@ -2603,7 +2615,17 @@ snapshots:
     dependencies:
       '@capacitor/core': 8.2.0
 
+  '@dawnchat/auth-bridge@0.2.0': {}
+
+  '@dawnchat/shared-protocol@0.1.0': {}
+
   '@dawnchat/shared-protocol@0.6.0': {}
+
+  '@dawnchat/shared-ui@0.2.0(lucide-vue-next@0.562.0(vue@3.5.24(typescript@5.9.3)))(vue@3.5.24(typescript@5.9.3))':
+    dependencies:
+      '@dawnchat/shared-protocol': 0.1.0
+      lucide-vue-next: 0.562.0(vue@3.5.24(typescript@5.9.3))
+      vue: 3.5.24(typescript@5.9.3)
 
   '@esbuild/aix-ppc64@0.25.12':
     optional: true
