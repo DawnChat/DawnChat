@@ -1,122 +1,120 @@
 # DawnChat Frontend
 
-基于 Vue 3 + TypeScript + Vite 构建的前端应用，作为 DawnChat 项目的用户界面层。
+English | [简体中文](./README.zh.md)
 
-## 技术栈
+`apps/frontend` is DawnChat’s frontend application layer. It powers:
+- Build Hub (plugin discovery, creation, startup)
+- Plugin Runtime (fullscreen runtime surface)
+- Plugin Dev Workbench (preview, publishing, context bridge, IWP build flow)
 
-- **框架**: Vue 3.6 + TypeScript 5.9
-- **构建工具**: Vite 7.1
-- **状态管理**: Vue Composition API + Pinia (如需)
-- **HTTP 客户端**: fetch/axios
-- **UI 组件**: 原生 Vue 组件（轻量级设计）
+Stack: Vue 3 + TypeScript + Vite + Pinia.
 
-## Python 环境配置
+---
 
-项目使用统一的 Python 环境配置：
-- **Python 解释器**: `/Users/zhutao/Library/Python/3.10/bin/python3` (用户目录安装)
-- **Poetry 工具**: `/Users/zhutao/Library/Python/3.10/bin/poetry` (用户目录安装)
-- **依赖管理**: 使用 Poetry 管理后端依赖
+## Core Pages (Read First)
 
-## 开发指南
+### 1) Home / Build Hub
+- Page: `src/features/plugin/views/AppsView.vue`
+- Role: unified entry for app creation, recent project resume, and app feed operations.
+- Boundary: page layer stays thin (template + event wiring); create/start/fork lifecycle calls go through `buildHubLifecycleFacade`.
 
-### 快速开始
+### 2) Dev Page / Dev Workbench
+- Page: `src/features/plugin-dev-workbench/views/PluginDevWorkbenchPage.vue`
+- Role: main development workspace for center editor, preview pane, publish overlays, IWP files, and build session status.
+- Boundary: page only consumes orchestration output, never calls `usePluginStore` directly; store access goes through `devWorkbenchFacade`.
+
+---
+
+## Frontend Plugin Architecture
+
+Three feature surfaces:
+- `features/plugin`: AppsView / Build Hub
+- `features/plugin-runtime`: fullscreen runtime
+- `features/plugin-dev-workbench`: dev workbench
+
+Shared principles:
+- Single source of truth: cross-page state lives in `stores/plugin` (`usePluginStore`).
+- Thin page containers: views focus on route parsing, rendering, and event forwarding.
+- Side effects go down: lifecycle, polling, publish, and session injection belong to composables/domains.
+- Clear access boundary: runtime/workbench use facades instead of crossing layers into store internals.
+
+Recommended one-way chain:
+
+```text
+Page -> Orchestration -> Capability Composable -> Facade -> Store
+```
+
+---
+
+## Directory Map (Plugin Development Focus)
+
+```text
+src/
+├── features/
+│   ├── plugin/                          # Build Hub
+│   │   ├── views/AppsView.vue
+│   │   ├── composables/useBuildHub*.ts
+│   │   └── services/buildHubLifecycleFacade.ts
+│   ├── plugin-runtime/                  # Fullscreen runtime
+│   │   ├── views/PluginRuntimeFullscreenPage.vue
+│   │   └── services/runtimeFacade.ts
+│   └── plugin-dev-workbench/            # Dev workbench
+│       ├── views/PluginDevWorkbenchPage.vue
+│       ├── composables/usePluginDevWorkbenchOrchestration.ts
+│       └── services/devWorkbenchFacade.ts
+├── features/plugin/store/               # Plugin domain single store
+└── components/                          # Shared UI components
+```
+
+---
+
+## Quick Start
 
 ```bash
-# 安装依赖
+# Install dependencies at repository root
 pnpm install
 
-# 启动开发服务器
+# Start frontend dev server (inside apps/frontend)
 pnpm run dev
 
-# 构建生产版本
+# Production build
 pnpm run build
 
-# 运行类型检查
-pnpm run type-check
+# Frontend typecheck
+pnpm run typecheck
 ```
 
-### 开发规范
+---
 
-- 使用 Composition API (`<script setup>`)
-- Props 必须有类型定义和默认值
-- Emits 必须显式声明
-- 使用 `ref` 和 `reactive` 管理响应式状态
+## Tests and Quality Checks
 
-### API 调用规范
+Run from repository root (recommended):
 
-```typescript
-// 统一封装 API 调用
-const fetchData = async () => {
-  try {
-    const response = await fetch(`${API_BASE}/endpoint`)
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
-    const data = await response.json()
-    // 处理数据
-  } catch (error) {
-    console.error('Failed to fetch:', error)
-    // 用户友好的错误提示
-  }
-}
+```bash
+# Frontend tests
+./dev.sh --vitest run
+./dev.sh --vitest-file src/**/__tests__/xxx.spec.ts
+
+# Workspace lint
+pnpm run lint
+
+# Frontend typecheck
+pnpm --filter @dawnchat/frontend run typecheck
 ```
 
-### 用户交互规范
+---
 
-**禁止使用浏览器原生弹窗**：
-- ❌ 不要使用 `window.confirm()`
-- ❌ 不要使用 `window.alert()`
-- ❌ 不要使用 `window.prompt()`
+## Frontend Development Constraints
 
-**必须使用自定义组件**：
-```vue
-<script setup lang="ts">
-import ConfirmDialog from '@/components/ConfirmDialog.vue'
+- Use Composition API (`<script setup>`) with TypeScript.
+- Keep business side effects out of page views; place them in composables.
+- Do not access low-level store APIs directly inside pages and `Workbench*` components; use facades.
+- Do not use browser native dialogs (`window.alert/confirm/prompt`); use custom dialog components.
+- Route frontend logs through `src/utils/logger.ts` instead of direct `console.log`.
 
-const confirmDialog = ref({
-  visible: false,
-  // ... 其他状态
-})
+---
 
-const showConfirm = () => {
-  confirmDialog.value.visible = true
-}
+## References
 
-const handleConfirm = async () => {
-  confirmDialog.value.visible = false
-  // 执行操作
-}
-</script>
-
-<template>
-  <ConfirmDialog
-    v-model:visible="confirmDialog.visible"
-    type="danger"
-    title="删除确认"
-    message="确定要执行此操作吗？"
-    detail="详细信息"
-    icon="⚠️"
-    @confirm="handleConfirm"
-  />
-</template>
-```
-
-## 项目结构
-
-```
-src/
-├── main.ts              # 应用入口
-├── App.vue             # 根组件
-├── components/         # 可复用组件
-│   ├── ModelManager.vue
-│   └── ConfirmDialog.vue
-├── views/              # 页面视图
-├── api/                # API 客户端
-├── types/              # TypeScript 类型定义
-└── assets/             # 静态资源
-```
-
-## 相关文档
-
-- [Vue 3 官方文档](https://v3.vuejs.org/)
-- [TypeScript 官方文档](https://www.typescriptlang.org/)
-- [Vite 官方文档](https://vitejs.dev/)
-- [DawnChat 项目开发规范](../../.cursorrules)
+- Repository overview: `/README.md`
+- Internal plugin frontend architecture: `/docs/internal/architecture/plugins/frontend-plugins-architecture.md`
