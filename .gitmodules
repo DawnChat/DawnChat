@@ -1,0 +1,3 @@
+[submodule "dawnchat-plugins"]
+	path = dawnchat-plugins
+	url = https://github.com/chaxiu/dawnchat-plugins.git

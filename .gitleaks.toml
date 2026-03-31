@@ -1,0 +1,9 @@
+title = "DawnChat gitleaks config"
+
+[allowlist]
+description = "ignore historical docs/log examples and generated assets"
+paths = [
+  '''^docs/''',
+  '''^log/''',
+  '''^dawnchat-plugins/official-plugins/.*/web/assets/''',
+]

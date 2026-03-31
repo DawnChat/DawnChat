@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- ======================================================= -->
+    <!-- 1. 硬件特征柔性声明 (合规策略：防 Google Play/应用商店 屏蔽下架) -->
+    <!-- ======================================================= -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <!-- 手电筒/闪光灯 (@capgo/capacitor-flash) -->
+    <uses-feature android:name="android.hardware.camera.flash" android:required="false" />
+    <!-- GPS 硬件 (@capacitor/geolocation) -->
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+    <uses-feature android:name="android.hardware.location.network" android:required="false" />
+    <!-- 指纹硬件 (@capgo/capacitor-native-biometric) -->
+    <uses-feature android:name="android.hardware.fingerprint" android:required="false" />
+    <!-- 麦克风硬件 (@capgo/capacitor-audio-recorder) -->
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
+        android:theme="@style/AppTheme">
+
+        <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
+            android:name=".MainActivity"
+            android:label="@string/title_activity_main"
+            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:launchMode="singleTask"
+            android:exported="true">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+        </activity>
+
+        <!-- 沙箱：SandboxActivity (配置防屏幕旋转等重建动作) -->
+        <activity
+            android:name=".SandboxActivity"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
+            android:theme="@style/AppTheme.NoActionBar" />
+        <activity
+            android:name=".ui.scan.ScanActivity"
+            android:screenOrientation="portrait"
+            android:theme="@style/AppTheme.NoActionBar" />
+        <activity
+            android:name=".ui.scan.PortraitCaptureActivity"
+            android:screenOrientation="portrait"
+            android:stateNotNeeded="true"
+            android:theme="@style/AppTheme.NoActionBar" />
+        <activity
+            android:name=".ui.settings.SettingsActivity"
+            android:parentActivityName=".MainActivity"
+            android:theme="@style/AppTheme.NoActionBar" />
+        <activity
+            android:name=".ui.about.AboutActivity"
+            android:parentActivityName=".MainActivity"
+            android:theme="@style/AppTheme.NoActionBar" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"></meta-data>
+        </provider>
+    </application>
+
+    <!-- ======================================================= -->
+    <!-- 3. 基础/通用权限 (你已有的) -->
+    <!-- ======================================================= -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- ======================================================= -->
+    <!-- 4. 存储与文件权限 (@capacitor/filesystem & camera) -->
+    <!-- ======================================================= -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <!-- 【非常重要】适配 Android 13+ (API 33) 媒体权限细分，否则高版本机型无法相册选图 -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+
+    <!-- ======================================================= -->
+    <!-- 5. 传感器与硬件权限 (针对你新增的 Capgo 插件) -->
+    <!-- ======================================================= -->
+
+    <!-- 获取网络状态 (@capacitor/network) -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- GPS 定位 (@capacitor/geolocation) -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+
+    <!-- 生物识别/FaceID/指纹 (@capgo/capacitor-native-biometric) -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <uses-permission android:name="android.permission.USE_FINGERPRINT" />
+
+    <!-- 录音与麦克风 (@capgo/capacitor-audio-recorder) -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+
+    <!-- 读取/写入通讯录 (@capgo/capacitor-contacts) -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <uses-permission android:name="android.permission.WRITE_CONTACTS" />
+
+    <!-- ======================================================= -->
+    <!-- 6. 系统功能权限 -->
+    <!-- ======================================================= -->
+
+    <!-- 本地通知 (@capacitor/local-notifications) -->
+    <!-- 适配 Android 13+ 推送权限 -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- 允许开机自动恢复已调度的延时通知 -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- 屏幕常亮 (@capgo/capacitor-keep-awake) -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+</manifest>

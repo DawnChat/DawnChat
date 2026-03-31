@@ -1,0 +1,341 @@
+import { computed, ref } from 'vue'
+import { flushPromises, mount } from '@vue/test-utils'
+import { describe, expect, it, vi, beforeEach } from 'vitest'
+
+function createMockStore() {
+  return {
+    selectedEngine: ref('opencode'),
+    availableAgents: ref([{ id: 'general', label: 'general' }]),
+    availableModels: ref([{ id: 'local/model-a', label: 'Model A', providerID: 'local', modelID: 'model-a' }]),
+    engineOptions: ref([
+      { id: 'opencode', label: 'OpenCode' },
+      { id: 'agentv3', label: 'AgentV3' }
+    ]),
+    selectedAgent: ref('general'),
+    selectedModelId: ref('local/model-a'),
+    chatRows: ref([]),
+    timelineItems: ref([]),
+    activeReasoningItemId: ref(''),
+    permissionCards: ref([]),
+    questionCards: ref([]),
+    activeSessionTodos: ref([]),
+    canSwitchPlanToBuild: computed(() => false),
+    sessions: ref([]),
+    activeSessionId: ref('ses_test_1'),
+    isStreaming: ref(false),
+    waitingReason: ref(''),
+    canInterrupt: ref(false),
+    lastError: ref<string | null>(null),
+    lastErrorRaw: ref<unknown>(null),
+    rulesStatus: ref(null),
+    selectEngine: vi.fn(),
+    selectAgent: vi.fn(),
+    selectModel: vi.fn(),
+    ensureReadyWithWorkspace: vi.fn(async () => {}),
+    sendText: vi.fn(async () => {}),
+    interruptActiveRun: vi.fn(async () => true),
+    replyPermission: vi.fn(async () => {}),
+    replyQuestion: vi.fn(async () => {}),
+    rejectQuestion: vi.fn(async () => {}),
+    createSession: vi.fn(async () => 'ses_test_1'),
+    switchSession: vi.fn(async () => {}),
+    dispose: vi.fn()
+  }
+}
+
+let mockStore = createMockStore()
+
+vi.mock('pinia', async () => {
+  const actual = await vi.importActual<typeof import('pinia')>('pinia')
+  return {
+    ...actual,
+    storeToRefs: (store: Record<string, unknown>) => store
+  }
+})
+
+vi.mock('@/composables/useI18n', () => ({
+  useI18n: () => ({
+    t: ref({
+      apps: {
+        sharedRulesDisabled: '共享规则: 未启用',
+        sharedRulesEnabled: '共享规则: 已启用',
+        sharedRulesVersion: '共享规则: v{version}'
+      }
+    })
+  })
+}))
+
+vi.mock('@/composables/useEngineHealth', () => ({
+  useEngineHealth: () => ({
+    engineHealthStatus: ref('healthy'),
+    engineHealthTitle: ref('OpenCode 已连接')
+  })
+}))
+
+vi.mock('@/utils/logger', () => ({
+  logger: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn()
+  }
+}))
+
+vi.mock('@/features/coding-agent/store/codingAgentStore', () => ({
+  useCodingAgentStore: () => mockStore
+}))
+
+vi.mock('@/services/plugin-ui-bridge/contextToken', () => ({
+  expandContextTokens: (value: string) => value
+}))
+
+vi.mock('@/features/coding-agent/components/plugin-dev-chat/PluginDevSessionTabs.vue', () => ({
+  default: {
+    name: 'PluginDevSessionTabs',
+    template: '<div class="session-tabs-stub" />'
+  }
+}))
+
+vi.mock('@/features/coding-agent/components/plugin-dev-chat/PluginDevMessageList.vue', () => ({
+  default: {
+    name: 'PluginDevMessageList',
+    template: '<div class="message-list-stub" />'
+  }
+}))
+
+vi.mock('@/features/coding-agent/components/plugin-dev-chat/PluginDevComposer.vue', () => ({
+  default: {
+    name: 'PluginDevComposer',
+    props: [
+      'blocked',
+      'canSend',
+      'showEngineSelector',
+      'showAgentSelector',
+      'showModelSelector',
+      'selectedEngine',
+      'selectedEngineLabel',
+      'selectedEngineHealthStatus',
+      'selectedEngineHealthTitle',
+      'selectedAgent',
+      'selectedModelId'
+    ],
+    emits: ['select-engine', 'select-agent', 'select-model', 'send', 'interrupt', 'update:modelValue', 'selection-change'],
+    template: `
+      <div class="composer-stub">
+        <span class="engine-flag">{{ showEngineSelector }}</span>
+        <span class="agent-flag">{{ showAgentSelector }}</span>
+        <span class="model-flag">{{ showModelSelector }}</span>
+        <span class="engine-health">{{ selectedEngineLabel }}|{{ selectedEngineHealthStatus }}</span>
+        <button class="emit-engine" @click="$emit('select-engine', 'agentv3')" />
+      </div>
+    `
+  }
+}))
+
+import CodingChatShell from '@/features/coding-agent/components/CodingChatShell.vue'
+
+describe('CodingChatShell', () => {
+  beforeEach(() => {
+    mockStore = createMockStore()
+    mockStore.ensureReadyWithWorkspace.mockClear()
+    mockStore.selectEngine.mockClear()
+    mockStore.selectAgent.mockClear()
+    mockStore.dispose.mockClear()
+    mockStore.selectedEngine.value = 'opencode'
+    mockStore.selectedAgent.value = 'general'
+    mockStore.selectedModelId.value = 'local/model-a'
+  })
+
+  it('挂载时会按 workspace target 初始化运行时', async () => {
+    mount(CodingChatShell, {
+      props: {
+        modelValue: '',
+        workspaceTarget: {
+          id: 'workbench:proj_1',
+          kind: 'workbench-general',
+          displayName: 'Project 1',
+          appType: 'chat',
+          workspacePath: '/tmp/project-1',
+          preferredEntry: '',
+          preferredDirectories: [],
+          hints: [],
+          defaultAgent: 'general',
+          sessionStrategy: 'single',
+          projectId: 'proj_1'
+        },
+        emptyText: 'empty',
+        placeholder: 'placeholder',
+        streamingText: 'streaming',
+        blockedText: 'blocked',
+        runLabel: 'run',
+        newChatLabel: 'new',
+        showSessionTabs: false,
+        showEngineSelector: true,
+        showAgentSelector: false,
+        showModelSelector: true
+      }
+    })
+
+    await flushPromises()
+
+    expect(mockStore.ensureReadyWithWorkspace).toHaveBeenCalledWith({
+      workspaceTarget: expect.objectContaining({
+        kind: 'workbench-general',
+        projectId: 'proj_1',
+        workspacePath: '/tmp/project-1'
+      }),
+      pluginId: undefined,
+      forceRestart: false
+    })
+  })
+
+  it('切换引擎时会刷新运行时且保留 workbench 的 general agent 约束', async () => {
+    const wrapper = mount(CodingChatShell, {
+      props: {
+        modelValue: '',
+        workspaceTarget: {
+          id: 'workbench:proj_1',
+          kind: 'workbench-general',
+          displayName: 'Project 1',
+          appType: 'chat',
+          workspacePath: '/tmp/project-1',
+          preferredEntry: '',
+          preferredDirectories: [],
+          hints: [],
+          defaultAgent: 'general',
+          sessionStrategy: 'single',
+          projectId: 'proj_1'
+        },
+        emptyText: 'empty',
+        placeholder: 'placeholder',
+        streamingText: 'streaming',
+        blockedText: 'blocked',
+        runLabel: 'run',
+        newChatLabel: 'new',
+        showSessionTabs: false,
+        showEngineSelector: true,
+        showAgentSelector: false,
+        showModelSelector: true,
+        forceAgent: 'general'
+      }
+    })
+
+    await flushPromises()
+    await wrapper.find('.emit-engine').trigger('click')
+    await flushPromises()
+
+    expect(mockStore.selectEngine).toHaveBeenCalledWith('agentv3')
+    expect(mockStore.ensureReadyWithWorkspace).toHaveBeenLastCalledWith({
+      workspaceTarget: expect.objectContaining({
+        kind: 'workbench-general',
+        projectId: 'proj_1'
+      }),
+      pluginId: undefined,
+      forceRestart: false
+    })
+    expect(mockStore.selectedAgent.value).toBe('general')
+  })
+
+  it('会把当前引擎健康状态传给 composer 展示层', async () => {
+    const wrapper = mount(CodingChatShell, {
+      props: {
+        modelValue: '',
+        pluginId: 'com.dawnchat.hello-world-vue',
+        emptyText: 'empty',
+        placeholder: 'placeholder',
+        streamingText: 'streaming',
+        blockedText: 'blocked',
+        runLabel: 'run',
+        newChatLabel: 'new'
+      }
+    })
+
+    await flushPromises()
+
+    expect(wrapper.find('.engine-health').text()).toContain('OpenCode|healthy')
+  })
+
+  it('运行中触发发送动作时会优先执行中断', async () => {
+    mockStore.isStreaming.value = true
+    mockStore.canInterrupt.value = true
+    const wrapper = mount(CodingChatShell, {
+      props: {
+        modelValue: 'hello',
+        pluginId: 'com.dawnchat.hello-world-vue',
+        emptyText: 'empty',
+        placeholder: 'placeholder',
+        streamingText: 'streaming',
+        blockedText: 'blocked',
+        runLabel: 'run',
+        newChatLabel: 'new'
+      }
+    })
+    await flushPromises()
+
+    wrapper.findComponent({ name: 'PluginDevComposer' }).vm.$emit('send')
+    await flushPromises()
+
+    expect(mockStore.interruptActiveRun).toHaveBeenCalledTimes(1)
+    expect(mockStore.sendText).not.toHaveBeenCalled()
+  })
+
+  it('存在 permission 卡片时不阻塞输入与发送', async () => {
+    mockStore.permissionCards.value = [
+      {
+        id: 'perm_1',
+        sessionID: 'ses_test_1',
+        messageID: 'msg_1',
+        callID: 'call_1',
+        tool: 'read_file',
+        status: 'pending',
+        detail: '需要读取文件'
+      }
+    ]
+    const wrapper = mount(CodingChatShell, {
+      props: {
+        modelValue: 'hello',
+        pluginId: 'com.dawnchat.hello-world-vue',
+        emptyText: 'empty',
+        placeholder: 'placeholder',
+        streamingText: 'streaming',
+        blockedText: 'blocked',
+        runLabel: 'run',
+        newChatLabel: 'new'
+      }
+    })
+    await flushPromises()
+
+    const composer = wrapper.findComponent({ name: 'PluginDevComposer' })
+    expect(composer.props('blocked')).toBe(false)
+    expect(composer.props('canSend')).toBe(true)
+  })
+
+  it('存在 question 卡片时仍阻塞输入与发送', async () => {
+    mockStore.questionCards.value = [
+      {
+        id: 'q_1',
+        sessionID: 'ses_test_1',
+        messageID: 'msg_1',
+        questions: [],
+        status: 'pending',
+        toolCallID: 'call_1'
+      }
+    ]
+    const wrapper = mount(CodingChatShell, {
+      props: {
+        modelValue: 'hello',
+        pluginId: 'com.dawnchat.hello-world-vue',
+        emptyText: 'empty',
+        placeholder: 'placeholder',
+        streamingText: 'streaming',
+        blockedText: 'blocked',
+        runLabel: 'run',
+        newChatLabel: 'new'
+      }
+    })
+    await flushPromises()
+
+    const composer = wrapper.findComponent({ name: 'PluginDevComposer' })
+    expect(composer.props('blocked')).toBe(true)
+    expect(composer.props('canSend')).toBe(false)
+  })
+})

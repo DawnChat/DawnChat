@@ -1,0 +1,225 @@
+/* CSS Reset & Base Styles */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* CSS Variables - Dark Mode (Default) */
+/* 配色基于 macOS 原生窗口颜色，实现跨平台统一视觉 */
+:root {
+  --color-app-canvas: #2f2e2d;    /* 页面背景 */
+  --color-bg-primary: #343331;    /* 主容器背景 */
+  --color-bg-secondary: #3b3a38;  /* 卡片/消息项背景 */
+  --color-bg-tertiary: #444341;   /* 输入框/浮层背景 */
+  --color-bg-hover: rgba(255, 255, 255, 0.08);
+  --color-border: #4c4a47;        /* 边框色 */
+  --color-border-muted: #464441;
+  --color-border-strong: #5a5753;
+  --color-separator: #3D3C3A;     /* 顶部分隔线 */
+  --color-text-primary: #F5F6F7;
+  --color-text-secondary: #B5B3B0;
+  --color-text-disabled: #6B6965;
+  --color-primary: #F2F4F7;
+  --color-primary-hover: #FFFFFF;
+  --color-on-primary: #1C1B1A;
+  --color-primary-rgb: 242, 244, 247;
+  --color-success: #22C55E;
+  --color-warning: #F59E0B;
+  --color-danger: #EF4444;
+  --color-scrollbar-track: var(--color-surface-2);
+  --color-scrollbar-thumb: color-mix(in srgb, var(--color-surface-2) 34%, white 66%);
+  --color-scrollbar-thumb-hover: color-mix(in srgb, var(--color-surface-2) 20%, white 80%);
+
+  /* Aliases */
+  --color-surface-1: var(--color-bg-primary);
+  --color-surface-2: var(--color-bg-secondary);
+  --color-surface-3: var(--color-bg-tertiary);
+  --color-bg: var(--color-surface-1);
+  --color-hover: var(--color-bg-hover);
+  --color-text: var(--color-text-primary);
+  --wb-canvas: var(--color-app-canvas);
+  --wb-pane-main: var(--color-surface-1);
+  --wb-pane-side: var(--color-surface-2);
+  --wb-pane-chrome: var(--color-surface-3);
+  --wb-border-subtle: color-mix(in srgb, var(--color-border) 82%, transparent);
+  --wb-border-strong: color-mix(in srgb, var(--color-border-strong) 74%, transparent);
+  --wb-inset-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-text) 5%, transparent);
+
+  /* Semantic interactive tokens: avoid coupling component states to brand hue */
+  --color-interactive-selected-bg: var(--color-primary);
+  --color-interactive-selected-bg-hover: var(--color-primary-hover);
+  --color-interactive-selected-fg: var(--color-on-primary);
+  --color-interactive-selected-border: color-mix(in srgb, var(--color-primary) 64%, var(--color-border-strong));
+  --color-button-neutral-bg: var(--color-surface-3);
+  --color-button-neutral-fg: var(--color-text);
+  --color-button-neutral-border: var(--color-border);
+  --color-button-neutral-hover-bg: color-mix(in srgb, var(--color-primary) 10%, var(--color-surface-3));
+  --color-button-neutral-hover-border: var(--color-primary);
+  --color-button-emphasis-bg: var(--color-primary);
+  --color-button-emphasis-fg: var(--color-on-primary);
+  --color-button-emphasis-hover-bg: var(--color-primary-hover);
+  /* Danger button uses restrained surface tint to keep visual hierarchy consistent */
+  --color-button-danger-bg: color-mix(in srgb, var(--color-danger) 15%, var(--color-surface-3));
+  --color-button-danger-fg: color-mix(in srgb, var(--color-danger) 92%, var(--color-text-primary));
+  --color-button-danger-border: color-mix(in srgb, var(--color-danger) 46%, var(--color-border));
+  --color-button-danger-hover-bg: color-mix(in srgb, var(--color-danger) 22%, var(--color-surface-3));
+  --color-button-danger-hover-border: color-mix(in srgb, var(--color-danger) 64%, var(--color-border-strong));
+
+  /* Build Hub layout tokens */
+  --buildhub-space-xs: 0.45rem;
+  --buildhub-space-sm: 0.68rem;
+  --buildhub-space-md: 0.88rem;
+  --buildhub-space-lg: 1rem;
+  --buildhub-space-xl: 1.25rem;
+  --buildhub-radius-sm: 8px;
+  --buildhub-radius-md: 10px;
+  --buildhub-radius-lg: 12px;
+  --buildhub-btn-height: 34px;
+  --buildhub-chip-height: 30px;
+  --buildhub-card-min-height: 156px;
+  --buildhub-card-grid-min: 320px;
+  --buildhub-launcher-padding: 1rem;
+  --buildhub-launcher-card-height: 128px;
+  --buildhub-launcher-icon-size: 34px;
+}
+
+/* Light Mode Variables */
+:root:not(.dark) {
+  --color-primary: #4F5865;
+  --color-primary-hover: #3E4754;
+  --color-on-primary: #FFFFFF;
+  --color-primary-rgb: 79, 88, 101;
+  --color-app-canvas: #ECECEA;    /* 页面背景 */
+  --color-bg-primary: #F5F5F4;    /* 主容器背景 */
+  --color-bg-secondary: #FFFFFF;  /* 卡片/消息项背景 */
+  --color-bg-tertiary: #F1F1EF;   /* 输入框/浮层背景 */
+  --color-bg-hover: rgba(0, 0, 0, 0.05);
+  --color-border: #D1D1D0;        /* 边框色 */
+  --color-border-muted: #DDDDDB;
+  --color-border-strong: #BDBDBA;
+  --color-separator: #D1D1D0;     /* 顶部分隔线 */
+  --color-text-primary: #1A1918;
+  --color-text-secondary: #6B6965;
+  --color-text-disabled: #A8A6A3;
+  --color-scrollbar-track: var(--color-surface-2);
+  --color-scrollbar-thumb: color-mix(in srgb, var(--color-surface-2) 42%, black 58%);
+  --color-scrollbar-thumb-hover: color-mix(in srgb, var(--color-surface-2) 28%, black 72%);
+  --wb-border-subtle: color-mix(in srgb, var(--color-border) 88%, transparent);
+  --wb-border-strong: color-mix(in srgb, var(--color-border-strong) 76%, transparent);
+  --wb-inset-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-text) 2.5%, transparent);
+}
+
+/* Base Typography */
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.75;
+  color: var(--color-text-primary);
+  background: var(--color-app-canvas);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Remove default styles */
+button {
+  font-family: inherit;
+}
+
+/* Reusable interactive primitives */
+.ui-selected {
+  background: var(--color-interactive-selected-bg);
+  color: var(--color-interactive-selected-fg);
+}
+
+.ui-selected:hover {
+  background: var(--color-interactive-selected-bg-hover);
+}
+
+.ui-btn {
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ui-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ui-btn--neutral {
+  background: var(--color-button-neutral-bg);
+  color: var(--color-button-neutral-fg);
+  border: 1px solid var(--color-button-neutral-border);
+}
+
+.ui-btn--neutral:hover:not(:disabled) {
+  border-color: var(--color-button-neutral-hover-border);
+  background: var(--color-button-neutral-hover-bg);
+}
+
+.ui-btn--emphasis {
+  background: var(--color-button-emphasis-bg);
+  color: var(--color-button-emphasis-fg);
+  border: none;
+}
+
+.ui-btn--emphasis:hover:not(:disabled) {
+  background: var(--color-button-emphasis-hover-bg);
+}
+
+/* Shared danger action button for destructive operations across pages and modals */
+.ui-btn--danger {
+  background: var(--color-button-danger-bg);
+  color: var(--color-button-danger-fg);
+  border: 1px solid var(--color-button-danger-border);
+}
+
+.ui-btn--danger:hover:not(:disabled) {
+  background: var(--color-button-danger-hover-bg);
+  border-color: var(--color-button-danger-hover-border);
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-scrollbar-thumb) var(--color-scrollbar-track);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-scrollbar-thumb) var(--color-scrollbar-track);
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--color-scrollbar-track);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--color-scrollbar-thumb);
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-scrollbar-track) 40%, transparent);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--color-scrollbar-thumb-hover);
+}
+
+/* Code blocks */
+code {
+  font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+  background: rgba(0, 0, 0, 0.1);
+  padding: 0.2rem 0.4rem;
+  border-radius: 0.25rem;
+  font-size: 0.875em;
+}

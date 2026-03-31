@@ -1,0 +1,216 @@
+# DawnChat 项目开发规范
+
+## ⚠️ 最重要的规则
+
+### 禁止主动创建文档
+
+**除非用户明确要求"写文档"、"创建文档"、"写总结"，否则不要创建任何 .md 文档文件！**
+
+- ❌ 禁止在完成任务后主动创建总结文档
+- ❌ 禁止主动创建 log/、docs/ 目录下的文档
+- ✅ 只在用户明确要求时才创建文档
+- ✅ 专注于代码实现和问题修复
+- ✅ 重要：一定要编写高质量代码，确保架构合理、可维护、符合业界最佳实践
+
+---
+
+## 项目概述
+
+DawnChat（晓话 AI）是一个**桌面端 AI Agent 平台**，以本地优先为基础，形成插件生态与 AI 编程流水线两条主线。
+
+**核心使命**: 面向开发者提供高效的研发编排与插件开发能力，面向普通用户提供可扩展的智能工具生态。
+
+**目标用户**:
+- 开发者：通过 CLI 与流水线快速完成通用研发任务，并构建桌面端 AI 应用
+- 普通用户：通过插件生态获得 TTS、语音识别、LLM、图像生成等能力
+
+---
+
+## 技术栈 (v3.0)
+
+### 前端层 (apps/frontend)
+- **框架**: Vue 3.6 + TypeScript 5.9
+- **构建工具**: Vite 7.1
+- **UI 库**: TailwindCSS + 原生组件
+- **可视化**: Vue Flow (工作流编辑器)
+- **测试框架**: Vitest + @vue/test-utils
+- **状态管理**: Pinia
+- **HTTP 客户端**: fetch/axios
+
+### 后端层 (packages/backend-kernel)
+- **语言**: Python 3.11+ (开发环境) / PBS Python 3.11 (生产环境)
+- **Web 框架**: FastAPI 0.119+
+- **ASGI 服务器**: Uvicorn 0.37+
+- **运行时打包**: Python Build Standalone (PBS)
+- **依赖管理**: Poetry 2.2+
+- **任务调度**: APScheduler 3.11+
+- **测试框架**: pytest + pytest-asyncio + pytest-mock
+- **插件系统**: Plugin Manager + UV Env Isolation
+- **AI 编程流水线**: Pipeline v3 (Task/Stage/Gate)
+
+### AI 引擎层 (Local AI)
+- **推理引擎**: Llama.cpp (原生二进制集成)
+- **运行模式**: 作为 Python 后端的子进程运行 (Subprocess)
+- **通信协议**: OpenAI Compatible API
+- **端口**: 动态分配 (默认 8080-8089)
+- **生命周期**: 懒加载 (Lazy Loading) + 自动卸载 (Auto Unload)
+- **模型管理**: HuggingFace Hub 直接下载 (GGUF 格式)
+
+### 核心层 (apps/desktop/src-tauri)
+- **语言**: Rust 1.90+
+- **框架**: Tauri 2.8+
+- **进程管理**: 负责启动 Python Sidecar，Python Sidecar 再管理 Llama.cpp
+- **通信**: Matrix SDK
+
+### 插件开发层 (packages/sdk)
+- **语言**: Python 3.11+
+- **SDK**: dawnchat-sdk
+- **UI**: NiceGUI/Gradio
+
+### 包管理 (Monorepo v2)
+- **工具**: pnpm workspaces
+- **结构**: apps/ (应用) + packages/ (功能包)
+- **构建**: 统一的 build.sh 脚本 (集成 PBS 下载与构建)
+
+---
+
+## 架构设计原则
+
+### 1. 接口标准化 (Standardized Interfaces)
+所有 AI 功能必须通过统一接口调用，屏蔽 Llama.cpp 与云端模型的差异。
+
+### 2. 分层解耦 (Layered Decoupling)
+严格分离四层：
+- **UI 层**: Vue/TypeScript (apps/frontend)
+- **业务编排层**: Python/FastAPI (packages/backend-kernel)
+- **插件层**: dawnchat-sdk + official-plugins
+- **系统通信层**: Rust/Tauri (apps/desktop/src-tauri)
+
+### 3. 确定性与概率性分离
+- **确定性逻辑**: 使用工作流引擎与流水线编排处理
+- **概率性逻辑**: 使用 LLM Agent 处理，结果需结构化验证
+
+### 4. 隐私优先 (Privacy-first)
+- 所有数据处理和 AI 推理必须在本地完成
+- 不得将用户数据发送到外部服务器（除非用户明确授权）
+- 敏感数据必须加密存储
+
+### 5. 数据持久化 (Data Persistence) ⭐ 重要
+**用户数据必须存储在系统级用户目录，不能存储在应用包内**
+
+**正确路径**:
+- ✅ macOS: `~/Library/Application Support/DawnChat/`
+- ✅ Windows: `%APPDATA%\DawnChat\`
+- ✅ Linux: `~/.local/share/DawnChat/`
+
+**实现**:
+```python
+# config.py
+@staticmethod
+def _get_user_data_dir() -> Path:
+    system = platform.system()
+    if system == "Darwin":  # macOS
+        return Path.home() / "Library" / "Application Support" / "DawnChat"
+    elif system == "Windows":
+        return Path(os.getenv("APPDATA")) / "DawnChat"
+    else:  # Linux
+        return Path.home() / ".local" / "share" / "DawnChat"
+
+DATA_DIR = _get_user_data_dir()  # ✅ 正确
+```
+
+### 6. 容错与降级 (Fault Tolerance & Graceful Degradation)
+- Llama.cpp 进程崩溃不应导致主程序崩溃
+- AI 请求必须有超时 (Timeout) 和重试 (Retry) 机制
+- 工作流引擎需支持错误跳过 (continue_on_error) 和人工介入 (Human-in-the-Loop)
+
+### 7. 可观测性 (Observability)
+- 完善的日志系统 (不同级别: DEBUG, INFO, WARNING, ERROR)
+- 工作流执行需记录完整的 Context 和 Step 状态
+- 前端必须使用 `logger` 工具，禁止 `console.log`
+
+---
+
+## 编码规范
+
+### Python 后端
+
+#### 文件组织
+```
+packages/backend-kernel/
+├── app/
+│   ├── main.py                 # FastAPI 应用入口
+│   ├── config.py              # 集中配置管理
+│   ├── workflows/             # 工作流引擎核心
+│   ├── pipeline/              # AI 编程流水线
+│   ├── plugins/               # 插件系统
+│   │   ├── engine/            # 调度器与执行器
+│   │   └── models/            # Pydantic Schema
+│   ├── services/              # 业务逻辑服务
+│   │   ├── llama_manager.py   # Llama.cpp 进程管理
+│   │   └── lifecycle.py       # 模型生命周期管理
+│   ├── ai/                    # AI 适配器层
+│   │   └── litellm_provider.py # 统一 AI 接口
+│   └── api/                   # API 路由
+```
+
+#### 命名规范
+- **类名**: PascalCase (例: `WorkflowEngine`, `NodeExecutor`)
+- **函数名**: snake_case (例: `execute_node`, `download_model`)
+- **常量**: UPPER_SNAKE_CASE (例: `DEFAULT_CONTEXT_SIZE`, `API_PORT`)
+
+#### 异步编程
+- **强制**: 所有 IO 密集型操作（AI 调用、文件读写、网络请求）必须使用 `async/await`
+- **并发**: 使用 `asyncio.gather` 处理 Map 节点的并发执行
+- **同步库**: 对于 `huggingface_hub` 等同步库，使用 `asyncio.to_thread` 包装
+
+#### 错误处理
+```python
+try:
+    result = await executor.execute_node(node, context)
+except WorkflowExecutionError as e:
+    logger.error(f"节点执行失败: {e.node_id} - {e.message}")
+    # 根据策略决定重试或终止
+except Exception as e:
+    logger.exception("未预期的系统错误")
+    raise
+```
+
+### Vue 前端
+
+#### 文件组织
+```
+apps/frontend/
+├── src/
+│   ├── assets/              # 静态资源
+│   ├── components/          # 公共组件 (Atomic Design)
+│   │   ├── ui/             # 基础 UI 组件 (Button, Input)
+│   │   └── business/       # 业务组件 (WorkflowEditor)
+│   ├── composables/         # 组合式函数 (useWorkflow, useLLM)
+│   ├── stores/              # Pinia 状态管理
+│   ├── views/               # 页面视图
+│   ├── utils/               # 工具函数
+│   ├── api/                 # API 接口定义
+│   ├── App.vue              # 根组件
+│   └── main.ts              # 入口文件
+```
+
+#### 命名规范
+- **组件名**: PascalCase (例: `WorkflowEditor.vue`, `BaseButton.vue`)
+- **组合式函数**: camelCase, 以 `use` 开头 (例: `useWorkflowEngine`)
+- **Store**: camelCase, 以 `use` 开头, `Store` 结尾 (例: `useUserStore`)
+- **常量**: UPPER_SNAKE_CASE
+
+#### 编码风格
+- 使用 `<script setup lang="ts">`
+- 优先使用 TailwindCSS Utility Classes
+- 避免在模板中编写复杂逻辑，提取到 computed 或 composable
+
+#### 日志规范
+- **禁止直接使用 console.log/warn/error**
+- 必须使用 `logger` 工具（位于 `src/utils/logger.ts`）
+- 日志文件会输出到桌面：`DawnChat_Frontend.log`
+
+#### 组件测试
+- 业务组件必须编写测试用例 (`tests/components/`)
+- 使用 `vi.mock` 模拟 Tauri API 调用

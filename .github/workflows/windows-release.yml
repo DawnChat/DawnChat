@@ -1,0 +1,106 @@
+name: windows-release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        shell: bash
+        run: pnpm install --frozen-lockfile
+
+      - name: Cache runtime assets
+        uses: actions/cache@v4
+        with:
+          path: |
+            runtime-assets
+            .cache/runtime-assets
+          key: windows-runtime-assets-${{ runner.os }}-x86_64-pc-windows-msvc-${{ hashFiles('scripts/download-runtime-assets.sh') }}
+          restore-keys: |
+            windows-runtime-assets-${{ runner.os }}-x86_64-pc-windows-msvc-
+
+      - name: Download runtime assets
+        shell: bash
+        env:
+          DAWNCHAT_RUNTIME_ASSETS_BASE_URL: ${{ vars.DAWNCHAT_RUNTIME_ASSETS_BASE_URL }}
+          DAWNCHAT_BUN_BASE_URL: ${{ vars.DAWNCHAT_BUN_BASE_URL }}
+          DAWNCHAT_UV_BASE_URL: ${{ vars.DAWNCHAT_UV_BASE_URL }}
+          DAWNCHAT_OPENCODE_BASE_URL: ${{ vars.DAWNCHAT_OPENCODE_BASE_URL }}
+          DAWNCHAT_LLAMACPP_BASE_URL: ${{ vars.DAWNCHAT_LLAMACPP_BASE_URL }}
+          DAWNCHAT_TTS_KOKORO_URL: ${{ vars.DAWNCHAT_TTS_KOKORO_URL }}
+        run: ./scripts/download-runtime-assets.sh --all --platform x86_64-pc-windows-msvc
+
+      - name: Build release bundle
+        shell: bash
+        run: |
+          ./build.sh \
+            --mode release \
+            --platform x86_64-pc-windows-msvc \
+            --optimize
+
+      - name: Validate installer artifacts
+        shell: bash
+        run: |
+          mkdir -p .ci-artifacts
+          log_file=".ci-artifacts/windows-installer-validation.log"
+          manifest_file=".ci-artifacts/windows-installer-manifest.txt"
+          : > "$log_file"
+          : > "$manifest_file"
+          shopt -s nullglob
+          msi_files=(apps/desktop/src-tauri/target/release/bundle/msi/*.msi)
+          nsis_files=(apps/desktop/src-tauri/target/release/bundle/nsis/*.exe)
+          if (( ${#msi_files[@]} == 0 && ${#nsis_files[@]} == 0 )); then
+            echo "No Windows installer artifacts found (.msi/.exe)." | tee -a "$log_file"
+            echo "Expected at least one artifact in bundle/msi or bundle/nsis." | tee -a "$log_file"
+            exit 1
+          fi
+          echo "Installer artifacts found." | tee -a "$log_file"
+          printf '%s\n' "${msi_files[@]}" "${nsis_files[@]}" | tee "$manifest_file" | tee -a "$log_file"
+
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: dawnchat-windows-installers
+          retention-days: 14
+          path: |
+            apps/desktop/src-tauri/target/release/bundle/msi/*.msi
+            apps/desktop/src-tauri/target/release/bundle/nsis/*.exe
+            .ci-artifacts/windows-installer-validation.log
+            .ci-artifacts/windows-installer-manifest.txt
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: dawnchat-windows-bundle-debug
+          retention-days: 3
+          path: |
+            apps/desktop/src-tauri/target/release/bundle/**
+            .ci-artifacts/windows-installer-validation.log
+            .ci-artifacts/windows-installer-manifest.txt
+          if-no-files-found: error

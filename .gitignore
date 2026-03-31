@@ -1,0 +1,136 @@
+# Dependencies
+node_modules/
+apps/*/node_modules
+packages/*/node_modules
+
+# Build outputs
+apps/*/dist
+packages/*/dist
+packages/backend-kernel/*.zip
+apps/desktop/src-tauri/target
+apps/desktop/src-tauri/sidecars
+apps/desktop/src-tauri/gen
+packages/*/build
+.dev-runtime/
+.dawnchat-real-smoke-data/
+runtime-assets/
+
+# Python
+__pycache__/
+*.pyc
+.pycache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage/
+htmlcov/
+packages/backend-kernel/build
+packages/backend-kernel/dist
+packages/backend-kernel/.venv
+packages/backend-kernel/venv
+packages/backend-kernel/.mypy_cache
+packages/backend-kernel/.ruff_cache
+*.egg-info
+
+# Python data directories (keep structure but ignore content)
+packages/backend-kernel/data/models/*/blobs/*
+packages/backend-kernel/data/models/*/manifests/*/*
+packages/backend-kernel/logs/*.log
+
+# macOS
+.DS_Store
+*.app
+
+# IDE
+.vscode/
+.claude/
+.idea/
+.trae/
+.cache/
+.cursor/
+.agents/
+*.swp
+*.swo
+*.tsbuildinfo
+
+# Logs
+*.log
+backend.log
+debug-log/
+log/
+
+# Temporary test files
+test-models/
+test-ollama-home/
+test-*.py
+verify-*.sh
+
+# Package manager
+.pnpm-store/
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Ollama models (large files)
+packages/backend-kernel/data/models/ollama/blobs/sha256-*
+packages/backend-kernel/data/models/dawnchat-ollama-models/blobs/sha256-*
+
+# Example
+example/
+download/
+binary/
+source-code/
+
+interview/
+
+packages/.dawnchat-test-data/*
+.dawnchat/
+packages/official-plugins/smart-reader/data
+packages/backend-kernel/.crawl4ai
+packages/backend-kernel/.pytest_cache
+
+packages/official-plugins/cosyvoice/src/local_overrides
+packages/official-plugins/vibevoice/src/local_overrides
+packages/official-plugins/comfyui/src/local_overrides
+
+# Bun
+.tmp-bun
+
+apps/dawnchat-android/android/.gradle/
+apps/dawnchat-android/android/build/
+apps/dawnchat-android/android/app/build/
+apps/dawnchat-android/android/capacitor-cordova-android-plugins/
+apps/dawnchat-android/android/local.properties
+apps/dawnchat-ios/ios/App/Pods/
+apps/dawnchat-ios/ios/App/App.xcodeproj/project.xcworkspace/xcuserdata/
+apps/dawnchat-ios/ios/App/App.xcodeproj/xcuserdata/
+apps/dawnchat-ios/ios/App/App.xcworkspace/xcuserdata/
+apps/dawnchat-ios/ios/App/CapApp-SPM/.swiftpm/
+apps/dawnchat-ios/ios/capacitor-cordova-ios-plugins/
+apps/dawnchat-ios/ios/App/App/public/
+apps/dawnchat-ios/ios/App/App/capacitor.config.json
+apps/dawnchat-ios/ios/App/App/config.xml
+
+# Sensitive configs and secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+.secrets
+.secrets.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+
+# Local files
+cloud/
+assets/
+docs/internal/
+dawnchat-plugins/
+DawnChatWeb/
+instructware.org/
+CLAUDE.md
+worktree-manager.sh

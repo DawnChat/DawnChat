@@ -1,0 +1,52 @@
+{
+  "$schema": "../../../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "DawnChat",
+  "version": "2.0.0",
+  "identifier": "com.dawnchat.desktop",
+  "build": {
+    "frontendDist": "../../frontend/dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "pnpm --filter @dawnchat/frontend dev",
+    "beforeBuildCommand": "pnpm --filter @dawnchat/frontend build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "DawnChat",
+        "width": 1200,
+        "height": 800,
+        "resizable": true,
+        "fullscreen": false,
+        "devtools": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: data: blob: https:; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:* ws://127.0.0.1:* http://localhost:* ws://localhost:* https://*.supabase.co wss://*.supabase.co https://accounts.google.com; frame-src 'self' https://accounts.google.com;"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": [
+      "sidecars/dawnchat-backend/**/*"
+    ]
+  },
+  "plugins": {
+    "deep-link": {
+      "mobile": [],
+      "desktop": {
+        "schemes": ["dawnchat"]
+      }
+    },
+    "shell": {
+      "open": true
+    }
+  }
+}

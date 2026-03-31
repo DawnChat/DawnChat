@@ -1,0 +1,15 @@
+{
+  "appId": "com.dawnchat.dev",
+  "appName": "DawnChatDev",
+  "webDir": "www",
+  "server": {
+    "allowNavigation": [
+      "*"
+    ]
+  },
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    }
+  }
+}

@@ -1,0 +1,143 @@
+name: macos-release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      sign_and_notarize:
+        type: boolean
+        required: true
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos-dmg:
+    runs-on: macos-14
+    env:
+      SHOULD_SIGN: ${{ ((github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) || (github.event_name == 'workflow_dispatch' && inputs.sign_and_notarize == true)) && secrets.MACOS_CERT_P12_B64 != '' && secrets.MACOS_CERT_PASSWORD != '' && secrets.ASC_API_KEY_P8_B64 != '' && secrets.ASC_KEY_ID != '' && secrets.ASC_ISSUER_ID != '' && secrets.APPLE_TEAM_ID != '' && secrets.APPLE_SIGNING_IDENTITY != '' }}
+      KEYCHAIN_NAME: dawnchat-build.keychain
+      KEYCHAIN_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+      NOTARY_PROFILE: dawnchat-notary
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Cache runtime assets
+        uses: actions/cache@v4
+        with:
+          path: |
+            runtime-assets
+            .cache/runtime-assets
+          key: macos-runtime-assets-${{ runner.os }}-aarch64-apple-darwin-${{ hashFiles('scripts/download-runtime-assets.sh') }}
+          restore-keys: |
+            macos-runtime-assets-${{ runner.os }}-aarch64-apple-darwin-
+
+      - name: Download runtime assets
+        env:
+          DAWNCHAT_RUNTIME_ASSETS_BASE_URL: ${{ vars.DAWNCHAT_RUNTIME_ASSETS_BASE_URL }}
+          DAWNCHAT_BUN_BASE_URL: ${{ vars.DAWNCHAT_BUN_BASE_URL }}
+          DAWNCHAT_UV_BASE_URL: ${{ vars.DAWNCHAT_UV_BASE_URL }}
+          DAWNCHAT_OPENCODE_BASE_URL: ${{ vars.DAWNCHAT_OPENCODE_BASE_URL }}
+          DAWNCHAT_LLAMACPP_BASE_URL: ${{ vars.DAWNCHAT_LLAMACPP_BASE_URL }}
+          DAWNCHAT_TTS_KOKORO_URL: ${{ vars.DAWNCHAT_TTS_KOKORO_URL }}
+        run: ./scripts/download-runtime-assets.sh --all --platform aarch64-apple-darwin
+
+      - name: Verify runtime assets
+        run: |
+          test -x runtime-assets/bun-bin/bun-darwin-aarch64/bun
+          test -x runtime-assets/uv-binary/uv-aarch64-apple-darwin/uv
+          test -x runtime-assets/uv-binary/uv-aarch64-apple-darwin/uvx
+          test -x runtime-assets/opencode-bin/opencode-darwin-arm64/opencode
+          test -x runtime-assets/llamacpp/llama-b7204-bin-macos-arm64/bin/llama-server
+          test -f runtime-assets/tts-models/kokoro-multi-lang-v1_1/model.onnx
+
+      - name: Prepare signing assets
+        if: env.SHOULD_SIGN == 'true'
+        env:
+          MACOS_CERT_P12_B64: ${{ secrets.MACOS_CERT_P12_B64 }}
+          ASC_API_KEY_P8_B64: ${{ secrets.ASC_API_KEY_P8_B64 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+        run: |
+          CERT_PATH="$RUNNER_TEMP/developer-id-app.p12"
+          KEY_PATH="$RUNNER_TEMP/AuthKey_${{ secrets.ASC_KEY_ID }}.p8"
+          python - <<'PY'
+          import base64
+          import os
+          from pathlib import Path
+          cert = Path(os.environ["RUNNER_TEMP"]) / "developer-id-app.p12"
+          key = Path(os.environ["RUNNER_TEMP"]) / f'AuthKey_{os.environ["ASC_KEY_ID"]}.p8'
+          cert.write_bytes(base64.b64decode(os.environ["MACOS_CERT_P12_B64"]))
+          key.write_bytes(base64.b64decode(os.environ["ASC_API_KEY_P8_B64"]))
+          PY
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_NAME"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_NAME"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_NAME"
+          security list-keychains -d user -s "$KEYCHAIN_NAME" login.keychain-db
+          security default-keychain -s "$KEYCHAIN_NAME"
+          security import "$CERT_PATH" -k "$KEYCHAIN_NAME" -P "${{ secrets.MACOS_CERT_PASSWORD }}" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_NAME"
+          xcrun notarytool store-credentials "$NOTARY_PROFILE" --key "$KEY_PATH" --key-id "${{ secrets.ASC_KEY_ID }}" --issuer "${{ secrets.ASC_ISSUER_ID }}"
+
+      - name: Build unsigned dmg
+        if: env.SHOULD_SIGN != 'true'
+        run: |
+          ./build.sh \
+            --mode release \
+            --platform aarch64-apple-darwin \
+            --optimize \
+            --dmg-only
+
+      - name: Build signed and notarized dmg
+        if: env.SHOULD_SIGN == 'true'
+        run: |
+          ./build.sh \
+            --mode release \
+            --platform aarch64-apple-darwin \
+            --optimize \
+            --dmg-only \
+            --sign-macos \
+            --notarize-macos \
+            --notary-profile "$NOTARY_PROFILE" \
+            --signing-identity "${{ secrets.APPLE_SIGNING_IDENTITY }}"
+
+      - name: Resolve artifact path
+        id: artifact
+        run: |
+          DMG_PATH="$(ls -t apps/desktop/src-tauri/target/release/bundle/dmg/*.dmg | head -n 1)"
+          echo "dmg_path=$DMG_PATH" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dawnchat-macos-dmg
+          path: ${{ steps.artifact.outputs.dmg_path }}
+          if-no-files-found: error
+
+      - uses: softprops/action-gh-release@v2
+        if: env.SHOULD_SIGN == 'true' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        with:
+          files: ${{ steps.artifact.outputs.dmg_path }}
+
+      - name: Cleanup keychain
+        if: always() && env.SHOULD_SIGN == 'true'
+        run: security delete-keychain "$KEYCHAIN_NAME" || true

@@ -1,0 +1,37 @@
+{
+  "name": "dawnchat-monorepo",
+  "version": "2.0.0",
+  "description": "DawnChat - Your Personal AI-Powered Agent Platform (Monorepo)",
+  "private": true,
+  "scripts": {
+    "//--- 开发 ---": "",
+    "dev": "pnpm --filter @dawnchat/desktop dev",
+    "dev:backend": "cd packages/backend-kernel && poetry run uvicorn app.main:app --reload --port 8000",
+    "dev:frontend": "pnpm --filter @dawnchat/frontend dev",
+
+    "//--- 构建 ---": "",
+    "build": "./build.sh",
+    "build:frontend": "pnpm --filter @dawnchat/frontend build",
+    "build:backend": "cd packages/backend-kernel && poetry run pyinstaller dawnchat-backend.spec --distpath ../../apps/desktop/src-tauri/sidecars --clean",
+    "build:tauri": "cd apps/desktop && pnpm tauri build",
+
+    "//--- 清理 ---": "",
+    "clean": "rm -rf apps/*/node_modules apps/*/dist packages/*/node_modules packages/backend-kernel/{build,dist} apps/desktop/src-tauri/{target,sidecars}",
+
+    "//--- 预览与测试 ---": "",
+    "preview": "pnpm run build",
+    "lint:backend": "cd packages/backend-kernel && poetry run ruff check app",
+    "typecheck:backend": "cd packages/backend-kernel && poetry run mypy app && poetry run pyright -p ../../pyrightconfig.json",
+    "lint:frontend": "pnpm --filter @dawnchat/frontend run typecheck",
+    "lint:tauri": "cd apps/desktop/src-tauri && cargo fmt --all -- --check",
+    "lint": "pnpm run lint:backend && pnpm run typecheck:backend && pnpm run lint:frontend && pnpm run lint:tauri",
+    "scan:secrets": "gitleaks detect --config .gitleaks.toml --no-banner --redact --exit-code 1",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["tauri", "ai", "agent", "monorepo", "privacy"],
+  "author": "DawnChat Team",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.8.4"
+  }
+}

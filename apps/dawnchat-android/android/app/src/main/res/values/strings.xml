@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DawnChat Mobile Host</string>
+    <string name="title_activity_main">DawnChat Mobile Host</string>
+    <string name="package_name">com.dawnchat.dev</string>
+    <string name="custom_url_scheme">com.dawnchat.dev</string>
+    <string name="tab_home">首页</string>
+    <string name="tab_mine">我的</string>
+    <string name="action_scan">扫码</string>
+    <string name="action_close">退出</string>
+    <string name="qr_invalid_payload">二维码格式不支持</string>
+    <string name="install_success">安装成功：%1$s</string>
+    <string name="install_failed">安装失败：%1$s</string>
+    <string name="plugin_version">版本：%1$s</string>
+    <string name="plugin_updated_at">更新时间：%1$s</string>
+    <string name="plugin_empty">暂无本地插件，点击右上角扫码安装</string>
+    <string name="plugin_files_missing">插件文件缺失，请重新扫码安装</string>
+    <string name="sandbox_title_default">插件沙箱</string>
+    <string name="sandbox_title_hmr">HMR 预览</string>
+    <string name="page_settings">设置</string>
+    <string name="page_about">关于</string>
+    <string name="setting_theme">主题</string>
+    <string name="setting_language">语言</string>
+    <string name="setting_system">跟随系统</string>
+    <string name="setting_light">浅色</string>
+    <string name="setting_dark">深色</string>
+    <string name="setting_zh">简体中文</string>
+    <string name="setting_en">English</string>
+    <string name="settings_applied">设置已应用</string>
+    <string name="about_description">DawnChat 移动端插件开发宿主，支持扫码 HMR 与离线包加载。</string>
+    <string name="about_version">版本：%1$s</string>
+    <string name="mine_settings">设置</string>
+    <string name="mine_about">关于</string>
+</resources>

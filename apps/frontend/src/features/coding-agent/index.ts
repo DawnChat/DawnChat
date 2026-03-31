@@ -1,0 +1,5 @@
+export { useCodingAgentStore } from './store/codingAgentStore'
+export { default as CodingChatShell } from './components/CodingChatShell.vue'
+export { default as WorkbenchChatPanel } from './components/WorkbenchChatPanel.vue'
+export * from './services/workspaceTarget'
+export type * from './types'

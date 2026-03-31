@@ -1,0 +1,23 @@
+require_relative '../../node_modules/@capacitor/ios/scripts/pods_helpers'
+
+# 【修复 1】：将最低版本强制拉升到 Capacitor 8 要求的 16.0
+platform :ios, '16.0'
+use_frameworks!
+
+install! 'cocoapods', :disable_input_output_paths => true
+
+def capacitor_pods
+  pod 'Capacitor', :path => '../../node_modules/@capacitor/ios'
+  pod 'CapacitorCordova', :path => '../../node_modules/@capacitor/ios'
+  
+  # 【修复 2】：显式强行注入未能通过 SPM 编译的 SQLite 底层库
+  pod 'CapacitorCommunitySqlite', :path => '../../node_modules/@capacitor-community/sqlite'
+end
+
+target 'App' do
+  capacitor_pods
+end
+
+post_install do |installer|
+  assertDeploymentTarget(installer)
+end

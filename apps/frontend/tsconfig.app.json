@@ -1,0 +1,38 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "module": "ESNext",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@test/*": ["src/test/*"],
+      "@mocks/*": ["src/test/mocks/*"],
+      "@fixtures/*": ["src/test/mocks/fixtures/*"],
+      "@utils/*": ["src/test/utils/*"],
+      "@dawnchat/auth-bridge": ["../../dawnchat-plugins/auth-bridge/src/index.ts"],
+      "@dawnchat/shared-protocol": ["../../dawnchat-plugins/shared-protocol/src/index.ts"],
+      "@dawnchat/shared-ui": ["../../dawnchat-plugins/shared-ui/src/index.ts"]
+    },
+
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "preserve",
+
+    /* Linting */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue"],
+  "exclude": ["src/test/**", "src/**/__tests__/**"]
+}

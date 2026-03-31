@@ -1,0 +1,17 @@
+{
+  "name": "@dawnchat/desktop",
+  "version": "2.0.0",
+  "description": "DawnChat Desktop Application (Tauri)",
+  "private": true,
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/plugin-opener": "^2.5.2"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.8.4"
+  }
+}

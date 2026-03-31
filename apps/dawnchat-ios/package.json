@@ -1,0 +1,45 @@
+{
+  "name": "dawnchat-ios",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@capacitor-community/sqlite": "^8.0.1",
+    "@capacitor/barcode-scanner": "^3.0.2",
+    "@capacitor/camera": "^8.0.2",
+    "@capacitor/clipboard": "^8.0.1",
+    "@capacitor/core": "^8.2.0",
+    "@capacitor/dialog": "^8.0.1",
+    "@capacitor/filesystem": "^8.1.2",
+    "@capacitor/geolocation": "^8.1.0",
+    "@capacitor/haptics": "^8.0.1",
+    "@capacitor/inappbrowser": "^3.0.2",
+    "@capacitor/ios": "^8.2.0",
+    "@capacitor/keyboard": "^8.0.1",
+    "@capacitor/local-notifications": "^8.0.2",
+    "@capacitor/network": "^8.0.1",
+    "@capacitor/preferences": "^8.0.1",
+    "@capacitor/screen-orientation": "^8.0.1",
+    "@capacitor/share": "^8.0.1",
+    "@capacitor/status-bar": "^8.0.1",
+    "@capacitor/toast": "^8.0.1",
+    "@capgo/capacitor-audio-recorder": "^8.0.12",
+    "@capgo/capacitor-contacts": "^8.0.8",
+    "@capgo/capacitor-flash": "^8.0.21",
+    "@capgo/capacitor-keep-awake": "^8.1.9",
+    "@capgo/capacitor-native-biometric": "^8.4.2",
+    "@capgo/capacitor-shake": "^8.0.23",
+    "@capgo/capacitor-video-player": "^8.0.17",
+    "@capgo/native-audio": "^8.3.4"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.2.0"
+  }
+}

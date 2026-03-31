@@ -1,0 +1,7 @@
+# Add directories or file patterns to ignore during indexing (e.g. foo/ or *.csv)
+download/
+example/
+dawnchat-plugins/official-plugins/comfyui/src/comfyui/
+dawnchat-plugins/official-plugins/cosyvoice/src/cosyvoice/
+dawnchat-plugins/official-plugins/vibevoice/src/vibevoice/
+**/dist/

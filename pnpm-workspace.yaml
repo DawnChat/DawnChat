@@ -1,0 +1,15 @@
+# DawnChat Monorepo Workspace Configuration
+# 定义 pnpm 工作区，统一管理所有子项目的依赖
+
+packages:
+  # 应用程序（可构建的最终产品）
+  - 'apps/*'
+  
+  # 功能包（可共享的库和服务）
+  - 'packages/*'
+  
+  # 插件与 SDK 子模块
+  - 'dawnchat-plugins/*'
+
+# 共享配置
+shared-workspace-lockfile: true

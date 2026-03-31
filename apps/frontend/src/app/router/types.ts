@@ -1,0 +1,25 @@
+export type AppRouteName =
+  | 'login'
+  | 'auth-callback'
+  | 'workbench'
+  | 'workbench-room'
+  | 'project-settings'
+  | 'mindcore'
+  | 'agents'
+  | 'workflows'
+  | 'pipeline'
+  | 'pipeline-section'
+  | 'pipeline-task-detail'
+  | 'tools'
+  | 'models'
+  | 'apps'
+  | 'settings'
+  | 'plugin-fullscreen'
+
+export type FullscreenBackSource =
+  | '/app/apps'
+  | '/app/apps/hub'
+  | '/app/apps/installed'
+  | '/app/apps/market'
+
+export type DeepLinkParseResultType = 'valid' | 'invalid' | 'unsupported'

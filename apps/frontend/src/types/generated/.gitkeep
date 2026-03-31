@@ -1,0 +1,9 @@
+# OpenAPI 生成的类型文件目录
+#
+# 使用方法：
+# 1. 启动后端服务：./dev.sh --backend
+# 2. 生成类型：pnpm api:generate
+#
+# 生成的文件：
+# - api.ts: OpenAPI 自动生成的 TypeScript 类型
+# - openapi.json: 缓存的 OpenAPI schema
