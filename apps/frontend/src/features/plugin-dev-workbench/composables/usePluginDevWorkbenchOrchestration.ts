@@ -1,6 +1,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
+import type { LocationQueryRaw } from 'vue-router'
 import { useTheme } from '@/composables/useTheme'
 import { useI18n } from '@/composables/useI18n'
 import { logger } from '@/utils/logger'
@@ -68,6 +69,7 @@ export const usePluginDevWorkbenchOrchestration = () => {
     message: '',
     kind: 'success'
   })
+  const renamingApp = ref(false)
   let publishToastTimer: ReturnType<typeof setTimeout> | null = null
   const pluginId = computed(() => String(route.params.pluginId || ''))
   const { ensureReady: ensureWorkbenchCodingReady } = useWorkbenchCodingRuntime({ pluginId })
@@ -670,7 +672,7 @@ export const usePluginDevWorkbenchOrchestration = () => {
   }
 
   const setSurfaceMode = async (mode: PluginWorkbenchSurfaceMode) => {
-    const nextQuery: Record<string, unknown> = {
+    const nextQuery: LocationQueryRaw = {
       ...route.query,
     }
     if (mode === 'assistant_compact') {
@@ -753,6 +755,34 @@ export const usePluginDevWorkbenchOrchestration = () => {
 
   const handleRetryInstall = async () => {
     await retryInstall()
+  }
+
+  const renameActiveApp = async (nextName: string): Promise<boolean> => {
+    const id = pluginId.value
+    if (!id || renamingApp.value) return false
+    const normalizedName = String(nextName || '').trim()
+    if (!normalizedName) {
+      showPublishToast(t.value.apps.workbenchRenameNameRequired, 'error')
+      return false
+    }
+    if (normalizedName === String(activeApp.value?.name || '').trim()) {
+      return true
+    }
+    renamingApp.value = true
+    try {
+      await facade.updateAppDisplayName(id, normalizedName)
+      showPublishToast(t.value.apps.workbenchRenameSuccess, 'success')
+      return true
+    } catch (error) {
+      showPublishToast(t.value.apps.workbenchRenameFailed, 'error')
+      logger.warn('plugin_dev_workbench_rename_failed', {
+        pluginId: id,
+        error: String(error),
+      })
+      return false
+    } finally {
+      renamingApp.value = false
+    }
   }
 
   const handleInspectorSelect = async (payload: InspectorSelectPayload) => {
@@ -932,6 +962,8 @@ export const usePluginDevWorkbenchOrchestration = () => {
     openBuildSession,
     hasBuildSession,
     isBuildRunning,
+    renamingApp,
+    renameActiveApp,
     workbenchMode,
     workbenchProfile,
     isAgentPreviewLayout,

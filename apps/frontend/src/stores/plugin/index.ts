@@ -153,6 +153,7 @@ export function createPluginStoreActions(state: ReturnType<typeof createPluginSt
     setMarketQuery: marketActions.setMarketQuery,
     loadMarketApps: marketActions.loadMarketApps,
     loadApps: runtimeActions.loadApps,
+    updateAppDisplayName: runtimeActions.updateAppDisplayName,
     startApp: runtimeActions.startApp,
     stopApp: runtimeActions.stopApp,
     openApp: runtimeActions.openApp,

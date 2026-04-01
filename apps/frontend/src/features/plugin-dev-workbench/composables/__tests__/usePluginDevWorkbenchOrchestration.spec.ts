@@ -38,10 +38,12 @@ const activeAppRef = ref({
   },
 })
 const loadFileList = vi.fn(async () => {})
+const routerReplace = vi.fn(async () => {})
+const routerPush = vi.fn(async () => {})
 
 vi.mock('vue-router', () => ({
   useRoute: () => routeRef.value,
-  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+  useRouter: () => ({ replace: routerReplace, push: routerPush }),
   onBeforeRouteLeave: vi.fn(),
 }))
 
@@ -53,6 +55,7 @@ vi.mock('@/features/plugin-dev-workbench/services/devWorkbenchFacade', () => ({
   useDevWorkbenchFacade: () => ({
     rememberBuildHubRecentSession,
     closeApp,
+    updateAppDisplayName: vi.fn(async () => null),
   }),
 }))
 
@@ -169,6 +172,9 @@ vi.mock('@/composables/useI18n', () => ({
         publishWeb: '发布网页',
         mobilePreviewQr: '二维码',
         mobileOfflineUpload: '离线包',
+        workbenchRenameSuccess: '重命名成功',
+        workbenchRenameFailed: '重命名失败',
+        workbenchRenameNameRequired: '名称不能为空',
         workbenchCloseRunningWarning: '运行中',
         workbenchCloseSaveFailed: '保存失败',
       },
@@ -431,5 +437,29 @@ describe('usePluginDevWorkbenchOrchestration', () => {
     await (wrapper.vm as any).selectTtsEngine('azure')
     expect((wrapper.vm as any).azureTtsDialogVisible).toBe(true)
     expect((wrapper.vm as any).selectedTtsEngine).not.toBe('azure')
+  })
+
+  it('切换预览全屏时通过 query 持久化 surface', async () => {
+    const Harness = defineComponent({
+      setup() {
+        return usePluginDevWorkbenchOrchestration()
+      },
+      template: '<div />',
+    })
+    const wrapper = mount(Harness)
+    await (wrapper.vm as any).togglePreviewFullscreen()
+    expect(routerReplace).toHaveBeenCalledWith(expect.objectContaining({
+      query: expect.objectContaining({
+        surface: 'assistant_compact',
+      }),
+    }))
+
+    routeRef.value.query = { from: '/app/apps', surface: 'assistant_compact' }
+    await (wrapper.vm as any).togglePreviewFullscreen()
+    expect(routerReplace).toHaveBeenLastCalledWith(expect.objectContaining({
+      query: expect.not.objectContaining({
+        surface: expect.anything(),
+      }),
+    }))
   })
 })

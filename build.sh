@@ -90,6 +90,7 @@ ENABLE_VERBOSE_IMPORT=false
 CLEAN_BEFORE_BUILD=false
 VERBOSE=false
 ENABLE_MLX=false
+ENABLE_LLAMACPP=false
 USER_SET_OPTIMIZE=false
 SIGN_MACOS=false
 NOTARIZE_MACOS=false
@@ -156,6 +157,7 @@ DawnChat 统一构建脚本 (Python Build Standalone 方案)
     --embed-chromium        嵌入 Chromium 浏览器 (用于爬虫功能)
     --enable-verbose-import 开启详细的 Python 导入日志 (PYTHONVERBOSE)
     --with-mlx              安装 MLX 运行时依赖
+    --with-llamacpp         内置 llama.cpp 二进制（默认关闭）
     --mirror <url>          指定 PyPI 镜像地址
     --cn-mirror             使用国内镜像 (清华源) 加速下载
     --clean                 构建前清理所有产物
@@ -227,6 +229,10 @@ parse_args() {
                 ;;
             --with-mlx)
                 ENABLE_MLX=true
+                shift
+                ;;
+            --with-llamacpp)
+                ENABLE_LLAMACPP=true
                 shift
                 ;;
             --mirror)
@@ -1652,9 +1658,6 @@ main() {
         ENABLE_OPTIMIZE=true
         print_info "release 模式默认启用 Python 体积优化（可通过参数显式控制）"
     fi
-    if [[ "$platform" == "aarch64-apple-darwin" ]]; then
-        ENABLE_MLX=true
-    fi
     print_info "构建配置:"
     echo "    模式:     $BUILD_MODE"
     echo "    平台:     $platform"
@@ -1664,6 +1667,7 @@ main() {
     echo "    Cython:   $ENABLE_CYTHON"
     echo "    优化:     $ENABLE_OPTIMIZE"
     echo "    MLX:      $ENABLE_MLX"
+    echo "    LlamaCpp: $ENABLE_LLAMACPP"
     echo "    DMG Only: $DMG_ONLY"
     echo "    签名:     $SIGN_MACOS"
     echo "    公证:     $NOTARIZE_MACOS"
@@ -1692,7 +1696,11 @@ main() {
         copy_source_code
         compile_with_cython
         optimize_python
-        copy_llamacpp_binary "$platform"
+        if [[ "$ENABLE_LLAMACPP" == true ]]; then
+            copy_llamacpp_binary "$platform"
+        else
+            print_info "跳过 llama.cpp 二进制内置（默认关闭，可通过 --with-llamacpp 开启）"
+        fi
         copy_tts_kokoro_model
         copy_uv_binary "$platform"
         copy_bun_binary "$platform"

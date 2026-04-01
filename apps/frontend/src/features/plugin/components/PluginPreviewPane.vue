@@ -1,23 +1,33 @@
 <template>
-  <div class="preview-pane">
+  <div class="preview-pane" :class="{ 'compact-surface': isCompactSurface }">
+    <div v-if="isCompactSurface" class="toolbar-reveal-hotzone"></div>
     <div class="preview-toolbar">
-      <button class="tool-btn ui-btn ui-btn--neutral" :class="{ active: inspectorEnabled }" :disabled="isLifecycleBusy" @click="toggleInspector">
-        {{ inspectorEnabled ? labels.inspectorDisable : labels.inspectorEnable }}
-      </button>
-      <button class="tool-btn ui-btn ui-btn--neutral" :disabled="isLifecycleBusy" @click="reloadIframe">{{ t.common.refresh }}</button>
-      <button class="tool-btn ui-btn ui-btn--neutral" :disabled="isLifecycleBusy" @click="$emit('toggleFullscreen')">
-        {{ isCompactSurface ? labels.exitFullscreen : labels.enterFullscreen }}
-      </button>
-      <button class="tool-btn ui-btn ui-btn--neutral" :disabled="isLifecycleBusy" @click="$emit('restart', pluginId)">
-        {{ labels.restart }}
-      </button>
+      <div class="preview-toolbar-main">
+        <button class="tool-btn ui-btn ui-btn--neutral" :class="{ active: inspectorEnabled }" :disabled="isLifecycleBusy" @click="toggleInspector">
+          {{ inspectorEnabled ? labels.inspectorDisable : labels.inspectorEnable }}
+        </button>
+        <button class="tool-btn ui-btn ui-btn--neutral" :disabled="isLifecycleBusy" @click="reloadIframe">{{ t.common.refresh }}</button>
+        <button class="tool-btn ui-btn ui-btn--neutral" :disabled="isLifecycleBusy" @click="$emit('restart', pluginId)">
+          {{ labels.restart }}
+        </button>
+        <button
+          v-if="showStopButton"
+          class="tool-btn ui-btn ui-btn--neutral danger"
+          :disabled="isLifecycleBusy"
+          @click="$emit('stop', pluginId)"
+        >
+          {{ t.apps.stop }}
+        </button>
+      </div>
       <button
-        v-if="showStopButton"
-        class="tool-btn ui-btn ui-btn--neutral danger"
+        class="fullscreen-icon-btn ui-btn ui-btn--neutral"
         :disabled="isLifecycleBusy"
-        @click="$emit('stop', pluginId)"
+        :aria-label="isCompactSurface ? labels.exitFullscreen : labels.enterFullscreen"
+        :title="isCompactSurface ? labels.exitFullscreen : labels.enterFullscreen"
+        @click="$emit('toggleFullscreen')"
       >
-        {{ t.apps.stop }}
+        <Minimize2 v-if="isCompactSurface" :size="16" />
+        <Maximize2 v-else :size="16" />
       </button>
     </div>
 
@@ -67,6 +77,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { Maximize2, Minimize2 } from 'lucide-vue-next'
 import { useI18n } from '@/composables/useI18n'
 import type {
   CapabilityInvokeExecutionContext,
@@ -461,6 +472,7 @@ onUnmounted(() => {
 
 <style scoped>
 .preview-pane {
+  position: relative;
   width: 100%;
   height: 100%;
   display: flex;
@@ -473,8 +485,45 @@ onUnmounted(() => {
   border-bottom: 1px solid var(--color-border);
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.62rem;
   padding: 0 0.75rem;
+  transition: transform 0.22s ease, opacity 0.22s ease;
+}
+
+.toolbar-reveal-hotzone {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 14px;
+  z-index: 32;
+}
+
+.preview-pane.compact-surface .preview-toolbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 34;
+  background: color-mix(in srgb, var(--color-surface-1) 78%, transparent);
+  backdrop-filter: blur(8px);
+  transform: translateY(calc(-100% + 6px));
+  opacity: 0;
+  pointer-events: none;
+}
+
+.preview-pane.compact-surface .toolbar-reveal-hotzone:hover + .preview-toolbar,
+.preview-pane.compact-surface .preview-toolbar:hover,
+.preview-pane.compact-surface .preview-toolbar:focus-within {
+  transform: translateY(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.preview-toolbar-main {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .tool-btn {
@@ -503,6 +552,17 @@ onUnmounted(() => {
 
 .tool-btn.danger {
   color: #ef4444;
+}
+
+.fullscreen-icon-btn {
+  margin-left: auto;
+  min-height: 34px;
+  width: 34px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
 }
 
 .preview-iframe {

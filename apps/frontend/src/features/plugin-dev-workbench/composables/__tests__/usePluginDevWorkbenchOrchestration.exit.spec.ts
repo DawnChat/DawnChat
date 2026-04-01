@@ -65,6 +65,7 @@ vi.mock('@/features/plugin-dev-workbench/services/devWorkbenchFacade', () => ({
   useDevWorkbenchFacade: () => ({
     rememberBuildHubRecentSession: vi.fn(),
     closeApp: vi.fn(),
+    updateAppDisplayName: vi.fn(async () => null),
   }),
 }))
 
@@ -214,6 +215,9 @@ vi.mock('@/composables/useI18n', () => ({
     t: ref({
       apps: {
         starting: '启动中',
+        workbenchRenameSuccess: '重命名成功',
+        workbenchRenameFailed: '重命名失败',
+        workbenchRenameNameRequired: '名称不能为空',
         workbenchCloseRunningWarning: '会话会保留但预览会停止',
         workbenchCloseSaveFailed: '保存失败',
       },

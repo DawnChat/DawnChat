@@ -117,7 +117,7 @@ import { useBuildHubState } from '@/features/plugin/composables/useBuildHubState
 import { useBuildHubActions } from '@/features/plugin/composables/useBuildHubActions'
 import { useBuildHubCreationFlow } from '@/features/plugin/composables/useBuildHubCreationFlow'
 import { useBuildHubLifecycleFacade } from '@/features/plugin/services/buildHubLifecycleFacade'
-import { usePluginStore } from '@/features/plugin/store'
+import { usePluginStore } from '@/stores/plugin'
 import { useI18n } from '@/composables/useI18n'
 import type { CreateAppType } from '@/config/appTemplates'
 import type { Plugin } from '@/features/plugin/types'

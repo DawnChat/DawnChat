@@ -301,18 +301,22 @@ class TtsRuntimeService:
             logger.info("tts_task_cancelled task_id=%s plugin=%s", task.task_id, task.plugin_id)
             await self._publish(task.task_id, {"event": "cancelled", "data": {"task_id": task.task_id}})
         except Exception as err:
+            normalized_error_message = self._normalize_error_message(err)
             task.status = "failed"
-            task.error_code = self._map_error_code(str(err))
-            task.message = str(err)
+            task.error_code = self._map_error_code(normalized_error_message)
+            task.message = normalized_error_message
             task.completed_at = datetime.utcnow()
             task.updated_at = datetime.utcnow()
-            self._last_error_by_plugin[task.plugin_id] = str(err)
+            self._last_error_by_plugin[task.plugin_id] = normalized_error_message
             logger.warning(
-                "tts_task_failed task_id=%s plugin=%s code=%s message=%s",
+                "tts_task_failed task_id=%s plugin=%s engine=%s code=%s message=%s exc_type=%s exc_repr=%s",
                 task.task_id,
                 task.plugin_id,
+                task.engine,
                 task.error_code,
                 task.message,
+                err.__class__.__name__,
+                repr(err),
             )
             await self._publish(
                 task.task_id,
@@ -521,6 +525,16 @@ class TtsRuntimeService:
             "last_bridge_error_code": "",
             "last_bridge_error_at": "",
         }
+
+    @staticmethod
+    def _normalize_error_message(err: Exception) -> str:
+        message = str(err).strip()
+        if message:
+            return message
+        representation = repr(err).strip()
+        if representation:
+            return representation
+        return err.__class__.__name__
 
     @staticmethod
     def _map_error_code(message: str) -> str:

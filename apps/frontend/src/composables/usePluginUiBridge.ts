@@ -131,8 +131,23 @@ function parseHostInvoke(payload: unknown): HostInvokeRequest | null {
 export function usePluginUiBridge(options: UiBridgeOptions) {
   let bridge: PluginUiBridgeClient | null = null
   const pendingRequests = new Map<string, PendingRequest>()
-  const REQUEST_TIMEOUT_MS = 20_000
+  const REQUEST_TIMEOUT_DEFAULT_MS = 20_000
+  const REQUEST_TIMEOUT_SESSION_INVOKE_MS = 120_000
   let localRequestSeq = 0
+
+  const resolveRequestTimeoutMs = (op: string, payload: Record<string, unknown>): number => {
+    if (op !== 'capability_invoke') {
+      return REQUEST_TIMEOUT_DEFAULT_MS
+    }
+    const functionName = String(payload.function || '').trim()
+    if (
+      functionName.startsWith('assistant.session')
+      || functionName.startsWith('assistant.session_')
+    ) {
+      return REQUEST_TIMEOUT_SESSION_INVOKE_MS
+    }
+    return REQUEST_TIMEOUT_DEFAULT_MS
+  }
 
   const postToIframe = (message: Record<string, unknown>) => {
     const frame = options.iframeRef.value?.contentWindow
@@ -155,6 +170,7 @@ export function usePluginUiBridge(options: UiBridgeOptions) {
   const schedulePendingTimeout = (
     requestId: string,
     source: PendingRequest['source'],
+    timeoutMs: number,
     resolve?: (result: Record<string, unknown>) => void
   ) => {
     const existing = finalizePending(requestId)
@@ -177,7 +193,7 @@ export function usePluginUiBridge(options: UiBridgeOptions) {
         return
       }
       resolve?.(timeoutResult)
-    }, REQUEST_TIMEOUT_MS)
+    }, timeoutMs)
     pendingRequests.set(requestId, { timer, source, resolve })
   }
 
@@ -203,7 +219,8 @@ export function usePluginUiBridge(options: UiBridgeOptions) {
       }
       return false
     }
-    schedulePendingTimeout(requestId, source, resolve)
+    const timeoutMs = resolveRequestTimeoutMs(op, payload)
+    schedulePendingTimeout(requestId, source, timeoutMs, resolve)
     const success = postToIframe({
       type,
       pluginId,

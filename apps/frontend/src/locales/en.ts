@@ -949,6 +949,13 @@ export default {
     workbenchCloseSaveAndExit: 'Save and Exit',
     workbenchCloseExitDirectly: 'Exit Directly',
     workbenchCloseCancel: 'Cancel',
+    workbenchRenameAction: 'Rename app',
+    workbenchRenameSave: 'Save name',
+    workbenchRenameCancel: 'Cancel rename',
+    workbenchRenamePlaceholder: 'Enter app name',
+    workbenchRenameSuccess: 'App name updated',
+    workbenchRenameFailed: 'Failed to update app name',
+    workbenchRenameNameRequired: 'App name cannot be empty',
     workbenchCloseRunningWarning: 'Build or Agent is still running. The session will be kept, but preview will stop.',
     workbenchCloseSaveFailed: 'Save failed. Dev workbench stays open.',
     workbenchAgentLogTitle: 'Agent Live Log',
@@ -1306,7 +1313,7 @@ export default {
   },
 
   loading: {
-    subtitle: 'DawnChat is built for apps that keep evolving.',
+    subtitle: 'Built for apps that keep evolving.',
     retry: 'Retry',
     connectionFailed: 'Connection Failed',
     serviceReady: 'Service Ready',

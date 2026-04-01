@@ -66,7 +66,18 @@
             />
           </div>
           <div v-if="ttsEngineSelectOptions.length > 0" class="settings-field settings-field-tts">
-            <div class="settings-label">{{ labels.ttsEngine }}</div>
+            <div class="settings-label-row">
+              <div class="settings-label">{{ labels.ttsEngine }}</div>
+              <button
+                v-if="selectedTtsEngine === 'azure'"
+                class="icon-btn icon-btn-azure-config-label"
+                type="button"
+                title="配置 Azure TTS"
+                @click="emit('open-azure-tts-settings')"
+              >
+                <Pencil class="settings-icon" aria-hidden="true" />
+              </button>
+            </div>
             <div class="tts-engine-row">
               <PluginDevInlineSelect
                 :model-value="selectedTtsEngine"
@@ -74,15 +85,6 @@
                 label="TTS"
                 @update:model-value="(value) => emit('select-tts-engine', value)"
               />
-              <button
-                v-if="selectedTtsEngine === 'azure'"
-                class="icon-btn icon-btn-azure-config"
-                type="button"
-                title="配置 Azure TTS"
-                @click="emit('open-azure-tts-settings')"
-              >
-                <Pencil class="settings-icon" aria-hidden="true" />
-              </button>
             </div>
           </div>
           <div v-if="showTtsControl" class="settings-field settings-field-tts-switch">
@@ -378,17 +380,20 @@ onUnmounted(() => {
 }
 
 .settings-popover {
-  width: 248px;
-  --settings-select-width: 190px;
+  width: fit-content;
+  min-width: 0;
+  --settings-select-width: 168px;
   padding: 0.7rem;
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 0.68rem;
 }
 
 .settings-field {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 0.38rem;
 }
 
@@ -397,9 +402,16 @@ onUnmounted(() => {
   color: var(--color-text-secondary);
 }
 
-.settings-field :deep(.inline-select-root) {
-  width: min(var(--settings-select-width), 100%);
-  max-width: 100%;
+.settings-label-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+}
+
+.settings-field :deep(.inline-select) {
+  width: var(--settings-select-width);
+  max-width: var(--settings-select-width);
+  min-width: var(--settings-select-width);
 }
 
 .settings-field :deep(.inline-select-trigger) {
@@ -412,13 +424,20 @@ onUnmounted(() => {
   gap: 0.35rem;
 }
 
-.tts-engine-row :deep(.inline-select-root) {
+.tts-engine-row :deep(.inline-select) {
   flex: 0 0 auto;
 }
 
 .icon-btn-azure-config {
   min-width: 28px;
   padding: 0 0.38rem;
+}
+
+.icon-btn-azure-config-label {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 0.2rem;
+  border-radius: 6px;
 }
 
 .settings-field :deep(.inline-select-label) {

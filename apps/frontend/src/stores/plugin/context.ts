@@ -14,6 +14,7 @@ export interface MarketActionsContract {
 export interface RuntimeActionsContract {
   refreshInstalledApp(appId: string): Promise<void>
   loadApps(isBackground?: boolean): Promise<void>
+  updateAppDisplayName(appId: string, name: string): Promise<Plugin | null>
 }
 
 export interface PreviewActionsContract {
@@ -98,6 +99,7 @@ export function createPluginStoreContext(state: PluginStoreState, deps: PluginSt
     runtimeActions: {
       refreshInstalledApp: async () => createNotReadyError('runtimeActions.refreshInstalledApp'),
       loadApps: async () => createNotReadyError('runtimeActions.loadApps'),
+      updateAppDisplayName: async () => createNotReadyError('runtimeActions.updateAppDisplayName'),
     },
     previewActions: {
       startPreview: async () => createNotReadyError('previewActions.startPreview'),

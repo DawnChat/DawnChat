@@ -88,4 +88,36 @@ describe('useWorkbenchLayoutState', () => {
     const maxByHalf = Math.floor((window.innerWidth - 8) / 2)
     expect((wrapper.vm as any).previewWidthPx).toBe(maxByHalf)
   })
+
+  it('split_no_iwp 布局首次挂载时默认左栏 460', () => {
+    localStorage.setItem(
+      'plugin-dev-workbench.layout.v1',
+      JSON.stringify({ previewWidthPx: 720, agentLogHeightPx: 220 })
+    )
+    const layoutVariant = ref<'split_no_iwp' | 'split_with_iwp'>('split_no_iwp')
+    const Harness = defineComponent({
+      setup() {
+        return useWorkbenchLayoutState({ layoutVariant })
+      },
+      template: '<div />',
+    })
+    const wrapper = mount(Harness)
+    expect((wrapper.vm as any).previewWidthPx).toBe(460)
+  })
+
+  it('布局语义切换到 split_no_iwp 时重算左栏默认宽度', async () => {
+    const profile = ref(getWorkbenchLayoutProfile('default'))
+    const layoutVariant = ref<'split_no_iwp' | 'split_with_iwp'>('split_with_iwp')
+    const Harness = defineComponent({
+      setup() {
+        return useWorkbenchLayoutState({ profile, layoutVariant })
+      },
+      template: '<div />',
+    })
+    const wrapper = mount(Harness)
+    ;(wrapper.vm as any).previewWidthPx = 780
+    layoutVariant.value = 'split_no_iwp'
+    await Promise.resolve()
+    expect((wrapper.vm as any).previewWidthPx).toBe(460)
+  })
 })

@@ -146,6 +146,60 @@ describe('usePluginUiBridge', () => {
     )
   })
 
+  it('uses extended timeout for assistant.session step invoke requests', async () => {
+    const TestComp = defineComponent({
+      setup() {
+        const frameRef = ref({
+          contentWindow: {
+            postMessage: vi.fn()
+          }
+        } as unknown as HTMLIFrameElement)
+        usePluginUiBridge({
+          pluginId: ref('plugin.demo') as any,
+          iframeRef: frameRef,
+          expectedOrigin: ref('http://plugin.local') as any,
+          onContextPush: vi.fn()
+        })
+        return () => null
+      }
+    })
+    mount(TestComp)
+
+    const client = bridgeClientMockState.instances[0]
+    client.handlers.onRequest({
+      type: 'bridge.request',
+      requestId: 'req_session_step_timeout',
+      pluginId: 'plugin.demo',
+      op: 'capability_invoke',
+      payload: {
+        function: 'assistant.session_step_execute',
+        payload: {
+          session_id: 'sess_1',
+          action: {
+            type: 'guide.narrate',
+            payload: {
+              text: 'long narration'
+            }
+          }
+        },
+        options: {}
+      }
+    })
+
+    vi.advanceTimersByTime(20_001)
+    expect(client.sentResults).toHaveLength(0)
+
+    vi.advanceTimersByTime(100_000)
+    expect(client.sentResults).toHaveLength(1)
+    expect(client.sentResults[0]).toEqual({
+      requestId: 'req_session_step_timeout',
+      result: expect.objectContaining({
+        ok: false,
+        error_code: 'iframe_timeout'
+      })
+    })
+  })
+
   it('forwards scroll op to dedicated iframe message type', async () => {
     const postMessage = vi.fn()
     const TestComp = defineComponent({

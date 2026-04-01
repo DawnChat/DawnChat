@@ -1,6 +1,6 @@
 import { storeToRefs } from 'pinia'
 import type { Ref } from 'vue'
-import { usePluginStore } from '@/features/plugin/store'
+import { usePluginStore } from '@/stores/plugin'
 import type { Plugin, PluginRunMode } from '@/features/plugin/types'
 
 export interface RuntimeFacade {

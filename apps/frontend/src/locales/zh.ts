@@ -205,7 +205,7 @@ export default {
     failedToLoad: '加载失败'
   },
   loading: {
-    subtitle: 'DawnChat，构建可持续进化的 App。',
+    subtitle: '构建可持续进化的 App。',
     retry: '重新尝试',
     connectionFailed: '连接失败',
     serviceReady: '服务已就绪',
@@ -287,7 +287,7 @@ export default {
   },
   app: {
     name: 'DawnChat',
-    subtitle: 'DawnChat，构建可持续进化的 App。'
+    subtitle: '构建可持续进化的 App。'
   },
   nav: {
     workbench: '工作台',
@@ -1136,6 +1136,13 @@ export default {
     workbenchCloseSaveAndExit: '保存并退出',
     workbenchCloseExitDirectly: '直接退出',
     workbenchCloseCancel: '取消',
+    workbenchRenameAction: '修改应用名称',
+    workbenchRenameSave: '保存名称',
+    workbenchRenameCancel: '取消修改',
+    workbenchRenamePlaceholder: '请输入应用名称',
+    workbenchRenameSuccess: '应用名称已更新',
+    workbenchRenameFailed: '应用名称更新失败',
+    workbenchRenameNameRequired: '应用名称不能为空',
     workbenchCloseRunningWarning: '当前 Build 或 Agent 会话正在运行，会话会保留，但预览会停止。',
     workbenchCloseSaveFailed: '保存失败，未能退出工作台',
     workbenchAgentLogTitle: 'Agent 实时日志',

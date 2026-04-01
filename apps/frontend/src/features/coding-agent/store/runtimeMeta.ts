@@ -5,7 +5,6 @@ import type { EngineId } from '@/services/coding-agent/adapterRegistry'
 import { engineUsesRuntimeMeta, getControlPlanePrefix } from '@/services/coding-agent/engineCapabilities'
 import { getWorkbenchProject } from '@/stores/workbenchProjectsApi'
 import type { WorkspaceResolveOptions, WorkspaceTarget } from '@/features/coding-agent/store/types'
-import { getSupabaseSession } from '@/shared/composables/useSecureStorage'
 
 interface ModelOption {
   id: string
@@ -256,9 +255,6 @@ export function createRuntimeMetaLoader(input: {
     }
     const engineLabel = 'OpenCode'
     const controlPrefix = getControlPlanePrefix(engineId)
-    const hostedLlmEnabled = String(import.meta.env.VITE_DAWNCHAT_HOSTED_LLM_ENABLED || '').trim().toLowerCase() === 'true'
-    const supabaseSession = hostedLlmEnabled ? await getSupabaseSession().catch(() => null) : null
-    const hostedAccessToken = hostedLlmEnabled ? String(supabaseSession?.access_token || '').trim() : ''
     const startResp = await fetch(buildBackendUrl(`${controlPrefix}/start_with_workspace`), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -266,7 +262,6 @@ export function createRuntimeMetaLoader(input: {
         workspace_kind: target.kind,
         ...(target.pluginId ? { plugin_id: target.pluginId } : {}),
         ...(target.projectId ? { project_id: target.projectId } : {}),
-        ...(hostedAccessToken ? { hosted_access_token: hostedAccessToken } : {}),
         force_restart: Boolean(options?.forceRestart)
       })
     })

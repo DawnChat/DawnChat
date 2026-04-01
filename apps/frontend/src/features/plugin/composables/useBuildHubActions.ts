@@ -1,6 +1,6 @@
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { usePluginStore } from '@/features/plugin/store'
+import { usePluginStore } from '@/stores/plugin'
 import type { CreateAppType } from '@/config/appTemplates'
 import { getAppTemplateCatalog } from '@/config/appTemplates'
 import { openPluginDevWorkbench, openPluginFullscreen } from '@/app/router/navigation'

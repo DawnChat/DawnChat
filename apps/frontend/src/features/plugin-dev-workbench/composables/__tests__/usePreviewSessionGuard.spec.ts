@@ -33,6 +33,7 @@ const createFacade = (app: Plugin | null): DevWorkbenchFacade => {
     installedApps,
     activeLifecycleTask,
     loadApps: vi.fn(async () => {}),
+    updateAppDisplayName: vi.fn(async () => null),
     openApp: vi.fn((next) => {
       activeApp.value = next
     }),

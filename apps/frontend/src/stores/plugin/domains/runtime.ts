@@ -162,6 +162,24 @@ export function createRuntimeActions(ctx: PluginStoreContext) {
     return await startAppWithCheck(appId)
   }
 
+  const updateAppDisplayName = async (appId: string, name: string): Promise<Plugin | null> => {
+    const normalizedName = name.trim()
+    if (!normalizedName) {
+      throw new Error('Plugin name cannot be empty')
+    }
+    const res = await fetch(`${API_BASE()}/api/plugins/${encodeURIComponent(appId)}/display-name`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: normalizedName }),
+    })
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '')
+      throw new Error(detail || `update plugin display name failed: ${res.status}`)
+    }
+    await refreshInstalledApp(appId)
+    return ctx.state.installedApps.value.find((item) => item.id === appId) || null
+  }
+
   return {
     upsertInstalledApp,
     fetchInstalledApp,
@@ -174,5 +192,6 @@ export function createRuntimeActions(ctx: PluginStoreContext) {
     checkEnvironmentRequirements,
     startAppWithCheck,
     startAppWithMode,
+    updateAppDisplayName,
   }
 }

@@ -91,6 +91,10 @@ class StartRuntimeOperationRequest(BaseModel):
     plugin_id: str
 
 
+class PluginDisplayNameUpdateRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=80)
+
+
 class MobilePreviewShareUrlResponse(BaseModel):
     status: str
     plugin_id: str
@@ -202,6 +206,23 @@ async def get_plugin(plugin_id: str):
         "plugin": plugin,
         "detail_metadata": manager.get_plugin_detail_metadata(plugin_id),
     }
+
+
+@router.patch("/{plugin_id}/display-name")
+async def update_plugin_display_name(plugin_id: str, request: PluginDisplayNameUpdateRequest):
+    manager = await _get_initialized_manager()
+    plugin = manager.get_plugin_snapshot(plugin_id)
+    if not plugin:
+        raise HTTPException(status_code=404, detail=f"Plugin not found: {plugin_id}")
+    try:
+        payload = manager.update_plugin_display_name(plugin_id, request.name)
+    except FileNotFoundError as err:
+        raise HTTPException(status_code=404, detail=str(err)) from err
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err)) from err
+    except RuntimeError as err:
+        raise HTTPException(status_code=400, detail=str(err)) from err
+    return {"status": "success", **payload}
 
 
 @router.post("/{plugin_id}/start", response_model=PluginActionResponse)

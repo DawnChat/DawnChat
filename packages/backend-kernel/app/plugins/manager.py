@@ -619,6 +619,43 @@ class PluginManager:
             return None
         return str(plugin.manifest.plugin_path)
 
+    def update_plugin_display_name(self, plugin_id: str, name: str) -> dict[str, Any]:
+        plugin = self._registry.get(plugin_id)
+        if not plugin:
+            raise FileNotFoundError(f"Plugin not found: {plugin_id}")
+        if plugin.manifest.is_official:
+            raise RuntimeError("Official plugin display name cannot be modified")
+
+        normalized_name = str(name or "").strip()
+        if not normalized_name:
+            raise ValueError("Plugin name cannot be empty")
+
+        plugin_path = str(plugin.manifest.plugin_path or "").strip()
+        if not plugin_path:
+            raise RuntimeError(f"Plugin source path not found: {plugin_id}")
+        manifest_path = Path(plugin_path) / "manifest.json"
+        if not manifest_path.exists():
+            raise FileNotFoundError(f"Plugin manifest not found: {plugin_id}")
+
+        try:
+            manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            raise RuntimeError(f"Failed to load plugin manifest: {plugin_id}") from exc
+        if not isinstance(manifest_payload, dict):
+            raise RuntimeError(f"Invalid plugin manifest format: {plugin_id}")
+
+        manifest_payload["name"] = normalized_name
+        try:
+            manifest_path.write_text(
+                json.dumps(manifest_payload, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+        except Exception as exc:
+            raise RuntimeError(f"Failed to save plugin manifest: {plugin_id}") from exc
+
+        plugin.manifest.name = normalized_name
+        return {"plugin_id": plugin_id, "name": normalized_name}
+
     def get_web_plugin_versions(self, plugin_id: str) -> dict[str, Any]:
         return self._web_version_service.get_web_plugin_versions(plugin_id)
 

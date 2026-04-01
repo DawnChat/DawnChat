@@ -42,7 +42,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from '@/composables/useI18n'
-import { CodingChatShell } from '@/features/coding-agent'
+import CodingChatShell from '@/features/coding-agent/components/CodingChatShell.vue'
 import type { TtsPlaybackState } from '@/services/tts/ttsPlaybackQueue'
 
 withDefaults(defineProps<{

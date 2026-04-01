@@ -28,6 +28,7 @@ const createFacade = (): DevWorkbenchFacade => {
     installedApps: ref<Plugin[]>([]),
     activeLifecycleTask: ref<LifecycleTask | null>(null),
     loadApps: vi.fn(async () => {}),
+    updateAppDisplayName: vi.fn(async () => null),
     openApp: vi.fn(),
     closeApp: vi.fn(),
     stopPreview: vi.fn(async () => true),

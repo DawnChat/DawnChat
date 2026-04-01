@@ -1,13 +1,13 @@
 import { storeToRefs } from 'pinia'
 import type { Ref } from 'vue'
-import { usePluginStore } from '@/features/plugin/store'
+import { usePluginStore } from '@/stores/plugin'
 import type { Plugin, PluginRunMode } from '@/features/plugin/types'
 import type {
   LifecycleTask,
   MobilePublishState,
   RunLifecycleOperationOptions,
   WebPublishState,
-} from '@/features/plugin/store'
+} from '@/features/plugin/store/types'
 
 export interface DevWorkbenchFacade {
   activeApp: Ref<Plugin | null>
@@ -15,6 +15,7 @@ export interface DevWorkbenchFacade {
   installedApps: Ref<Plugin[]>
   activeLifecycleTask: Ref<LifecycleTask | null>
   loadApps: (silent?: boolean) => Promise<void>
+  updateAppDisplayName: (pluginId: string, name: string) => Promise<Plugin | null>
   openApp: (app: Plugin, mode: PluginRunMode) => void
   closeApp: () => void
   stopPreview: (pluginId: string) => Promise<boolean>
@@ -41,6 +42,7 @@ export const useDevWorkbenchFacade = (): DevWorkbenchFacade => {
     installedApps,
     activeLifecycleTask,
     loadApps: pluginStore.loadApps,
+    updateAppDisplayName: pluginStore.updateAppDisplayName,
     openApp: pluginStore.openApp,
     closeApp: pluginStore.closeApp,
     stopPreview: pluginStore.stopPreview,

@@ -1,12 +1,5 @@
 <template>
   <div class="assistant-compact-shell">
-    <div class="runtime-pill">
-      <span class="runtime-dot"></span>
-      <span>{{ runtimeLabel }}</span>
-    </div>
-    <button class="expand-toggle" :class="{ active: panelExpanded }" @click="panelExpanded = !panelExpanded">
-      {{ panelExpanded ? collapseLabel : expandLabel }}
-    </button>
     <div class="compact-input" :class="{ focused: inputFocused }">
       <textarea
         ref="inputRef"
@@ -24,7 +17,9 @@
       />
       <button class="send-btn" :disabled="!canSend" @click="handleSend">{{ sendLabel }}</button>
     </div>
-    <p class="runtime-hint">{{ runtimeHint }}</p>
+    <button class="expand-toggle" :class="{ active: panelExpanded }" @click="panelExpanded = !panelExpanded">
+      {{ panelExpanded ? collapseLabel : expandLabel }}
+    </button>
     <Transition name="compact-log-panel">
       <div class="overlay-panel" v-show="panelExpanded">
         <CodingChatShell
@@ -69,7 +64,7 @@ import { computed, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from '@/composables/useI18n'
 import { logger } from '@/utils/logger'
-import { CodingChatShell } from '@/features/coding-agent'
+import CodingChatShell from '@/features/coding-agent/components/CodingChatShell.vue'
 import { useCodingAgentStore } from '@/features/coding-agent/store/codingAgentStore'
 import { expandContextTokens } from '@/services/plugin-ui-bridge/contextToken'
 import type { TtsPlaybackState } from '@/services/tts/ttsPlaybackQueue'
@@ -114,8 +109,6 @@ const labels = computed(() => {
     planSwitchAppliedText: String(apps.planSwitchApplied || '已切换到 Build 模式。'),
     planKeepInputHintText: String(apps.planKeepInputHint || '已保留你当前输入。'),
     planBuildPrefillText: String(apps.planBuildPrefill || '请根据计划开始执行实现。'),
-    runtimeLabel: String(apps.workbenchCompactRuntimeLabel || 'Assistant 运行态'),
-    runtimeHint: String(apps.workbenchCompactRuntimeHint || '该模式聚焦最终交互形态，仍支持实时改代码与预览。'),
     collapseLabel: String(apps.workbenchCompactCollapse || '收起日志'),
     expandLabel: String(apps.workbenchCompactExpand || '展开日志')
   }
@@ -133,8 +126,6 @@ const newChatLabel = computed(() => labels.value.newChatLabel)
 const planSwitchAppliedText = computed(() => labels.value.planSwitchAppliedText)
 const planKeepInputHintText = computed(() => labels.value.planKeepInputHintText)
 const planBuildPrefillText = computed(() => labels.value.planBuildPrefillText)
-const runtimeLabel = computed(() => labels.value.runtimeLabel)
-const runtimeHint = computed(() => labels.value.runtimeHint)
 const collapseLabel = computed(() => labels.value.collapseLabel)
 const expandLabel = computed(() => labels.value.expandLabel)
 const sendLabel = computed(() => String((t.value as any).common?.run || '发送'))
@@ -204,45 +195,20 @@ const handleCompositionEnd = () => {
   pointer-events: none;
 }
 
-.runtime-pill {
-  pointer-events: none;
-  position: absolute;
-  top: 0.78rem;
-  left: 0.78rem;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  border: 1px solid color-mix(in srgb, var(--color-primary) 55%, var(--color-border-strong));
-  border-radius: 999px;
-  padding: 0.22rem 0.6rem;
-  background: color-mix(in srgb, var(--color-surface-1) 76%, transparent);
-  color: var(--color-primary);
-  font-size: 0.72rem;
-  font-weight: 600;
-  backdrop-filter: blur(8px);
-}
-
-.runtime-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: var(--color-primary);
-  box-shadow: 0 0 8px color-mix(in srgb, var(--color-primary) 55%, transparent);
-}
-
 .expand-toggle {
   pointer-events: auto;
   position: absolute;
-  top: 0.75rem;
-  right: 0.75rem;
+  right: 0.9rem;
+  bottom: 4.2rem;
   border: 1px solid color-mix(in srgb, var(--color-border-strong) 84%, transparent);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--color-surface-1) 82%, transparent);
+  background: color-mix(in srgb, var(--color-surface-1) 76%, transparent);
   color: var(--color-text-secondary);
   font-size: 0.74rem;
-  min-height: 28px;
-  padding: 0 0.72rem;
+  min-height: 26px;
+  padding: 0 0.64rem;
   backdrop-filter: blur(8px);
+  z-index: 34;
 }
 
 .expand-toggle.active {
@@ -253,9 +219,8 @@ const handleCompositionEnd = () => {
 .compact-input {
   pointer-events: auto;
   position: absolute;
-  left: 50%;
+  right: 0.9rem;
   bottom: 0.9rem;
-  transform: translateX(-50%);
   width: min(560px, calc(100% - 1.6rem));
   display: flex;
   align-items: flex-end;
@@ -266,6 +231,7 @@ const handleCompositionEnd = () => {
   background: color-mix(in srgb, var(--color-surface-1) 78%, transparent);
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
   backdrop-filter: blur(10px);
+  z-index: 30;
   transition:
     transform 0.18s ease,
     box-shadow 0.18s ease,
@@ -274,25 +240,12 @@ const handleCompositionEnd = () => {
 }
 
 .compact-input.focused {
-  transform: translateX(-50%) translateY(-2px);
+  transform: translateY(-2px);
   border-color: color-mix(in srgb, var(--color-primary) 74%, var(--color-border-strong));
   box-shadow:
     0 14px 34px rgba(0, 0, 0, 0.24),
     0 0 0 2px color-mix(in srgb, var(--color-primary) 20%, transparent);
   background: color-mix(in srgb, var(--color-surface-1) 84%, transparent);
-}
-
-.runtime-hint {
-  pointer-events: none;
-  position: absolute;
-  left: 50%;
-  bottom: 3.2rem;
-  transform: translateX(-50%);
-  margin: 0;
-  width: min(560px, calc(100% - 1.6rem));
-  color: color-mix(in srgb, var(--color-text-secondary) 88%, transparent);
-  font-size: 0.72rem;
-  text-align: left;
 }
 
 .compact-input textarea {
@@ -331,17 +284,17 @@ const handleCompositionEnd = () => {
 .overlay-panel {
   pointer-events: auto;
   position: absolute;
-  left: 50%;
-  bottom: 3.9rem;
-  transform: translateX(-50%);
+  right: 0.9rem;
+  bottom: 6.15rem;
   width: min(760px, calc(100% - 1.6rem));
   height: min(62%, 520px);
   border: 1px solid color-mix(in srgb, var(--color-border-strong) 88%, transparent);
   border-radius: 12px;
   overflow: hidden;
-  background: color-mix(in srgb, var(--color-surface-1) 74%, transparent);
+  background: color-mix(in srgb, var(--color-surface-1) 58%, transparent);
   box-shadow: 0 16px 34px rgba(0, 0, 0, 0.28);
   backdrop-filter: blur(10px);
+  z-index: 28;
 }
 
 .compact-log-panel-enter-active,
@@ -352,24 +305,26 @@ const handleCompositionEnd = () => {
 .compact-log-panel-enter-from,
 .compact-log-panel-leave-to {
   opacity: 0;
-  transform: translateX(-50%) translateY(10px) scale(0.985);
+  transform: translateY(10px) scale(0.985);
 }
 
 @media (max-width: 960px) {
   .compact-input {
     width: calc(100% - 1.2rem);
+    right: 0.6rem;
     bottom: 0.7rem;
   }
 
-  .runtime-hint {
-    width: calc(100% - 1.2rem);
-    bottom: 3rem;
+  .expand-toggle {
+    right: 0.6rem;
+    bottom: 3.9rem;
   }
 
   .overlay-panel {
     width: calc(100% - 1.2rem);
     height: min(68%, 520px);
-    bottom: 3.6rem;
+    right: 0.6rem;
+    bottom: 5.8rem;
   }
 }
 </style>

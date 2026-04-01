@@ -142,4 +142,50 @@ describe('PluginPreviewPane', () => {
       })
     )
   })
+
+  it('点击右侧全屏图标时触发 toggleFullscreen 事件', async () => {
+    const wrapper = mount(PluginPreviewPane, {
+      props: {
+        pluginId: 'com.dawnchat.preview-log',
+        pluginUrl: 'http://127.0.0.1:17961/'
+      }
+    })
+    const fullscreenButton = wrapper.find('.preview-toolbar .fullscreen-icon-btn')
+    expect(fullscreenButton.exists()).toBe(true)
+    await fullscreenButton.trigger('click')
+    expect(wrapper.emitted('toggleFullscreen')?.length).toBe(1)
+  })
+
+  it('根据 compact 状态切换全屏按钮文案语义', () => {
+    const enterWrapper = mount(PluginPreviewPane, {
+      props: {
+        pluginId: 'com.dawnchat.preview-log',
+        pluginUrl: 'http://127.0.0.1:17961/'
+      }
+    })
+    const enterButton = enterWrapper.find('.preview-toolbar .fullscreen-icon-btn')
+    expect(enterButton.attributes('title')).toBe('全屏')
+
+    const exitWrapper = mount(PluginPreviewPane, {
+      props: {
+        pluginId: 'com.dawnchat.preview-log',
+        pluginUrl: 'http://127.0.0.1:17961/',
+        isCompactSurface: true
+      }
+    })
+    const exitButton = exitWrapper.find('.preview-toolbar .fullscreen-icon-btn')
+    expect(exitButton.attributes('title')).toBe('退出全屏')
+  })
+
+  it('compact 模式渲染顶部悬停唤出热区', () => {
+    const wrapper = mount(PluginPreviewPane, {
+      props: {
+        pluginId: 'com.dawnchat.preview-log',
+        pluginUrl: 'http://127.0.0.1:17961/',
+        isCompactSurface: true
+      }
+    })
+    expect(wrapper.find('.preview-pane').classes()).toContain('compact-surface')
+    expect(wrapper.find('.toolbar-reveal-hotzone').exists()).toBe(true)
+  })
 })

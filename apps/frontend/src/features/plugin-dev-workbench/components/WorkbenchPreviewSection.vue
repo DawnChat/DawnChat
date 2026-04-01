@@ -116,7 +116,8 @@ const emit = defineEmits<{
 
 .preview-column.compact {
   border-left: none;
-  padding-left: 0.62rem;
+  padding: 0;
+  background: var(--wb-pane-main);
 }
 
 .preview-content {
@@ -128,6 +129,12 @@ const emit = defineEmits<{
   overflow: hidden;
   box-shadow: var(--wb-inset-shadow);
   position: relative;
+}
+
+.preview-column.compact .preview-content {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .loading {

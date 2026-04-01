@@ -7,7 +7,6 @@ from urllib.parse import quote
 
 from app.config import Config
 from app.services.model_list_service import SUPPORTED_PROVIDERS
-from app.services.model_manager import get_model_manager
 from app.services.opencode_instruction_resolver import OpenCodeInstructionResolver
 from app.storage import storage_manager
 from app.utils.logger import get_logger
@@ -96,7 +95,6 @@ class OpenCodeBaselineConfigComposer:
             models = await self._get_enabled_models(provider_id, aliases, provider["models"])
             if not models:
                 continue
-            model_map = {m: {"name": m} for m in models}
             options: Dict[str, Any] = {"apiKey": api_key}
             for candidate in (provider_id, *aliases):
                 base_url = await storage_manager.get_app_config(f"provider.{candidate}.base_url")
@@ -106,41 +104,15 @@ class OpenCodeBaselineConfigComposer:
             provider_ids = [provider_id, "google"] if provider_id == "gemini" else [provider_id]
             for resolved_provider_id in provider_ids:
                 provider_cfg[resolved_provider_id] = {
-                    "models": model_map,
                     "options": dict(options),
                 }
                 configured_providers.add(resolved_provider_id)
-                for model in models:
-                    available_models.add(f"{resolved_provider_id}/{model}")
+            for model in models:
+                available_models.add(f"{provider_id}/{model}")
+                if provider_id == "gemini":
+                    available_models.add(f"google/{model}")
             if not default_model and models:
                 default_model = f"{provider_id}/{models[0]}"
-
-        local_provider_id = "dawnchat-local"
-        local_models = get_model_manager().get_installed_models()
-        if local_models:
-            local_map = {}
-            for item in local_models:
-                model_id = item.get("id")
-                if not model_id:
-                    continue
-                display_name = item.get("name") or item.get("filename") or model_id
-                local_map[str(model_id)] = {"name": str(display_name)}
-            if local_map:
-                provider_cfg[local_provider_id] = {
-                    "npm": "@ai-sdk/openai-compatible",
-                    "name": "DawnChat Local",
-                    "options": {
-                        "baseURL": Config.get_llama_server_api_base(),
-                        "apiKey": "not-needed",
-                    },
-                    "models": local_map,
-                }
-                if not default_model:
-                    first_local = next(iter(local_map.keys()))
-                    default_model = f"{local_provider_id}/{first_local}"
-                configured_providers.add(local_provider_id)
-                for model in local_map.keys():
-                    available_models.add(f"{local_provider_id}/{model}")
 
         preferred = await storage_manager.get_config("user_preference:model")
         if isinstance(preferred, str) and preferred:

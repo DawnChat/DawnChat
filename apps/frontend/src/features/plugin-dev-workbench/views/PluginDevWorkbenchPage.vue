@@ -5,7 +5,8 @@
       'agent-preview-layout': workbenchLayoutVariant === 'agent_preview',
       'split-with-iwp-layout': workbenchLayoutVariant === 'split_with_iwp',
       'split-no-iwp-layout': workbenchLayoutVariant === 'split_no_iwp',
-      'assistant-compact-layout': workbenchLayoutVariant === 'compact'
+      'assistant-compact-layout': workbenchLayoutVariant === 'compact',
+      'preview-fullscreen-layout': isAssistantCompactSurface,
     }"
     :style="isAssistantCompactSurface
       ? undefined
@@ -15,6 +16,7 @@
         }"
   >
     <WorkbenchHeaderBar
+      v-if="!isAssistantCompactSurface"
       :active-app-name="activeApp?.name || ''"
       :plugin-id="pluginId"
       :app-type-label="appTypeLabel"
@@ -32,6 +34,12 @@
       :mobile-preview-qr-label="t.apps.mobilePreviewQr"
       :mobile-offline-upload-label="t.apps.mobileOfflineUpload"
       :close-label="t.apps.workbenchClose"
+      :edit-name-label="t.apps.workbenchRenameAction"
+      :save-name-label="t.apps.workbenchRenameSave"
+      :cancel-name-label="t.apps.workbenchRenameCancel"
+      :name-input-placeholder="t.apps.workbenchRenamePlaceholder"
+      :renaming="renamingApp"
+      @rename-app="renameActiveApp"
       @switch-mode="setWorkbenchMode"
       @open-build-session="openBuildSession"
       @open-web-publish="openPublishDialog"
@@ -350,6 +358,8 @@ const {
   openBuildSession,
   hasBuildSession,
   isBuildRunning,
+  renamingApp,
+  renameActiveApp,
   workbenchMode,
   workbenchLayoutVariant,
   hasIwpRequirements,
@@ -423,6 +433,11 @@ const handleAzureDefaultVoiceEnChange = (value: string) => {
 
 .plugin-dev-workbench.assistant-compact-layout {
   grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.plugin-dev-workbench.preview-fullscreen-layout {
+  background: var(--wb-pane-main);
 }
 
 .plugin-dev-workbench.split-no-iwp-layout {

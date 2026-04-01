@@ -6,6 +6,7 @@ from app.plugins import get_plugin_manager
 from app.services.llama_binary_manager import get_binary_manager
 from app.services.model_lifecycle_manager import get_lifecycle_manager
 from app.services.network_service import NetworkService
+from app.voice.azure_tts_service import get_azure_tts_service
 from app.services.playwright_installer import PlaywrightInstaller
 from app.storage import storage_manager
 from app.utils.logger import app_logger as logger
@@ -139,6 +140,13 @@ async def shutdown_components() -> None:
         logger.info("✅ Plugin 管理器已关闭")
     except Exception as e:
         logger.error(f"❌ 关闭 Plugin 管理器时发生异常: {e}", exc_info=True)
+
+    try:
+        azure_tts_service = get_azure_tts_service()
+        await azure_tts_service.aclose()
+        logger.info("✅ Azure TTS HTTP 客户端已关闭")
+    except Exception as e:
+        logger.error(f"❌ 关闭 Azure TTS HTTP 客户端时发生异常: {e}", exc_info=True)
 
     try:
         storage_manager.close()

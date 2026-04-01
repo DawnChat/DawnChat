@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
+import random
 import re
+import time
 from typing import Any
 from xml.sax.saxutils import escape
 
 import httpx
 
 from app.storage import storage_manager
+from app.utils.logger import get_logger
 
 
 _AZURE_TTS_PROVIDER = "azure_tts"
@@ -19,6 +23,7 @@ _DEFAULT_AZURE_VOICE = "zh-CN-XiaoxiaoNeural"
 _DEFAULT_AZURE_ZH_VOICE = "zh-CN-XiaoxiaoNeural"
 _DEFAULT_AZURE_EN_VOICE = "en-US-JennyNeural"
 _DEFAULT_VALIDATE_TEXT = "DawnChat Azure TTS validation."
+logger = get_logger("azure_tts_service")
 
 
 @dataclass(slots=True)
@@ -33,6 +38,30 @@ class AzureTtsResolvedConfig:
 class AzureTtsService:
     _REGION_PATTERN = re.compile(r"^[a-z0-9-]{2,32}$")
     _VOICE_PATTERN = re.compile(r"^[A-Za-z0-9_-]{2,80}$")
+
+    def __init__(
+        self,
+        *,
+        max_attempts: int = 3,
+        retry_base_delay_seconds: float = 0.3,
+        retry_max_delay_seconds: float = 2.0,
+        request_timeout_seconds: float = 12.0,
+        connect_timeout_seconds: float = 4.0,
+        max_keepalive_connections: int = 10,
+        max_connections: int = 20,
+        keepalive_expiry_seconds: float = 30.0,
+    ) -> None:
+        self._max_attempts = max(1, int(max_attempts))
+        self._retry_base_delay_seconds = max(0.01, float(retry_base_delay_seconds))
+        self._retry_max_delay_seconds = max(self._retry_base_delay_seconds, float(retry_max_delay_seconds))
+        self._timeout = httpx.Timeout(timeout=float(request_timeout_seconds), connect=float(connect_timeout_seconds))
+        self._limits = httpx.Limits(
+            max_keepalive_connections=max(1, int(max_keepalive_connections)),
+            max_connections=max(1, int(max_connections)),
+            keepalive_expiry=max(1.0, float(keepalive_expiry_seconds)),
+        )
+        self._http_client: httpx.AsyncClient | None = None
+        self._http_client_lock = asyncio.Lock()
 
     async def get_status(self) -> dict[str, Any]:
         api_key = await storage_manager.get_api_key(_AZURE_TTS_PROVIDER)
@@ -226,21 +255,114 @@ class AzureTtsService:
         endpoint = f"https://{config.region}.tts.speech.microsoft.com/cognitiveservices/v1"
         target_voice = str(force_voice or "").strip() or config.voice
         ssml_text = self._build_ssml(text=payload, voice=target_voice)
-        timeout = httpx.Timeout(timeout=12.0, connect=4.0)
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            response = await client.post(
-                endpoint,
-                headers={
-                    "Ocp-Apim-Subscription-Key": config.api_key,
-                    "Content-Type": "application/ssml+xml",
-                    "X-Microsoft-OutputFormat": "riff-24khz-16bit-mono-pcm",
-                    "User-Agent": "DawnChat",
-                },
-                content=ssml_text.encode("utf-8"),
+        for attempt in range(1, self._max_attempts + 1):
+            started_at = time.monotonic()
+            logger.info(
+                "azure_tts_request_start attempt=%s text_len=%s region=%s voice=%s",
+                attempt,
+                len(payload),
+                config.region,
+                target_voice,
             )
-        if response.status_code >= 400:
-            self._raise_http_error(response.status_code)
-        return bytes(response.content or b"")
+            error_code = ""
+            captured_error: Exception | None = None
+            try:
+                client = await self._get_http_client()
+                response = await client.post(
+                    endpoint,
+                    headers={
+                        "Ocp-Apim-Subscription-Key": config.api_key,
+                        "Content-Type": "application/ssml+xml",
+                        "X-Microsoft-OutputFormat": "riff-24khz-16bit-mono-pcm",
+                        "User-Agent": "DawnChat",
+                    },
+                    content=ssml_text.encode("utf-8"),
+                )
+                if response.status_code >= 400:
+                    self._raise_http_error(response.status_code)
+                output = bytes(response.content or b"")
+                logger.info(
+                    "azure_tts_request_done attempt=%s latency_ms=%s bytes=%s",
+                    attempt,
+                    int((time.monotonic() - started_at) * 1000),
+                    len(output),
+                )
+                return output
+            except httpx.TimeoutException as err:
+                error_code = "azure_tts_timeout"
+                captured_error = err
+            except httpx.RequestError as err:
+                error_code = "azure_tts_network_error"
+                captured_error = err
+                await self._recreate_http_client(reason=error_code)
+            except ValueError as err:
+                error_code = str(err).strip()
+                captured_error = err
+
+            normalized_code = error_code or "azure_tts_unknown_error"
+            if not self._is_retryable_error_code(normalized_code):
+                logger.warning("azure_tts_non_retryable_error attempt=%s error_code=%s", attempt, normalized_code)
+                raise ValueError(normalized_code) from captured_error
+            if attempt >= self._max_attempts:
+                logger.warning(
+                    "azure_tts_retry_exhausted attempts=%s last_error_code=%s",
+                    attempt,
+                    normalized_code,
+                )
+                raise ValueError(normalized_code) from captured_error
+            sleep_seconds = self._compute_retry_sleep_seconds(attempt)
+            logger.warning(
+                "azure_tts_retry_scheduled attempt=%s error_code=%s sleep_ms=%s",
+                attempt,
+                normalized_code,
+                int(round(sleep_seconds * 1000)),
+            )
+            await asyncio.sleep(sleep_seconds)
+        raise ValueError("azure_tts_unknown_error")
+
+    async def aclose(self) -> None:
+        async with self._http_client_lock:
+            client = self._http_client
+            self._http_client = None
+        if client is not None and not client.is_closed:
+            await client.aclose()
+
+    async def _get_http_client(self) -> httpx.AsyncClient:
+        async with self._http_client_lock:
+            if self._http_client is None or self._http_client.is_closed:
+                self._http_client = self._create_http_client()
+                logger.info(
+                    "azure_tts_client_created timeout=%s connect_timeout=%s max_keepalive=%s max_connections=%s keepalive_expiry=%s",
+                    self._timeout.read,
+                    self._timeout.connect,
+                    self._limits.max_keepalive_connections,
+                    self._limits.max_connections,
+                    self._limits.keepalive_expiry,
+                )
+            return self._http_client
+
+    async def _recreate_http_client(self, *, reason: str) -> None:
+        async with self._http_client_lock:
+            old_client = self._http_client
+            self._http_client = self._create_http_client()
+        if old_client is not None and not old_client.is_closed:
+            await old_client.aclose()
+        logger.warning("azure_tts_client_recreated reason=%s", reason)
+
+    def _create_http_client(self) -> httpx.AsyncClient:
+        return httpx.AsyncClient(timeout=self._timeout, limits=self._limits)
+
+    def _compute_retry_sleep_seconds(self, attempt: int) -> float:
+        exponential = self._retry_base_delay_seconds * (2 ** max(0, attempt - 1))
+        jitter = random.uniform(0.0, self._retry_base_delay_seconds * 0.25)
+        return min(self._retry_max_delay_seconds, exponential + jitter)
+
+    @staticmethod
+    def _is_retryable_error_code(error_code: str) -> bool:
+        code = str(error_code or "").strip().lower()
+        if code in {"azure_tts_timeout", "azure_tts_network_error", "azure_tts_rate_limited", "azure_tts_http_5xx"}:
+            return True
+        return False
 
     @staticmethod
     def _build_ssml(*, text: str, voice: str) -> str:
@@ -261,6 +383,8 @@ class AzureTtsService:
             raise ValueError("azure_tts_region_or_voice_not_found")
         if status_code == 429:
             raise ValueError("azure_tts_rate_limited")
+        if 500 <= status_code <= 599:
+            raise ValueError("azure_tts_http_5xx")
         raise ValueError(f"azure_tts_http_{status_code}")
 
     @staticmethod

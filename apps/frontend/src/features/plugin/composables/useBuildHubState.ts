@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import type { LocationQueryRaw } from 'vue-router'
 import type { BuildHubFilter, MarketPlugin, PluginInstallProgress } from '@/features/plugin/store/types'
 import type { Plugin } from '@/features/plugin/types'
-import { usePluginStore } from '@/features/plugin/store'
+import { usePluginStore } from '@/stores/plugin'
 import { useI18n } from '@/composables/useI18n'
 
 const HUB_SECTION = 'hub'

@@ -21,12 +21,6 @@ class _InstructionResolverStub:
         return ["/shared/context/base.md"]
 
 
-class _ModelManagerStub:
-    @staticmethod
-    def get_installed_models() -> list[dict]:
-        return []
-
-
 @pytest.mark.asyncio
 async def test_compose_builds_baseline_with_resolved_instructions(monkeypatch) -> None:
     async def _get_api_key(provider_id: str):
@@ -46,7 +40,6 @@ async def test_compose_builds_baseline_with_resolved_instructions(monkeypatch) -
 
     import app.services.opencode_baseline_config_composer as composer_module
 
-    monkeypatch.setattr(composer_module, "get_model_manager", lambda: _ModelManagerStub())
     monkeypatch.setattr(composer_module.Config, "OPENCODE_INCLUDE_WORKSPACE_RULES", True)
     monkeypatch.setattr(composer_module.Config, "MCP_PROXY_TIMEOUT_READ_SECONDS", 12.0)
 
@@ -56,7 +49,8 @@ async def test_compose_builds_baseline_with_resolved_instructions(monkeypatch) -
     assert result.config["model"] == "openai/gpt-4o-mini"
     assert result.config["instructions"] == ["/shared/context/base.md", "AGENTS.md"]
     assert "openai" in result.config["provider"]
-    assert result.config["provider"]["openai"]["models"]["gpt-4o-mini"]["name"] == "gpt-4o-mini"
+    assert result.config["provider"]["openai"]["options"]["apiKey"] == "sk-test"
+    assert "models" not in result.config["provider"]["openai"]
     assert "dawnchat_ui_bridge" in result.config["mcp"]
     assert "dawnchat_iwp" in result.config["mcp"]
     assert result.config["mcp"]["dawnchat_ui_bridge"]["timeout"] == 12000
@@ -83,7 +77,6 @@ async def test_compose_can_disable_shared_instructions(monkeypatch) -> None:
 
     import app.services.opencode_baseline_config_composer as composer_module
 
-    monkeypatch.setattr(composer_module, "get_model_manager", lambda: _ModelManagerStub())
     monkeypatch.setattr(composer_module.Config, "OPENCODE_INCLUDE_WORKSPACE_RULES", True)
 
     composer = OpenCodeBaselineConfigComposer(_InstructionResolverStub())
@@ -116,7 +109,6 @@ async def test_compose_injects_plugin_backend_mcp_for_plugin_workspace(monkeypat
 
     import app.services.opencode_baseline_config_composer as composer_module
 
-    monkeypatch.setattr(composer_module, "get_model_manager", lambda: _ModelManagerStub())
     monkeypatch.setattr(composer_module.Config, "OPENCODE_INCLUDE_WORKSPACE_RULES", True)
     monkeypatch.setattr(composer_module.Config, "API_PORT", 7777)
     monkeypatch.setattr(composer_module.Config, "MCP_PROXY_TIMEOUT_READ_SECONDS", 12.0)
@@ -162,7 +154,6 @@ async def test_compose_injects_plugin_mcp_by_default_without_plugin_context(monk
 
     import app.services.opencode_baseline_config_composer as composer_module
 
-    monkeypatch.setattr(composer_module, "get_model_manager", lambda: _ModelManagerStub())
     monkeypatch.setattr(composer_module.Config, "OPENCODE_INCLUDE_WORKSPACE_RULES", True)
     monkeypatch.setattr(composer_module.Config, "API_PORT", 7777)
 

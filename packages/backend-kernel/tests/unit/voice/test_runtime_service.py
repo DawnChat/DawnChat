@@ -241,6 +241,17 @@ def test_map_error_code_refines_runtime_categories() -> None:
     assert TtsRuntimeService._map_error_code("sherpa-onnx returned empty audio") == "TTS_AUDIO_INVALID"
     assert TtsRuntimeService._map_error_code("task cancelled") == "TTS_RUNTIME_CANCELLED"
     assert TtsRuntimeService._map_error_code("azure_tts_auth_failed") == "TTS_AZURE_FAILED"
+    assert TtsRuntimeService._map_error_code("azure_tts_timeout") == "TTS_AZURE_FAILED"
+    assert TtsRuntimeService._map_error_code("azure_tts_http_5xx") == "TTS_AZURE_FAILED"
+
+
+def test_normalize_error_message_handles_blank_exception() -> None:
+    class _BlankError(Exception):
+        def __str__(self) -> str:
+            return ""
+
+    normalized = TtsRuntimeService._normalize_error_message(_BlankError())
+    assert normalized == "_BlankError()"
 
 
 @pytest.mark.asyncio
