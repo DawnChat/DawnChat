@@ -74,6 +74,19 @@
               @update:model-value="(value) => emit('select-tts-engine', value)"
             />
           </div>
+          <div v-if="showTtsControl" class="settings-field settings-field-tts-switch">
+            <div class="settings-label">{{ labels.ttsVoiceSwitch || '语音播报' }}</div>
+            <PluginDevInlineSelect
+              :model-value="ttsEnabled ? 'on' : 'off'"
+              :options="[{value: 'on', label: '开启'}, {value: 'off', label: '关闭'}]"
+              label="语音播报"
+              @update:model-value="(val) => {
+                if ((val === 'on') !== ttsEnabled) {
+                  emit('toggle-tts-enabled')
+                }
+              }"
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -120,6 +133,9 @@ const props = withDefaults(defineProps<{
   engineOptions?: EngineOption[]
   availableAgents?: AgentOption[]
   ttsEngineOptions?: TtsEngineOption[]
+  showTtsControl?: boolean
+  ttsEnabled?: boolean
+  isTtsActive?: boolean
 }>(), {
   selectedEngine: '',
   selectedEngineHealthStatus: null,
@@ -128,7 +144,10 @@ const props = withDefaults(defineProps<{
   selectedTtsEngine: 'system',
   engineOptions: () => [],
   availableAgents: () => [],
-  ttsEngineOptions: () => []
+  ttsEngineOptions: () => [],
+  showTtsControl: false,
+  ttsEnabled: false,
+  isTtsActive: false
 })
 
 const emit = defineEmits<{
@@ -137,6 +156,7 @@ const emit = defineEmits<{
   'select-engine': [value: string]
   'select-agent': [value: string]
   'select-tts-engine': [value: string]
+  'toggle-tts-enabled': []
 }>()
 
 const tabsScrollerRef = ref<HTMLElement | null>(null)
@@ -156,7 +176,8 @@ const labels = computed(() => {
     runtimeSettings: String(apps.runtimeSettings || 'Agent 设置'),
     engine: String(apps.engine || '运行引擎'),
     mode: String(apps.mode || '运行模式'),
-    ttsEngine: String(apps.ttsEngine || 'TTS 引擎')
+    ttsEngine: String(apps.ttsEngine || 'TTS 引擎'),
+    ttsVoiceSwitch: String(apps.ttsVoiceSwitch || '语音播报')
   }
 })
 const showSettingsButton = computed(() => props.engineOptions.length > 0 || props.availableAgents.length > 0 || props.ttsEngineOptions.length > 0)
@@ -418,4 +439,6 @@ onUnmounted(() => {
   color: var(--color-text-secondary);
   padding: 0.45rem;
 }
+
+
 </style>

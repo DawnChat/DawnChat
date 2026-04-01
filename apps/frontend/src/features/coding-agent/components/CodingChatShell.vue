@@ -19,28 +19,16 @@
       :engine-options="engineOptions"
       :available-agents="availableAgents"
       :tts-engine-options="ttsEngineOptions"
+      :show-tts-control="showTtsControl"
+      :tts-enabled="ttsEnabled"
+      :is-tts-active="isTtsActive"
       @switch-session="handleSwitchSession"
       @create-session="handleCreateSession"
       @select-engine="handleEngineChange"
       @select-agent="handleAgentChange"
       @select-tts-engine="(value) => emit('select-tts-engine', value)"
+      @toggle-tts-enabled="emit('toggle-tts-enabled')"
     />
-
-    <div v-if="showTtsControl" class="tts-toolbar">
-      <button class="tts-toggle-btn" :class="{ active: ttsEnabled, playing: isTtsActive }" @click="emit('toggle-tts-enabled')">
-        <span class="speaker-icon" aria-hidden="true">🔊</span>
-        <span>{{ ttsEnabled ? '语音已开启' : '语音已关闭' }}</span>
-      </button>
-      <span class="tts-status">{{ ttsStatusText }}</span>
-      <button
-        v-if="isTtsActive"
-        class="tts-stop-btn"
-        :disabled="!ttsEnabled"
-        @click="emit('stop-tts')"
-      >
-        停止播放
-      </button>
-    </div>
 
     <PluginDevMessageList
       :chat-rows="chatRows"
@@ -242,14 +230,6 @@ const isTtsActive = computed(() => {
     return true
   }
   return props.ttsPlaybackState === 'playing' || props.ttsPlaybackState === 'buffering'
-})
-const ttsStatusText = computed(() => {
-  if (!props.ttsEnabled) return '已静音'
-  if (props.ttsPlaybackState === 'error') return '播放异常'
-  if (props.ttsPlaybackState === 'playing') return '正在播放'
-  if (props.ttsPlaybackState === 'buffering') return '语音缓冲中'
-  if (props.ttsStreamStatus === 'connecting' || props.ttsStreamStatus === 'reconnecting') return '连接语音流中'
-  return '待机'
 })
 
 function getWorkspaceOptions(forceRestart = false): WorkspaceResolveOptions {
@@ -477,69 +457,5 @@ onMounted(async () => {
   margin: 0 1rem;
   font-size: 0.78rem;
   color: var(--color-text-secondary);
-}
-
-.tts-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.55rem 1rem;
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-surface-2);
-}
-
-.tts-toggle-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  border: 1px solid var(--color-border-strong);
-  border-radius: 8px;
-  background: var(--color-surface-1);
-  color: var(--color-text);
-  padding: 0.28rem 0.62rem;
-  font-size: 0.78rem;
-  cursor: pointer;
-  transition: border-color 0.16s ease;
-}
-
-.tts-toggle-btn.active {
-  border-color: color-mix(in srgb, var(--color-primary) 55%, var(--color-border-strong));
-}
-
-.tts-toggle-btn.playing .speaker-icon {
-  animation: speaker-pulse 0.9s ease-in-out infinite;
-}
-
-.tts-status {
-  font-size: 0.76rem;
-  color: var(--color-text-secondary);
-}
-
-.tts-stop-btn {
-  margin-left: auto;
-  border: 1px solid var(--color-border-strong);
-  border-radius: 8px;
-  background: var(--color-surface-1);
-  color: var(--color-text-secondary);
-  padding: 0.24rem 0.56rem;
-  font-size: 0.74rem;
-  cursor: pointer;
-}
-
-.tts-stop-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-@keyframes speaker-pulse {
-  0%,
-  100% {
-    transform: scale(1);
-    opacity: 0.85;
-  }
-  50% {
-    transform: scale(1.12);
-    opacity: 1;
-  }
 }
 </style>

@@ -56,6 +56,12 @@ class PluginTemplateApplicationService:
             raise RuntimeError(f"Template not found in market: {template_id}")
         target = max(candidates, key=lambda item: parse_semver_tuple(str(item.get("version") or "0.0.0")))
         version = str(target.get("version") or "")
+        
+        if local_template:
+            local_version = str(local_template.get("version") or "0.0.0")
+            if parse_semver_tuple(local_version) >= parse_semver_tuple(version):
+                return local_template
+
         package = target.get("package") or {}
         package_url = str(package.get("url") or "")
         package_sha256 = package.get("sha256")

@@ -1,4 +1,5 @@
 import { startSseClient, type SseClientEvent } from "@/services/coding-agent/sseClient";
+import { buildBackendUrl } from '@/utils/backendUrl';
 
 export interface TtsSpeakRequest {
   plugin_id: string;
@@ -36,10 +37,10 @@ export interface TtsStreamMessage {
   data: Record<string, unknown>;
 }
 
-const API_BASE = "/api/tts";
+const API_BASE = () => buildBackendUrl('/api/tts');
 
 export async function speakTts(payload: TtsSpeakRequest): Promise<TtsSpeakResponse> {
-  const response = await fetch(`${API_BASE}/speak`, {
+  const response = await fetch(`${API_BASE()}/speak`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -51,7 +52,7 @@ export async function speakTts(payload: TtsSpeakRequest): Promise<TtsSpeakRespon
 }
 
 export async function stopTts(taskId?: string, pluginId?: string): Promise<{ stopped: boolean }> {
-  const response = await fetch(`${API_BASE}/stop`, {
+  const response = await fetch(`${API_BASE()}/stop`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ task_id: taskId, plugin_id: pluginId }),
@@ -64,7 +65,7 @@ export async function stopTts(taskId?: string, pluginId?: string): Promise<{ sto
 }
 
 export async function getTtsTaskStatus(taskId: string): Promise<TtsTaskStatusResponse> {
-  const response = await fetch(`${API_BASE}/tasks/${encodeURIComponent(taskId)}`);
+  const response = await fetch(`${API_BASE()}/tasks/${encodeURIComponent(taskId)}`);
   if (!response.ok) {
     throw new Error(`tts status failed: ${response.status}`);
   }
@@ -73,7 +74,7 @@ export async function getTtsTaskStatus(taskId: string): Promise<TtsTaskStatusRes
 
 export async function getTtsCapability(pluginId?: string): Promise<TtsCapabilityResponse> {
   const query = pluginId ? `?plugin_id=${encodeURIComponent(pluginId)}` : "";
-  const response = await fetch(`${API_BASE}/capability${query}`);
+  const response = await fetch(`${API_BASE()}/capability${query}`);
   if (!response.ok) {
     throw new Error(`tts capability failed: ${response.status}`);
   }
@@ -90,7 +91,7 @@ export function subscribeTtsTaskStream(
   }
 ): Promise<void> {
   return startSseClient({
-    url: `${API_BASE}/stream/${encodeURIComponent(taskId)}`,
+    url: `${API_BASE()}/stream/${encodeURIComponent(taskId)}`,
     signal: options.signal,
     onStatus: (status) => options.onStatus?.(status),
     onError: (error) => options.onError?.(error),
