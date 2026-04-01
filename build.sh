@@ -37,26 +37,62 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # ============ 日志函数 ============
+supports_unicode_output() {
+    # Windows CI/终端下优先使用 ASCII，避免 cp1252 等编码导致输出异常
+    if [[ "${TARGET_PLATFORM:-}" == *"windows"* || "$OSTYPE" == msys* || "$OSTYPE" == cygwin* ]]; then
+        return 1
+    fi
+
+    local locale_value="${LC_ALL:-${LC_CTYPE:-${LANG:-}}}"
+    locale_value="${locale_value,,}"
+    if [[ "$locale_value" == *"utf-8"* || "$locale_value" == *"utf8"* ]]; then
+        return 0
+    fi
+    return 1
+}
+
 print_info() {
-    echo -e "${BLUE}ℹ️  $1${NC}"
+    if supports_unicode_output; then
+        echo -e "${BLUE}ℹ️  $1${NC}"
+    else
+        echo -e "${BLUE}[INFO] $1${NC}"
+    fi
 }
 
 print_success() {
-    echo -e "${GREEN}✅ $1${NC}"
+    if supports_unicode_output; then
+        echo -e "${GREEN}✅ $1${NC}"
+    else
+        echo -e "${GREEN}[OK] $1${NC}"
+    fi
 }
 
 print_warning() {
-    echo -e "${YELLOW}⚠️  $1${NC}"
+    if supports_unicode_output; then
+        echo -e "${YELLOW}⚠️  $1${NC}"
+    else
+        echo -e "${YELLOW}[WARN] $1${NC}"
+    fi
 }
 
 print_error() {
-    echo -e "${RED}❌ $1${NC}"
+    if supports_unicode_output; then
+        echo -e "${RED}❌ $1${NC}"
+    else
+        echo -e "${RED}[ERROR] $1${NC}"
+    fi
 }
 
 print_step() {
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}📦 $1${NC}"
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    if supports_unicode_output; then
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${CYAN}📦 $1${NC}"
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    else
+        echo -e "${CYAN}--------------------------------------------------${NC}"
+        echo -e "${CYAN}[STEP] $1${NC}"
+        echo -e "${CYAN}--------------------------------------------------${NC}"
+    fi
 }
 
 resolve_runtime_asset_dir() {
@@ -662,9 +698,9 @@ try:
     import fastapi
     import uvicorn
     import pydantic
-    print('✅ 基础依赖验证通过')
+    print('OK: base dependencies validation passed')
 except Exception as e:
-    print(f'❌ 验证失败: {e}')
+    print(f'ERROR: validation failed: {e}')
     sys.exit(1)
 "; then
         print_error "基础依赖验证失败，请检查上方报错信息"
@@ -1545,6 +1581,11 @@ notarize_and_staple_dmg() {
 assess_macos_artifacts() {
     local app_path="$1"
     local dmg_path="$2"
+    local notarized="$3"
+    if [[ "$notarized" != "true" ]]; then
+        print_warning "当前为未公证构建，跳过 Gatekeeper 评估（spctl 会拒绝未公证包）"
+        return 0
+    fi
     print_step "执行 Gatekeeper 评估"
     if [[ -d "$app_path" ]]; then
         spctl --assess --type execute --verbose=4 "$app_path"
@@ -1587,7 +1628,7 @@ process_macos_release() {
     if [[ "$NOTARIZE_MACOS" == true ]]; then
         notarize_and_staple_dmg "$dmg_path"
     fi
-    assess_macos_artifacts "$app_path" "$dmg_path"
+    assess_macos_artifacts "$app_path" "$dmg_path" "$NOTARIZE_MACOS"
 }
 
 # ============ 显示构建结果 ============
