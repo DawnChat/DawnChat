@@ -70,12 +70,24 @@ def remove_safely(path: Path, verbose: bool = False) -> int:
             shutil.rmtree(path)
         
         if verbose:
-            print(f"   删除: {path} ({format_size(size)})")
+            print(f"   removed: {path} ({format_size(size)})")
         return size
     except Exception as e:
         if verbose:
-            print(f"   ⚠️ 无法删除 {path}: {e}")
+            print(f"   WARN: cannot remove {path}: {e}")
         return 0
+
+
+def resolve_lib_dir(python_dir: Path) -> Path:
+    """Resolve stdlib directory for Unix/Windows layouts."""
+    candidates = [
+        python_dir / "lib" / "python3.11",
+        python_dir / "Lib",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
 
 
 def optimize_python(python_dir: Path, aggressive: bool = False, verbose: bool = True) -> None:
@@ -88,35 +100,35 @@ def optimize_python(python_dir: Path, aggressive: bool = False, verbose: bool = 
         verbose: 是否显示详细信息
     """
     if not python_dir.exists():
-        raise FileNotFoundError(f"Python 目录不存在: {python_dir}")
+        raise FileNotFoundError(f"Python directory not found: {python_dir}")
     
     initial_size = get_dir_size(python_dir)
-    print(f"📊 优化前大小: {format_size(initial_size)}")
+    print(f"Size before optimization: {format_size(initial_size)}")
     print()
     
     total_freed = 0
     
     # 1. 删除测试文件
-    print("🧹 删除测试文件...")
+    print("Cleaning test files...")
     for pattern in ["test", "tests", "testing"]:
         for test_dir in python_dir.rglob(pattern):
             if test_dir.is_dir():
                 total_freed += remove_safely(test_dir, verbose)
     
     # 2. 删除 __pycache__ 目录
-    print("🧹 删除 __pycache__...")
+    print("Cleaning __pycache__...")
     for cache_dir in python_dir.rglob("__pycache__"):
         if cache_dir.is_dir():
             total_freed += remove_safely(cache_dir, verbose)
     
     # 3. 删除 .pyc 文件（可选，运行时会重新生成）
-    print("🧹 删除 .pyc 文件...")
+    print("Cleaning .pyc files...")
     for pyc_file in python_dir.rglob("*.pyc"):
         total_freed += remove_safely(pyc_file, verbose)
     
     # 4. 删除不需要的标准库模块
-    print("🧹 删除不需要的标准库模块...")
-    lib_dir = python_dir / "lib" / "python3.11"
+    print("Cleaning unnecessary stdlib modules...")
+    lib_dir = resolve_lib_dir(python_dir)
     for module in UNNECESSARY_MODULES:
         module_path = lib_dir / module
         total_freed += remove_safely(module_path, verbose)
@@ -125,7 +137,7 @@ def optimize_python(python_dir: Path, aggressive: bool = False, verbose: bool = 
         total_freed += remove_safely(py_file, verbose)
     
     # 5. 删除文档和示例
-    print("🧹 删除文档和示例...")
+    print("Cleaning docs and examples...")
     site_packages_dir = lib_dir / "site-packages"
     for pattern in ["*.md", "*.rst", "*.txt"]:
         for doc_file in python_dir.rglob(pattern):
@@ -154,7 +166,7 @@ def optimize_python(python_dir: Path, aggressive: bool = False, verbose: bool = 
     
     # 6. 激进优化：删除 pip 和 setuptools
     if aggressive:
-        print("🧹 激进优化: 删除 pip 和 setuptools...")
+        print("Aggressive mode: removing pip and setuptools...")
         site_packages = lib_dir / "site-packages"
         if site_packages.exists():
             for pkg in ["pip", "setuptools", "pkg_resources"]:
@@ -162,12 +174,12 @@ def optimize_python(python_dir: Path, aggressive: bool = False, verbose: bool = 
                     total_freed += remove_safely(item, verbose)
     
     # 7. 删除 include 目录（C 头文件，运行时不需要）
-    print("🧹 删除 include 目录...")
+    print("Cleaning include directory...")
     include_dir = python_dir / "include"
     total_freed += remove_safely(include_dir, verbose)
     
     # 8. 删除共享库调试符号（仅限 release 构建）
-    print("🧹 清理共享库...")
+    print("Cleaning shared libraries...")
     for so_file in python_dir.rglob("*.so"):
         # 不删除核心库，只删除测试相关的
         if "test" in so_file.name.lower():
@@ -177,19 +189,23 @@ def optimize_python(python_dir: Path, aggressive: bool = False, verbose: bool = 
     
     print()
     print("=" * 50)
-    print(f"📊 优化前大小: {format_size(initial_size)}")
-    print(f"📊 优化后大小: {format_size(final_size)}")
-    print(f"📊 节省空间:   {format_size(total_freed)} ({total_freed * 100 / initial_size:.1f}%)")
+    print(f"Size before: {format_size(initial_size)}")
+    print(f"Size after:  {format_size(final_size)}")
+    if initial_size > 0:
+        ratio = total_freed * 100 / initial_size
+    else:
+        ratio = 0.0
+    print(f"Freed space: {format_size(total_freed)} ({ratio:.1f}%)")
     print("=" * 50)
 
 
 def main():
     """主函数"""
     if len(sys.argv) < 2:
-        print(f"用法: {sys.argv[0]} <python_dir> [--aggressive] [--verbose]")
-        print("\n选项:")
-        print("  --aggressive  启用激进优化（删除 pip/setuptools）")
-        print("  --verbose     显示详细删除信息")
+        print(f"Usage: {sys.argv[0]} <python_dir> [--aggressive] [--verbose]")
+        print("\nOptions:")
+        print("  --aggressive  enable aggressive optimization (remove pip/setuptools)")
+        print("  --verbose     show detailed removal logs")
         sys.exit(1)
     
     python_dir = Path(sys.argv[1])
@@ -199,7 +215,7 @@ def main():
     try:
         optimize_python(python_dir, aggressive, verbose)
     except Exception as e:
-        print(f"\n❌ 优化失败: {e}")
+        print(f"\nERROR: optimization failed: {e}")
         sys.exit(1)
 
 
