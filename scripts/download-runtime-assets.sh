@@ -33,7 +33,7 @@ usage() {
   ./scripts/download-runtime-assets.sh [选项]
 
 选项:
-  --all              下载当前平台所需的全部运行时资源
+  --all              下载当前平台核心运行时资源（bun/uv/opencode）
   --tts              下载 Kokoro TTS 模型
   --bun              下载 Bun 二进制
   --uv               下载 uv / uvx 二进制
@@ -336,11 +336,13 @@ if [[ "$DOWNLOAD_ALL" == false && "$DOWNLOAD_TTS" == false && "$DOWNLOAD_BUN" ==
 fi
 
 if [[ "$DOWNLOAD_ALL" == true ]]; then
-    DOWNLOAD_TTS=true
     DOWNLOAD_BUN=true
     DOWNLOAD_UV=true
     DOWNLOAD_OPENCODE=true
-    DOWNLOAD_LLAMACPP=true
+    # 默认最小运行集：不包含体积较大的 Kokoro/llama.cpp，
+    # 如需下载请显式传入 --tts / --llamacpp。
+    DOWNLOAD_TTS=false
+    DOWNLOAD_LLAMACPP=false
 fi
 
 mkdir -p "$RUNTIME_ASSETS_DIR" "$DOWNLOAD_CACHE_DIR"

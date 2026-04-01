@@ -552,14 +552,21 @@ download_pbs_python() {
 install_python_deps() {
     print_step "安装 Python 依赖"
     
-    local pip_path="$SIDECAR_DIR/python/bin/pip3.11"
     local python_path="$SIDECAR_DIR/python/bin/python3.11"
+    local pip_cmd=()
     
     # Windows 路径
-    if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
-        pip_path="$SIDECAR_DIR/python/Scripts/pip.exe"
+    if [[ "$TARGET_PLATFORM" == *"windows"* || "$OSTYPE" == msys* || "$OSTYPE" == cygwin* ]]; then
         python_path="$SIDECAR_DIR/python/python.exe"
     fi
+
+    if [[ ! -f "$python_path" ]]; then
+        print_error "未找到 Python 可执行文件: $python_path"
+        exit 1
+    fi
+
+    # 使用 python -m pip，避免依赖平台特定的 pip 可执行文件路径
+    pip_cmd=("$python_path" -m pip)
     
     cd "$BACKEND_DIR"
     
@@ -620,7 +627,7 @@ install_python_deps() {
 
     # 升级 pip
     print_info "升级 pip..."
-    "$pip_path" install --upgrade pip --quiet "${mirror_args[@]}"
+    "${pip_cmd[@]}" install --upgrade pip --quiet "${mirror_args[@]}"
     
     # 安装依赖
     print_info "安装依赖 (这可能需要几分钟)..."
@@ -628,20 +635,20 @@ install_python_deps() {
     pip_args+=("${mirror_args[@]}")
     
     if [[ "$VERBOSE" == true ]]; then
-        "$pip_path" install "${pip_args[@]}"
+        "${pip_cmd[@]}" install "${pip_args[@]}"
     else
-        "$pip_path" install "${pip_args[@]}" --quiet
+        "${pip_cmd[@]}" install "${pip_args[@]}" --quiet
     fi
 
     if [[ "${#mlx_specs[@]}" -gt 0 ]]; then
         print_info "安装 MLX 依赖..."
-        "$pip_path" install --upgrade --no-deps --no-cache-dir --quiet "${mlx_specs[@]}" "${mirror_args[@]}"
+        "${pip_cmd[@]}" install --upgrade --no-deps --no-cache-dir --quiet "${mlx_specs[@]}" "${mirror_args[@]}"
     fi
 
     # 安装 DawnChat SDK (用于 Plugin)
     print_info "安装 DawnChat SDK..."
     if [[ -d "$SDK_DIR" ]]; then
-        "$pip_path" install "$SDK_DIR" --no-cache-dir --quiet "${mirror_args[@]}"
+        "${pip_cmd[@]}" install "$SDK_DIR" --no-cache-dir --quiet "${mirror_args[@]}"
         print_info "DawnChat SDK 安装成功"
     else
         print_warning "未找到 SDK 目录: $SDK_DIR，跳过安装"
