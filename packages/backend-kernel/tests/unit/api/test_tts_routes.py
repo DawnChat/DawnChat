@@ -13,6 +13,7 @@ class _RuntimeStub:
         self.model_error = ""
 
     async def submit_speak(self, **kwargs):
+        self.last_submit = kwargs
         return "task-1"
 
     async def stop(self, **kwargs):
@@ -48,6 +49,17 @@ class _ArtifactStub:
         return self.path
 
 
+class _AzureStub:
+    async def get_status(self):
+        return {"configured": False, "api_key_configured": False, "region": "", "voice": "zh-CN-XiaoxiaoNeural"}
+
+    async def validate_config(self, **kwargs):
+        return {"ok": True, **kwargs}
+
+    async def save_config(self, **kwargs):
+        return {"ok": True, **kwargs}
+
+
 def _build_request(headers: dict[str, str] | None = None) -> Request:
     encoded_headers = []
     for key, value in (headers or {}).items():
@@ -63,10 +75,12 @@ def _build_request(headers: dict[str, str] | None = None) -> Request:
 
 @pytest.mark.asyncio
 async def test_submit_tts_speak_returns_task(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(routes, "get_tts_runtime_service", lambda: _RuntimeStub())
-    payload = routes.TtsSpeakRequest(plugin_id="com.demo", text="hello", sid=6)
+    runtime = _RuntimeStub()
+    monkeypatch.setattr(routes, "get_tts_runtime_service", lambda: runtime)
+    payload = routes.TtsSpeakRequest(plugin_id="com.demo", text="hello", sid=6, engine="azure")
     response = await routes.submit_tts_speak(payload)
     assert response["task_id"] == "task-1"
+    assert runtime.last_submit["engine"] == "azure"
 
 
 @pytest.mark.asyncio
@@ -164,3 +178,29 @@ async def test_stream_tts_task_emits_keepalive_comment(monkeypatch: pytest.Monke
         chunks.append(chunk.decode("utf-8") if isinstance(chunk, bytes) else str(chunk))
     payload = "".join(chunks)
     assert ": keepalive" in payload
+
+
+@pytest.mark.asyncio
+async def test_azure_tts_status(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(routes, "get_azure_tts_service", lambda: _AzureStub())
+    response = await routes.get_azure_tts_status()
+    assert response["status"] == "success"
+    assert response["data"]["voice"] == "zh-CN-XiaoxiaoNeural"
+
+
+@pytest.mark.asyncio
+async def test_validate_azure_tts_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(routes, "get_azure_tts_service", lambda: _AzureStub())
+    payload = routes.AzureTtsValidateRequest(api_key="key", region="eastasia", voice="zh-CN-XiaoxiaoNeural")
+    response = await routes.validate_azure_tts_config(payload)
+    assert response["status"] == "success"
+    assert response["data"]["region"] == "eastasia"
+
+
+@pytest.mark.asyncio
+async def test_save_azure_tts_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(routes, "get_azure_tts_service", lambda: _AzureStub())
+    payload = routes.AzureTtsConfigRequest(api_key="key", region="eastasia", voice="zh-CN-XiaoxiaoNeural")
+    response = await routes.save_azure_tts_config(payload)
+    assert response["status"] == "success"
+    assert response["data"]["voice"] == "zh-CN-XiaoxiaoNeural"

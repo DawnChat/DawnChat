@@ -63,6 +63,12 @@ class _ManySegmentsSynthesisStub:
             yield TtsSegment(seq=index, text=f"s-{index}", wav_bytes=b"RIFF", sample_rate=24000, duration_ms=100)
 
 
+class _AzureStub:
+    async def synthesize_segment(self, *, text: str, voice: str = "", sid: int | None = None):
+        del text, voice, sid
+        return b"RIFF" + (b"\x00" * 96), 24000
+
+
 @pytest.mark.asyncio
 async def test_submit_speak_creates_task(tmp_path) -> None:
     synthesis = _SynthesisStub()
@@ -234,3 +240,19 @@ def test_map_error_code_refines_runtime_categories() -> None:
     assert TtsRuntimeService._map_error_code("text is required") == "TTS_TEXT_INVALID"
     assert TtsRuntimeService._map_error_code("sherpa-onnx returned empty audio") == "TTS_AUDIO_INVALID"
     assert TtsRuntimeService._map_error_code("task cancelled") == "TTS_RUNTIME_CANCELLED"
+    assert TtsRuntimeService._map_error_code("azure_tts_auth_failed") == "TTS_AZURE_FAILED"
+
+
+@pytest.mark.asyncio
+async def test_submit_speak_azure_engine_generates_segment(tmp_path) -> None:
+    service = TtsRuntimeService(
+        synthesis_service=_SynthesisStub(),
+        artifact_store=TtsArtifactStore(base_dir=tmp_path / "tts"),
+        azure_tts_service=_AzureStub(),
+    )
+    task_id = await service.submit_speak(plugin_id="com.demo", text="hello", engine="azure")
+    await asyncio.sleep(0.05)
+    status = service.get_task(task_id)
+    assert status is not None
+    assert status["engine"] == "azure"
+    assert status["completed_segments"] == 1

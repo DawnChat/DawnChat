@@ -10,6 +10,7 @@ import uuid
 from app.utils.logger import get_logger
 
 from .artifact_store import TtsArtifactStore, get_tts_artifact_store
+from .azure_tts_service import AzureTtsService, get_azure_tts_service
 from .synthesis_service import TtsSegment, TtsSynthesisService, get_tts_synthesis_service
 
 TaskStatus = Literal["queued", "running", "completed", "failed", "cancelled"]
@@ -24,6 +25,7 @@ class TtsTask:
     voice: str
     sid: int | None
     mode: str
+    engine: str = "python"
     status: TaskStatus = "queued"
     created_at: datetime = field(default_factory=datetime.utcnow)
     updated_at: datetime = field(default_factory=datetime.utcnow)
@@ -42,6 +44,7 @@ class TtsTask:
             "status": self.status,
             "sid": self.sid,
             "message": self.message,
+            "engine": self.engine,
             "error_code": self.error_code,
             "total_segments": self.total_segments,
             "completed_segments": self.completed_segments,
@@ -56,6 +59,7 @@ class TtsRuntimeService:
         self,
         synthesis_service: TtsSynthesisService | None = None,
         artifact_store: TtsArtifactStore | None = None,
+        azure_tts_service: AzureTtsService | None = None,
         event_history_ttl_seconds: int = 180,
         max_terminal_tasks: int = 128,
         watcher_queue_maxsize: int = 64,
@@ -64,6 +68,7 @@ class TtsRuntimeService:
     ) -> None:
         self._synthesis = synthesis_service or get_tts_synthesis_service()
         self._store = artifact_store or get_tts_artifact_store()
+        self._azure = azure_tts_service or get_azure_tts_service()
         self._lock = asyncio.Lock()
         self._tasks: Dict[str, TtsTask] = {}
         self._active_task_by_plugin: Dict[str, str] = {}
@@ -86,6 +91,7 @@ class TtsRuntimeService:
         voice: str = "",
         sid: int | None = None,
         mode: str = "manual",
+        engine: str = "python",
         interrupt: bool = False,
     ) -> str:
         plugin_key = str(plugin_id or "").strip()
@@ -94,6 +100,7 @@ class TtsRuntimeService:
         payload = str(text or "").strip()
         if not payload:
             raise ValueError("text is required")
+        normalized_engine = self._normalize_engine(engine)
         task_id = str(uuid.uuid4())
         task = TtsTask(
             task_id=task_id,
@@ -102,6 +109,7 @@ class TtsRuntimeService:
             voice=str(voice or "").strip(),
             sid=sid,
             mode=str(mode or "manual").strip() or "manual",
+            engine=normalized_engine,
         )
         async with self._lock:
             if interrupt:
@@ -114,9 +122,11 @@ class TtsRuntimeService:
             self._store.register_task(task_id)
             task.runner = asyncio.create_task(self._run_task(task))
         logger.info(
-            "tts_task_submitted task_id=%s plugin=%s interrupt=%s sid=%s mode=%s text_len=%s",
+            "tts_task_submitted task_id=%s plugin=%s engine=%s voice=%s interrupt=%s sid=%s mode=%s text_len=%s",
             task_id,
             plugin_key,
+            normalized_engine,
+            task.voice,
             interrupt,
             sid,
             task.mode,
@@ -231,8 +241,15 @@ class TtsRuntimeService:
         try:
             task.status = "running"
             task.updated_at = datetime.utcnow()
-            logger.info("tts_task_started task_id=%s plugin=%s sid=%s", task.task_id, task.plugin_id, task.sid)
-            task.total_segments = len(self._synthesis.split_sentences(task.text))
+            logger.info(
+                "tts_task_started task_id=%s plugin=%s engine=%s voice=%s sid=%s",
+                task.task_id,
+                task.plugin_id,
+                task.engine,
+                task.voice,
+                task.sid,
+            )
+            task.total_segments = len(self._split_task_sentences(task))
             await self._publish(
                 task.task_id,
                 {
@@ -244,42 +261,17 @@ class TtsRuntimeService:
                     },
                 },
             )
-            iterator = iter(self._iter_task_segments(task))
-            sentinel = object()
-            while True:
-                next_segment = await asyncio.to_thread(next, iterator, sentinel)
-                if next_segment is sentinel:
-                    break
-                segment = cast(TtsSegment, next_segment)
-                if task.cancelled:
-                    raise asyncio.CancelledError()
-                self._store.write_segment(task.task_id, segment.seq, segment.wav_bytes)
-                task.completed_segments = segment.seq
-                task.updated_at = datetime.utcnow()
-                await self._publish(
-                    task.task_id,
-                    {
-                        "event": "segment_ready",
-                        "data": {
-                            "task_id": task.task_id,
-                            "plugin_id": task.plugin_id,
-                            "seq": segment.seq,
-                            "duration_ms": segment.duration_ms,
-                            "url": f"/api/tts/audio/{task.task_id}/{segment.seq}.wav",
-                        },
-                    },
-                )
-                await self._publish(
-                    task.task_id,
-                    {
-                        "event": "progress",
-                        "data": {
-                            "task_id": task.task_id,
-                            "completed_segments": task.completed_segments,
-                            "total_segments": task.total_segments,
-                        },
-                    },
-                )
+            if task.engine == "azure":
+                await self._run_azure_task(task)
+            else:
+                iterator = iter(self._iter_task_segments(task))
+                sentinel = object()
+                while True:
+                    next_segment = await asyncio.to_thread(next, iterator, sentinel)
+                    if next_segment is sentinel:
+                        break
+                    segment = cast(TtsSegment, next_segment)
+                    await self._accept_segment(task, segment)
             task.status = "completed"
             task.completed_at = datetime.utcnow()
             task.updated_at = datetime.utcnow()
@@ -340,12 +332,88 @@ class TtsRuntimeService:
                 self._prune_task_metadata_locked()
             self._store.cleanup_expired()
 
+    def _split_task_sentences(self, task: TtsTask) -> list[str]:
+        return self._synthesis.split_sentences(task.text)
+
     def _iter_task_segments(self, task: TtsTask) -> Iterable[TtsSegment]:
+        if task.engine == "azure":
+            return self._iter_azure_segments(task)
         iter_synthesize = getattr(self._synthesis, "iter_synthesize", None)
         if callable(iter_synthesize):
             handler = cast(Callable[..., Iterable[TtsSegment]], iter_synthesize)
             return handler(text=task.text, voice=task.voice, sid=task.sid)
         return self._synthesis.synthesize(text=task.text, voice=task.voice, sid=task.sid)
+
+    def _iter_azure_segments(self, task: TtsTask) -> Iterable[TtsSegment]:
+        return []
+
+    async def _run_azure_task(self, task: TtsTask) -> None:
+        sentences = self._synthesis.split_sentences(task.text)
+        if not sentences:
+            return
+        for seq, sentence in enumerate(sentences, start=1):
+            wav_bytes, sample_rate = await self._azure.synthesize_segment(
+                text=sentence,
+                voice=task.voice,
+                sid=task.sid,
+            )
+            duration_ms = self._estimate_wav_duration_ms(wav_bytes, sample_rate)
+            segment = TtsSegment(
+                seq=seq,
+                text=sentence,
+                wav_bytes=wav_bytes,
+                sample_rate=sample_rate,
+                duration_ms=duration_ms,
+            )
+            await self._accept_segment(task, segment)
+
+    async def _accept_segment(self, task: TtsTask, segment: TtsSegment) -> None:
+        if task.cancelled:
+            raise asyncio.CancelledError()
+        self._store.write_segment(task.task_id, segment.seq, segment.wav_bytes)
+        task.completed_segments = segment.seq
+        task.updated_at = datetime.utcnow()
+        await self._publish(
+            task.task_id,
+            {
+                "event": "segment_ready",
+                "data": {
+                    "task_id": task.task_id,
+                    "plugin_id": task.plugin_id,
+                    "seq": segment.seq,
+                    "duration_ms": segment.duration_ms,
+                    "url": f"/api/tts/audio/{task.task_id}/{segment.seq}.wav",
+                },
+            },
+        )
+        await self._publish(
+            task.task_id,
+            {
+                "event": "progress",
+                "data": {
+                    "task_id": task.task_id,
+                    "completed_segments": task.completed_segments,
+                    "total_segments": task.total_segments,
+                },
+            },
+        )
+
+    @staticmethod
+    def _estimate_wav_duration_ms(wav_bytes: bytes, sample_rate: int) -> int:
+        if sample_rate <= 0:
+            return 1
+        pcm_bytes = max(0, len(wav_bytes) - 44)
+        frames = pcm_bytes // 2
+        if frames <= 0:
+            return 1
+        return max(1, int(round(frames * 1000 / sample_rate)))
+
+    @staticmethod
+    def _normalize_engine(raw_engine: str) -> str:
+        payload = str(raw_engine or "").strip().lower()
+        if payload in {"python", "azure"}:
+            return payload
+        return "python"
 
     async def _cancel_active_task_locked(self, plugin_id: str) -> None:
         active_task_id = self._active_task_by_plugin.get(plugin_id) or ""
@@ -461,6 +529,8 @@ class TtsRuntimeService:
             return "TTS_ENGINE_UNAVAILABLE"
         if "kokoro file not found" in payload or "kokoro dir not found" in payload:
             return "TTS_MODEL_MISSING"
+        if "azure_tts_" in payload:
+            return "TTS_AZURE_FAILED"
         if "text is required" in payload or "tts text invalid" in payload:
             return "TTS_TEXT_INVALID"
         if (

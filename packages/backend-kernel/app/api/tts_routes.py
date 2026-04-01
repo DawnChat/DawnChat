@@ -9,6 +9,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
 from app.voice import get_tts_artifact_store, get_tts_runtime_service
+from app.voice.azure_tts_service import get_azure_tts_service
 
 router = APIRouter(prefix="/tts", tags=["tts"])
 
@@ -19,12 +20,30 @@ class TtsSpeakRequest(BaseModel):
     voice: str = ""
     sid: int | None = None
     mode: str = "manual"
+    engine: str = "python"
     interrupt: bool = False
 
 
 class TtsStopRequest(BaseModel):
     task_id: str | None = None
     plugin_id: str | None = None
+
+
+class AzureTtsValidateRequest(BaseModel):
+    api_key: str = ""
+    region: str = ""
+    voice: str = ""
+    default_voice_zh: str = ""
+    default_voice_en: str = ""
+    test_text: str = ""
+
+
+class AzureTtsConfigRequest(BaseModel):
+    api_key: str = ""
+    region: str = ""
+    voice: str = ""
+    default_voice_zh: str = ""
+    default_voice_en: str = ""
 
 
 @router.post("/speak")
@@ -37,6 +56,7 @@ async def submit_tts_speak(request: TtsSpeakRequest):
             voice=request.voice,
             sid=request.sid,
             mode=request.mode,
+            engine=request.engine,
             interrupt=request.interrupt,
         )
     except ValueError as err:
@@ -81,6 +101,43 @@ async def get_tts_capability(plugin_id: str = ""):
             "model": model_payload,
         },
     }
+
+
+@router.get("/providers/azure/status")
+async def get_azure_tts_status():
+    payload = await get_azure_tts_service().get_status()
+    return {"status": "success", "data": payload}
+
+
+@router.post("/providers/azure/validate")
+async def validate_azure_tts_config(request: AzureTtsValidateRequest):
+    try:
+        result = await get_azure_tts_service().validate_config(
+            api_key=request.api_key,
+            region=request.region,
+            voice=request.voice,
+            default_voice_zh=request.default_voice_zh,
+            default_voice_en=request.default_voice_en,
+            test_text=request.test_text,
+        )
+        return {"status": "success", "data": result}
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err)) from err
+
+
+@router.post("/providers/azure/config")
+async def save_azure_tts_config(request: AzureTtsConfigRequest):
+    try:
+        result = await get_azure_tts_service().save_config(
+            api_key=request.api_key,
+            region=request.region,
+            voice=request.voice,
+            default_voice_zh=request.default_voice_zh,
+            default_voice_en=request.default_voice_en,
+        )
+        return {"status": "success", "data": result}
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err)) from err
 
 
 @router.get("/stream/{task_id}")

@@ -45,6 +45,7 @@ class VoiceMcpService:
                 voice = str(arguments.get("voice") or "").strip()
                 sid = self._normalize_sid(arguments.get("sid"))
                 mode = str(arguments.get("mode") or "manual").strip().lower() or "manual"
+                engine = str(arguments.get("engine") or "python").strip().lower() or "python"
                 interrupt = bool(arguments.get("interrupt", False))
                 task_id = await self._runtime.submit_speak(
                     plugin_id=plugin_id,
@@ -52,6 +53,7 @@ class VoiceMcpService:
                     voice=voice,
                     sid=sid,
                     mode=mode,
+                    engine=engine,
                     interrupt=interrupt,
                 )
                 stream_url = f"/api/tts/stream/{task_id}"
@@ -128,6 +130,7 @@ class VoiceMcpService:
                         "voice": {"type": "string"},
                         "sid": {"type": "integer", "minimum": 0},
                         "mode": {"type": "string", "enum": ["manual"], "default": "manual"},
+                        "engine": {"type": "string", "enum": ["python", "azure"], "default": "python"},
                         "interrupt": {"type": "boolean", "default": False},
                     },
                     "required": ["plugin_id", "text"],
