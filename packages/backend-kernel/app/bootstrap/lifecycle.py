@@ -6,10 +6,10 @@ from app.plugins import get_plugin_manager
 from app.services.llama_binary_manager import get_binary_manager
 from app.services.model_lifecycle_manager import get_lifecycle_manager
 from app.services.network_service import NetworkService
-from app.voice.azure_tts_service import get_azure_tts_service
 from app.services.playwright_installer import PlaywrightInstaller
 from app.storage import storage_manager
 from app.utils.logger import app_logger as logger
+from app.voice.azure_tts_service import get_azure_tts_service
 
 
 async def initialize_non_critical_components(startup_start: float) -> None:

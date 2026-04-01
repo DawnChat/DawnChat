@@ -13,7 +13,6 @@ import httpx
 from app.storage import storage_manager
 from app.utils.logger import get_logger
 
-
 _AZURE_TTS_PROVIDER = "azure_tts"
 _AZURE_REGION_CONFIG_KEY = "tts.azure.region"
 _AZURE_VOICE_CONFIG_KEY = "tts.azure.voice"
