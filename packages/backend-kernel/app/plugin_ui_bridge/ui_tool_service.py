@@ -117,6 +117,8 @@ class UiToolService:
             return cls._build_session_status_invoke_payload(arguments)
         if tool.capability_function == "assistant.session.stop":
             return cls._build_session_stop_invoke_payload(arguments)
+        if tool.capability_function == "assistant.session.wait":
+            return cls._build_session_wait_invoke_payload(arguments)
         return cls._validate_and_normalize_arguments(tool.op, arguments)
 
     @classmethod
@@ -216,6 +218,79 @@ class UiToolService:
                 "payload": {
                     "session_id": session_id,
                 },
+                "options": arguments.get("options", {}),
+            },
+        )
+
+    @classmethod
+    def _build_session_wait_invoke_payload(cls, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        raw_session_id = arguments.get("session_id")
+        session_id = str(raw_session_id or "").strip()
+        if not session_id:
+            raise PluginUIBridgeError(code="invalid_arguments", message="session_id is required")
+
+        wait_for = str(arguments.get("wait_for") or "session_terminal").strip().lower()
+        if wait_for not in {"session_terminal", "runtime_event"}:
+            raise PluginUIBridgeError(
+                code="invalid_arguments",
+                message="wait_for must be one of: session_terminal, runtime_event",
+            )
+
+        wait_payload: Dict[str, Any] = {
+            "session_id": session_id,
+            "wait_for": wait_for,
+        }
+
+        raw_timeout_ms = arguments.get("timeout_ms")
+        if raw_timeout_ms is not None:
+            timeout_ms = cls._normalize_non_negative_number(raw_timeout_ms)
+            if timeout_ms is None:
+                raise PluginUIBridgeError(
+                    code="invalid_arguments",
+                    message="timeout_ms must be a non-negative number",
+                )
+            wait_payload["timeout_ms"] = timeout_ms
+
+        raw_since_seq = arguments.get("since_seq")
+        if raw_since_seq is not None:
+            since_seq = cls._normalize_index(raw_since_seq)
+            if since_seq is None:
+                raise PluginUIBridgeError(
+                    code="invalid_arguments",
+                    message="since_seq must be a non-negative integer",
+                )
+            wait_payload["since_seq"] = since_seq
+
+        raw_event_types = arguments.get("event_types")
+        if raw_event_types is not None:
+            if not isinstance(raw_event_types, list):
+                raise PluginUIBridgeError(code="invalid_arguments", message="event_types must be an array")
+            event_types = [str(item).strip() for item in raw_event_types if str(item).strip()]
+            if len(event_types) != len(raw_event_types):
+                raise PluginUIBridgeError(
+                    code="invalid_arguments",
+                    message="event_types must contain non-empty strings",
+                )
+            wait_payload["event_types"] = event_types
+
+        raw_match = arguments.get("match")
+        if raw_match is not None:
+            if not isinstance(raw_match, dict):
+                raise PluginUIBridgeError(code="invalid_arguments", message="match must be an object")
+            wait_payload["match"] = {str(key): value for key, value in raw_match.items()}
+
+        if wait_for == "runtime_event" and not wait_payload.get("event_types"):
+            raise PluginUIBridgeError(
+                code="invalid_arguments",
+                message="event_types is required when wait_for=runtime_event",
+            )
+
+        return cls._validate_and_normalize_arguments(
+            BridgeOperation.CAPABILITY_INVOKE,
+            {
+                "plugin_id": arguments.get("plugin_id"),
+                "function": "assistant.session.wait",
+                "payload": wait_payload,
                 "options": arguments.get("options", {}),
             },
         )
@@ -459,6 +534,34 @@ class UiToolService:
                         "plugin_id": {"type": "string"},
                         "session_id": {"type": "string"},
                         "reason": {"type": "string"},
+                        "options": {"type": "object"},
+                    },
+                    "required": ["plugin_id", "session_id"],
+                },
+            ),
+            UiToolDefinition(
+                name="dawnchat.ui.session.wait",
+                description="Wait for a host-managed assistant session terminal state or runtime event",
+                op=BridgeOperation.CAPABILITY_INVOKE,
+                capability_function="assistant.session.wait",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "plugin_id": {"type": "string"},
+                        "session_id": {"type": "string"},
+                        "wait_for": {
+                            "type": "string",
+                            "enum": ["session_terminal", "runtime_event"],
+                            "default": "session_terminal",
+                        },
+                        "event_types": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "minItems": 1,
+                        },
+                        "match": {"type": "object"},
+                        "since_seq": {"type": "number", "minimum": 0},
+                        "timeout_ms": {"type": "number", "minimum": 0},
                         "options": {"type": "object"},
                     },
                     "required": ["plugin_id", "session_id"],

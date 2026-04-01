@@ -76,6 +76,7 @@ The public host-managed tools are:
 - `dawnchat.ui.session.start`
 - `dawnchat.ui.session.status`
 - `dawnchat.ui.session.stop`
+- `dawnchat.ui.session.wait`
 
 These tools are defined in [ui_tool_service.py](file:///Users/zhutao/Cursor/DawnChat/packages/backend-kernel/app/plugin_ui_bridge/ui_tool_service.py#L402-L466).
 
@@ -193,6 +194,43 @@ If it returns `ok: false` or throws, the host marks the session as failed.
 
 The current public observation path is `dawnchat.ui.session.status`.
 Callers poll for state snapshots instead of receiving a plugin-defined push stream from the core protocol.
+
+### 7.5 Host-managed wait surface
+
+`dawnchat.ui.session.wait` provides a narrow wait-oriented control-plane surface without changing the host–plugin lifecycle boundary.
+
+It currently supports:
+
+- waiting for a host-managed session terminal state (`completed`, `failed`, `cancelled`),
+- waiting for plugin runtime events by `event_types`, `since_seq`, and optional payload `match`.
+
+This allows external callers to reduce high-frequency status polling while still treating plugin runtime events as plugin-owned business semantics.
+
+The host still does not interpret plugin business payloads:
+
+- the host owns the long wait lifecycle, timeout, and terminal wake-up,
+- the plugin owns runtime event meaning and workspace state updates,
+- durable truth still belongs to workspace state / checkpoint / artifacts rather than to the event stream itself.
+
+### 7.6 Recommended caller pattern
+
+For interactive or recoverable flows, the recommended external calling pattern is:
+
+1. start or continue a session with `dawnchat.ui.session.start`
+2. if the task needs passive waiting, call `dawnchat.ui.session.wait`
+3. if the runtime was interrupted, inspect `assistant.workspace.checkpoint.describe`
+4. after `assistant.workspace.resume`, read `continuation_hint`
+5. when `continuation_hint.pending_wait` exists, prefer a targeted follow-up wait using:
+   - `wait_for=runtime_event`
+   - `since_seq=continuation_hint.event_cursor_seq`
+6. use `dawnchat.ui.session.status` for explicit snapshot reads, not as the only waiting mechanism
+
+This keeps the contract narrow:
+
+- `status` remains the snapshot tool,
+- `wait` becomes the passive waiting tool,
+- `checkpoint.describe` and `resume` remain recovery tools,
+- `continuation_hint` helps the caller decide the next session or wait boundary.
 
 ---
 

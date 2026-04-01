@@ -426,6 +426,8 @@ describe('useAssistantSessionOrchestrator', () => {
       expect.objectContaining({
         functionName: 'assistant.session_step_execute',
         payload: expect.objectContaining({
+          step_index: 0,
+          total_steps: 1,
           timeout_ms: 45000,
         }),
       })
@@ -628,5 +630,327 @@ describe('useAssistantSessionOrchestrator', () => {
         })
       )
     })
+  })
+
+  it('waits for session terminal completion without polling status', async () => {
+    let resolveStep: ((value: Record<string, unknown>) => void) | null = null
+    const executePluginCapability = vi.fn(async (invoke) => {
+      if (invoke.functionName === 'assistant.session_step_execute') {
+        return await new Promise<Record<string, unknown>>((resolve) => {
+          resolveStep = resolve
+        })
+      }
+      return {
+        ok: false,
+        error_code: 'unsupported',
+        message: 'unsupported',
+      }
+    })
+    const orchestrator = useAssistantSessionOrchestrator({
+      pluginId: computed(() => 'com.demo.plugin'),
+    })
+    const startResult = await orchestrator.handleCapabilityInvokeRequest(
+      createContext(
+        'assistant.session.start',
+        {
+          steps: [
+            {
+              action: {
+                type: 'guide.card.show',
+                payload: {},
+              },
+            },
+          ],
+        },
+        executePluginCapability
+      )
+    )
+    const sessionId = String(
+      ((startResult as Record<string, unknown>).data as Record<string, unknown>).session_id || ''
+    )
+    const waitPromise = orchestrator.handleCapabilityInvokeRequest(
+      createContext(
+        'assistant.session.wait',
+        {
+          session_id: sessionId,
+        },
+        executePluginCapability
+      )
+    )
+    resolvePendingStep(resolveStep, {
+      ok: true,
+      data: { status: 'applied' },
+    })
+    await expect(waitPromise).resolves.toEqual({
+      ok: true,
+      data: expect.objectContaining({
+        session_id: sessionId,
+        wait_for: 'session_terminal',
+        status: 'terminal',
+        session_status: expect.objectContaining({
+          status: 'completed',
+        }),
+      }),
+    })
+  })
+
+  it('wakes session.wait when the running session is stopped', async () => {
+    let resolveStep: ((value: Record<string, unknown>) => void) | null = null
+    const executePluginCapability = vi.fn(async (invoke) => {
+      if (invoke.functionName === 'assistant.session_step_execute') {
+        return await new Promise<Record<string, unknown>>((resolve) => {
+          resolveStep = resolve
+        })
+      }
+      if (invoke.functionName === 'assistant.session_step_cancel') {
+        return {
+          ok: true,
+          data: {
+            session_id: 'sess_cancel',
+            step_id: 'step-1',
+            active_step_found: true,
+            cancel_requested: true,
+          },
+        }
+      }
+      return {
+        ok: false,
+        error_code: 'unsupported',
+        message: 'unsupported',
+      }
+    })
+    const orchestrator = useAssistantSessionOrchestrator({
+      pluginId: computed(() => 'com.demo.plugin'),
+    })
+    const startResult = await orchestrator.handleCapabilityInvokeRequest(
+      createContext(
+        'assistant.session.start',
+        {
+          steps: [
+            {
+              action: {
+                type: 'guide.card.show',
+                payload: {},
+              },
+            },
+          ],
+        },
+        executePluginCapability
+      )
+    )
+    const sessionId = String(
+      ((startResult as Record<string, unknown>).data as Record<string, unknown>).session_id || ''
+    )
+    const waitPromise = orchestrator.handleCapabilityInvokeRequest(
+      createContext(
+        'assistant.session.wait',
+        {
+          session_id: sessionId,
+        },
+        executePluginCapability
+      )
+    )
+    await orchestrator.handleCapabilityInvokeRequest(
+      createContext(
+        'assistant.session.stop',
+        {
+          session_id: sessionId,
+          reason: 'agent_interrupted',
+        },
+        executePluginCapability
+      )
+    )
+    await expect(waitPromise).resolves.toEqual({
+      ok: true,
+      data: expect.objectContaining({
+        session_id: sessionId,
+        wait_for: 'session_terminal',
+        status: 'terminal',
+        session_status: expect.objectContaining({
+          status: 'cancelled',
+        }),
+      }),
+    })
+    resolvePendingStep(resolveStep, {
+      ok: false,
+      error_code: 'step_cancelled',
+      message: 'guide narration cancelled',
+    })
+  })
+
+  it('waits for runtime events through assistant.runtime.event.peek', async () => {
+    let resolveStep: ((value: Record<string, unknown>) => void) | null = null
+    const executePluginCapability = vi.fn(async (invoke) => {
+      if (invoke.functionName === 'assistant.session_step_execute') {
+        return await new Promise<Record<string, unknown>>((resolve) => {
+          resolveStep = resolve
+        })
+      }
+      if (invoke.functionName === 'assistant.runtime.event.peek') {
+        return {
+          ok: true,
+          data: {
+            latest_seq: 5,
+            events: [
+              {
+                seq: 5,
+                type: 'assistant.guide.quiz.submitted',
+                session_id: 'sess-runtime',
+                payload: {
+                  quiz_id: 'quiz-1',
+                  selected_option: 'A',
+                },
+              },
+            ],
+          },
+        }
+      }
+      return {
+        ok: false,
+        error_code: 'unsupported',
+        message: 'unsupported',
+      }
+    })
+    const orchestrator = useAssistantSessionOrchestrator({
+      pluginId: computed(() => 'com.demo.plugin'),
+    })
+    const startResult = await orchestrator.handleCapabilityInvokeRequest(
+      createContext(
+        'assistant.session.start',
+        {
+          steps: [
+            {
+              action: {
+                type: 'guide.card.show',
+                payload: {},
+              },
+            },
+          ],
+        },
+        executePluginCapability
+      )
+    )
+    const sessionId = String(
+      ((startResult as Record<string, unknown>).data as Record<string, unknown>).session_id || ''
+    )
+    const waitResult = await orchestrator.handleCapabilityInvokeRequest(
+      createContext(
+        'assistant.session.wait',
+        {
+          session_id: sessionId,
+          wait_for: 'runtime_event',
+          event_types: ['assistant.guide.quiz.submitted'],
+          match: {
+            quiz_id: 'quiz-1',
+          },
+          since_seq: 3,
+        },
+        executePluginCapability
+      )
+    )
+    expect(waitResult).toEqual({
+      ok: true,
+      data: expect.objectContaining({
+        session_id: sessionId,
+        wait_for: 'runtime_event',
+        status: 'matched',
+        latest_seq: 5,
+        matched_event: expect.objectContaining({
+          type: 'assistant.guide.quiz.submitted',
+        }),
+      }),
+    })
+    expect(executePluginCapability).toHaveBeenCalledWith(
+      expect.objectContaining({
+        functionName: 'assistant.runtime.event.peek',
+        payload: expect.objectContaining({
+          session_id: sessionId,
+          since_seq: 3,
+          event_types: ['assistant.guide.quiz.submitted'],
+          match: {
+            quiz_id: 'quiz-1',
+          },
+        }),
+      })
+    )
+    resolvePendingStep(resolveStep, {
+      ok: true,
+      data: { status: 'applied' },
+    })
+  })
+
+  it('returns timed_out when runtime events do not arrive before timeout', async () => {
+    vi.useFakeTimers()
+    let resolveStep: ((value: Record<string, unknown>) => void) | null = null
+    const executePluginCapability = vi.fn(async (invoke) => {
+      if (invoke.functionName === 'assistant.session_step_execute') {
+        return await new Promise<Record<string, unknown>>((resolve) => {
+          resolveStep = resolve
+        })
+      }
+      if (invoke.functionName === 'assistant.runtime.event.peek') {
+        return {
+          ok: true,
+          data: {
+            latest_seq: 0,
+            events: [],
+          },
+        }
+      }
+      return {
+        ok: false,
+        error_code: 'unsupported',
+        message: 'unsupported',
+      }
+    })
+    const orchestrator = useAssistantSessionOrchestrator({
+      pluginId: computed(() => 'com.demo.plugin'),
+    })
+    const startResult = await orchestrator.handleCapabilityInvokeRequest(
+      createContext(
+        'assistant.session.start',
+        {
+          steps: [
+            {
+              action: {
+                type: 'guide.card.show',
+                payload: {},
+              },
+            },
+          ],
+        },
+        executePluginCapability
+      )
+    )
+    const sessionId = String(
+      ((startResult as Record<string, unknown>).data as Record<string, unknown>).session_id || ''
+    )
+    const waitPromise = orchestrator.handleCapabilityInvokeRequest(
+      createContext(
+        'assistant.session.wait',
+        {
+          session_id: sessionId,
+          wait_for: 'runtime_event',
+          event_types: ['assistant.guide.quiz.submitted'],
+          timeout_ms: 400,
+        },
+        executePluginCapability
+      )
+    )
+    await vi.advanceTimersByTimeAsync(600)
+    await expect(waitPromise).resolves.toEqual({
+      ok: true,
+      data: expect.objectContaining({
+        session_id: sessionId,
+        wait_for: 'runtime_event',
+        status: 'timed_out',
+        latest_seq: 0,
+      }),
+    })
+    resolvePendingStep(resolveStep, {
+      ok: true,
+      data: { status: 'applied' },
+    })
+    vi.useRealTimers()
   })
 })

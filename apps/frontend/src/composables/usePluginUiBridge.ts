@@ -140,6 +140,13 @@ export function usePluginUiBridge(options: UiBridgeOptions) {
       return REQUEST_TIMEOUT_DEFAULT_MS
     }
     const functionName = String(payload.function || '').trim()
+    if (functionName === 'assistant.session.wait') {
+      const waitPayload = toRecord(payload.payload)
+      const requestedTimeoutMs = typeof waitPayload.timeout_ms === 'number' && Number.isFinite(waitPayload.timeout_ms)
+        ? waitPayload.timeout_ms
+        : REQUEST_TIMEOUT_SESSION_INVOKE_MS
+      return Math.max(REQUEST_TIMEOUT_SESSION_INVOKE_MS, requestedTimeoutMs + 5_000)
+    }
     if (
       functionName.startsWith('assistant.session')
       || functionName.startsWith('assistant.session_')

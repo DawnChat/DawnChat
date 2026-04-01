@@ -49,3 +49,7 @@ async def act_executor(arguments: Dict[str, Any], context: Dict[str, Any]) -> Di
 async def scroll_executor(arguments: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
     return await _execute_ui_tool("dawnchat.ui.scroll", arguments, context)
 
+
+async def session_wait_executor(arguments: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    return await _execute_ui_tool("dawnchat.ui.session.wait", arguments, context)
+

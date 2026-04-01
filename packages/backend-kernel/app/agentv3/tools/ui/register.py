@@ -4,7 +4,7 @@ from app.agentv3.tools.registry import ToolRegistry, ToolSpec
 from app.plugin_ui_bridge import get_ui_tool_service
 from app.plugin_ui_bridge.models import BridgeOperation
 
-from .executors import act_executor, describe_executor, query_executor, scroll_executor
+from .executors import act_executor, describe_executor, query_executor, scroll_executor, session_wait_executor
 
 
 def register_ui_tools(registry: ToolRegistry) -> None:
@@ -13,6 +13,7 @@ def register_ui_tools(registry: ToolRegistry) -> None:
         "dawnchat.ui.query": query_executor,
         "dawnchat.ui.act": act_executor,
         "dawnchat.ui.scroll": scroll_executor,
+        "dawnchat.ui.session.wait": session_wait_executor,
     }
     read_ops = {BridgeOperation.DESCRIBE, BridgeOperation.QUERY}
 
@@ -25,7 +26,7 @@ def register_ui_tools(registry: ToolRegistry) -> None:
                 name=item.name,
                 description=item.description,
                 capability="ui",
-                permission="read" if item.op in read_ops else "edit",
+                permission="read" if item.op in read_ops or item.name == "dawnchat.ui.session.wait" else "edit",
                 input_schema=item.input_schema,
                 executor=executor,
             )

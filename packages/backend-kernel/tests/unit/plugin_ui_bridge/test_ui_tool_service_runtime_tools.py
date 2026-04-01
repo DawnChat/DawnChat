@@ -209,6 +209,38 @@ async def test_session_stop_dispatches_as_capability_invoke(monkeypatch: pytest.
 
 
 @pytest.mark.asyncio
+async def test_session_wait_dispatches_as_capability_invoke(monkeypatch: pytest.MonkeyPatch) -> None:
+    bridge = _BridgeStub()
+    service = UiToolService(bridge_service=bridge, artifact_store=_ArtifactStoreStub())
+    monkeypatch.setattr(resolver_module, "get_plugin_manager", lambda: _ManagerStub())
+
+    result = await service.execute(
+        "dawnchat.ui.session.wait",
+        {
+            "plugin_id": "com.demo.plugin",
+            "session_id": "sess_1",
+            "wait_for": "runtime_event",
+            "event_types": ["assistant.guide.quiz.submitted"],
+            "match": {"quiz_id": "quiz-1"},
+            "since_seq": 3,
+            "timeout_ms": 15000,
+        },
+    )
+
+    assert result["ok"] is True
+    assert bridge.last_op == BridgeOperation.CAPABILITY_INVOKE
+    assert bridge.last_payload["function"] == "assistant.session.wait"
+    assert bridge.last_payload["payload"] == {
+        "session_id": "sess_1",
+        "wait_for": "runtime_event",
+        "event_types": ["assistant.guide.quiz.submitted"],
+        "match": {"quiz_id": "quiz-1"},
+        "since_seq": 3,
+        "timeout_ms": 15000.0,
+    }
+
+
+@pytest.mark.asyncio
 async def test_session_start_rejects_invalid_steps(monkeypatch: pytest.MonkeyPatch) -> None:
     service = UiToolService(bridge_service=_BridgeStub(), artifact_store=_ArtifactStoreStub())
     monkeypatch.setattr(resolver_module, "get_plugin_manager", lambda: _ManagerStub())
@@ -259,6 +291,41 @@ async def test_session_status_requires_session_id(monkeypatch: pytest.MonkeyPatc
     with pytest.raises(PluginUIBridgeError) as exc:
         await service.execute(
             "dawnchat.ui.session.status",
+            {
+                "plugin_id": "com.demo.plugin",
+                "session_id": "",
+            },
+        )
+    assert exc.value.code == "invalid_arguments"
+    assert exc.value.message == "session_id is required"
+
+
+@pytest.mark.asyncio
+async def test_session_wait_requires_event_types_for_runtime_event(monkeypatch: pytest.MonkeyPatch) -> None:
+    service = UiToolService(bridge_service=_BridgeStub(), artifact_store=_ArtifactStoreStub())
+    monkeypatch.setattr(resolver_module, "get_plugin_manager", lambda: _ManagerStub())
+
+    with pytest.raises(PluginUIBridgeError) as exc:
+        await service.execute(
+            "dawnchat.ui.session.wait",
+            {
+                "plugin_id": "com.demo.plugin",
+                "session_id": "sess_1",
+                "wait_for": "runtime_event",
+            },
+        )
+    assert exc.value.code == "invalid_arguments"
+    assert exc.value.message == "event_types is required when wait_for=runtime_event"
+
+
+@pytest.mark.asyncio
+async def test_session_wait_requires_session_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    service = UiToolService(bridge_service=_BridgeStub(), artifact_store=_ArtifactStoreStub())
+    monkeypatch.setattr(resolver_module, "get_plugin_manager", lambda: _ManagerStub())
+
+    with pytest.raises(PluginUIBridgeError) as exc:
+        await service.execute(
+            "dawnchat.ui.session.wait",
             {
                 "plugin_id": "com.demo.plugin",
                 "session_id": "",
