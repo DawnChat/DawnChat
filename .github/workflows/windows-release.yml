@@ -47,6 +47,21 @@ jobs:
         shell: bash
         run: pnpm install --frozen-lockfile
 
+      - name: Install Poetry
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install poetry poetry-plugin-export
+          POETRY_BIN_DIR="$(python - <<'PY'
+          import sys
+          from pathlib import Path
+          print((Path(sys.executable).parent / "Scripts").as_posix())
+          PY
+          )"
+          echo "$POETRY_BIN_DIR" >> "$GITHUB_PATH"
+          poetry --version
+          poetry export --help > /dev/null
+
       - name: Cache runtime assets
         uses: actions/cache@v4
         with:

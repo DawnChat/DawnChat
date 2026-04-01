@@ -63,6 +63,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install Poetry
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install poetry poetry-plugin-export
+          poetry --version
+          poetry export --help > /dev/null
+
       - name: Cache runtime assets
         uses: actions/cache@v4
         with:
@@ -83,14 +90,42 @@ jobs:
           DAWNCHAT_TTS_KOKORO_URL: ${{ vars.DAWNCHAT_TTS_KOKORO_URL }}
         run: ./scripts/download-runtime-assets.sh --all --platform aarch64-apple-darwin
 
+      - name: Normalize runtime binary permissions
+        run: |
+          chmod +x runtime-assets/bun-bin/bun-darwin-aarch64/bun 2>/dev/null || true
+          chmod +x runtime-assets/uv-binary/uv-aarch64-apple-darwin/uv 2>/dev/null || true
+          chmod +x runtime-assets/uv-binary/uv-aarch64-apple-darwin/uvx 2>/dev/null || true
+          chmod +x runtime-assets/opencode-bin/opencode-darwin-arm64/opencode 2>/dev/null || true
+          chmod +x runtime-assets/llamacpp/llama-b7204-bin-macos-arm64/bin/llama-server 2>/dev/null || true
+
       - name: Verify runtime assets
         run: |
-          test -x runtime-assets/bun-bin/bun-darwin-aarch64/bun
-          test -x runtime-assets/uv-binary/uv-aarch64-apple-darwin/uv
-          test -x runtime-assets/uv-binary/uv-aarch64-apple-darwin/uvx
-          test -x runtime-assets/opencode-bin/opencode-darwin-arm64/opencode
-          test -x runtime-assets/llamacpp/llama-b7204-bin-macos-arm64/bin/llama-server
-          test -f runtime-assets/tts-models/kokoro-multi-lang-v1_1/model.onnx
+          require_executable() {
+            local path="$1"
+            if [[ ! -f "$path" ]]; then
+              echo "Missing file: $path"
+              exit 1
+            fi
+            if [[ ! -x "$path" ]]; then
+              echo "File is not executable: $path"
+              ls -l "$path" || true
+              exit 1
+            fi
+          }
+          require_file() {
+            local path="$1"
+            if [[ ! -f "$path" ]]; then
+              echo "Missing file: $path"
+              exit 1
+            fi
+          }
+
+          require_executable runtime-assets/bun-bin/bun-darwin-aarch64/bun
+          require_executable runtime-assets/uv-binary/uv-aarch64-apple-darwin/uv
+          require_executable runtime-assets/uv-binary/uv-aarch64-apple-darwin/uvx
+          require_executable runtime-assets/opencode-bin/opencode-darwin-arm64/opencode
+          require_executable runtime-assets/llamacpp/llama-b7204-bin-macos-arm64/bin/llama-server
+          require_file runtime-assets/tts-models/kokoro-multi-lang-v1_1/model.onnx
 
       - name: Prepare signing assets
         if: env.SHOULD_SIGN == 'true'
