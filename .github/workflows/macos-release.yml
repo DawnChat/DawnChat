@@ -86,9 +86,7 @@ jobs:
           DAWNCHAT_BUN_BASE_URL: ${{ vars.DAWNCHAT_BUN_BASE_URL }}
           DAWNCHAT_UV_BASE_URL: ${{ vars.DAWNCHAT_UV_BASE_URL }}
           DAWNCHAT_OPENCODE_BASE_URL: ${{ vars.DAWNCHAT_OPENCODE_BASE_URL }}
-          DAWNCHAT_LLAMACPP_BASE_URL: ${{ vars.DAWNCHAT_LLAMACPP_BASE_URL }}
-          DAWNCHAT_TTS_KOKORO_URL: ${{ vars.DAWNCHAT_TTS_KOKORO_URL }}
-        run: ./scripts/download-runtime-assets.sh --all --platform aarch64-apple-darwin
+        run: ./scripts/download-runtime-assets.sh --bun --uv --opencode --platform aarch64-apple-darwin
 
       - name: Normalize runtime binary permissions
         run: |
@@ -96,7 +94,6 @@ jobs:
           chmod +x runtime-assets/uv-binary/uv-aarch64-apple-darwin/uv 2>/dev/null || true
           chmod +x runtime-assets/uv-binary/uv-aarch64-apple-darwin/uvx 2>/dev/null || true
           chmod +x runtime-assets/opencode-bin/opencode-darwin-arm64/opencode 2>/dev/null || true
-          chmod +x runtime-assets/llamacpp/llama-b7204-bin-macos-arm64/bin/llama-server 2>/dev/null || true
 
       - name: Verify runtime assets
         run: |
@@ -124,8 +121,6 @@ jobs:
           require_executable runtime-assets/uv-binary/uv-aarch64-apple-darwin/uv
           require_executable runtime-assets/uv-binary/uv-aarch64-apple-darwin/uvx
           require_executable runtime-assets/opencode-bin/opencode-darwin-arm64/opencode
-          require_executable runtime-assets/llamacpp/llama-b7204-bin-macos-arm64/bin/llama-server
-          require_file runtime-assets/tts-models/kokoro-multi-lang-v1_1/model.onnx
 
       - name: Prepare signing assets
         if: env.SHOULD_SIGN == 'true'
