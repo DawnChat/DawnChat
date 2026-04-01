@@ -71,5 +71,5 @@ clean_cython_cache() {
 # 执行清理
 clean_cython_cache
 
-# 调用主构建脚本，传入 debug 模式参数
-exec "$SCRIPT_DIR/build.sh" --mode debug --cn-mirror "$@"
+# 调用主构建脚本，传入 debug 模式参数，并默认内置 kokoro 模型
+exec "$SCRIPT_DIR/build.sh" --mode debug --cn-mirror --with-kokoro-model "$@"

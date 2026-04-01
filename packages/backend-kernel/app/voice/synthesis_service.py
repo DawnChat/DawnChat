@@ -101,11 +101,14 @@ class TtsSynthesisService:
             if entry.init_error:
                 first_error = entry.init_error
                 break
+        
+        model_exists = (self._model_dir / "model.onnx").is_file()
+
         return {
             "engine": "sherpa-onnx-kokoro",
             "model_dir": str(self._model_dir),
             "sample_rate": self._sample_rate,
-            "ready": bool(cached_languages),
+            "ready": model_exists and not bool(first_error),
             "error": first_error,
             "primary_lang": self._primary_lang,
             "cached_languages": cached_languages,

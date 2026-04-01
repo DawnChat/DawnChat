@@ -9,13 +9,11 @@
 
 DawnChat is built for apps that keep evolving.
 
-Traditionally, software's lifecycle freezes the moment you hit "compile" and "publish". DawnChat breaks this boundary.
+It is a platform that makes "app development" as simple as chatting. Zero environment setup required—just tell the Agent what you need, and it will rapidly generate your exclusive Desktop, Web, or Mobile App.
 
-It is a local-first AI desktop runtime. Here, building an app requires zero environment wrestling—**if you can type, you can start creating**. Apps are no longer static, dead code. You can chat with an Agent and watch it **rewrite code and reshape the UI in real-time** right inside the workbench.
+The ultimate realization of this vision is our built-in, **self-evolving AI Assistant**. Breaking the boundaries of traditional human-computer interaction, it goes far beyond chatting and answering questions—it **has the unique ability to rewrite its own code in real-time**. As you interact with it daily, it dynamically reshapes its UI and unlocks new capabilities on the fly. It's more than just a tool; it's an intelligent entity that grows alongside your needs.
 
-The most radical exploration of this vision is our official AI Assistant—it doesn't just chat with you; it continuously evolves its own capabilities and UI while running.
-
-[Download for Desktop](https://github.com/DawnChat/DawnChat/releases) · [AI Assistant Roadmap](./docs/public/architecture/assistant/ai-gui-workspace-v1-roadmap.md) · [Architecture Docs](./docs/public/architecture/assistant/visual-voice-session-architecture.md) · [Build from Source](#build-from-source)
+[Download for Desktop](https://github.com/DawnChat/DawnChat/releases) · [AI Assistant Roadmap](./docs/public/architecture/assistant/ai-gui-workspace-v1-roadmap.md) · [Host–Plugin Session Protocol](./docs/public/architecture/assistant/host-plugin-session-protocol.md) · [Build from Source](#build-from-source)
 
 ---
 
@@ -23,9 +21,9 @@ The most radical exploration of this vision is our official AI Assistant—it do
 
 We don't want to build just another AI chat wrapper, nor another heavy low-code platform. DawnChat seamlessly blends three things into one desktop host:
 
-1. **Frictionless App Creation**: Build for desktop, web, or mobile. Less setup friction, more direct creation.
-2. **Agent As Builder**: The Agent isn't just a surface-level assistant. It reads the context, modifies the underlying code of your App, and lets you see UI changes instantly.
-3. **Apps That Never Stop Evolving**: Apps can be continuously iterated while running, breaking the traditional "develop -> compile -> publish" dead loop.
+1. **Development by Conversation**: Build Desktop, Web, and Mobile Apps with ease. We eliminate environment setup friction, lowering the barrier to creation to the absolute minimum.
+2. **Agent as Builder**: The Agent isn't just a floating chat box. It understands the UI context and **modifies the underlying code directly**, letting you see UI refactoring instantly.
+3. **Self-Evolving Agents**: Shattering the traditional "develop -> compile -> publish" loop. Apps can be continuously iterated while running, and even **rewrite themselves** dynamically based on your interactions.
 
 ---
 
@@ -33,19 +31,28 @@ We don't want to build just another AI chat wrapper, nor another heavy low-code 
 
 If you're new to this repository, we recommend focusing on these three parts:
 
-### 1. Witness the Self-Evolving AI Assistant
-The official AI Assistant isn't just a side demo; it's the ultimate manifestation of DawnChat's vision.
-It doesn't just answer questions. It dynamically calls new page capabilities based on your needs and even changes its own form during interactions. We are building it as the prototype for future AI GUI workspaces.
+### 1. Witness the "Self-Evolution" of the AI Assistant
+The official AI Assistant is far from a mere side demo; it is the strongest embodiment of DawnChat's vision.
+It goes way beyond answering questions—it **rewrites its own underlying code on the fly** based on your requests, spawning new interfaces and capabilities in real-time. We are crafting it into the prototype for future AI GUI workspaces.
+
+<!-- TODO: Replace with actual webp demo gif link -->
+> <img src="https://via.placeholder.com/800x450.webp?text=AI+Assistant+Self-Evolution+Demo" alt="AI Assistant Self-Evolution Demo" width="100%" />
 
 ### 2. "Chat & Build" in the Workbench
 DawnChat comes with a powerful built-in dev workbench.
-You can select any element on the UI, trace it to the source code, and throw that context to the Agent. Tell it "make this button red and add an animation," and watch the preview panel on the right update instantly.
+You can select any element on the UI, throw that context to the Agent, and just say "make this button red and add an animation." Then, watch the preview panel on the right update instantly.
 
-### 3. Create Multiple App Forms
+<!-- TODO: Replace with actual webp demo gif link -->
+> <img src="https://via.placeholder.com/800x450.webp?text=Chat+and+Build+Demo" alt="Chat and Build Demo" width="100%" />
+
+### 3. One Conversation, Cross-Platform Generation
 DawnChat's underlying architecture isn't limited to a single use case. It allows you to create three entirely different forms of Apps:
 - **Desktop**: Native windowed desktop experience.
 - **Web**: One-click publish to the DawnChat website once developed.
 - **Mobile**: Write code on your desktop, scan a QR code with your phone to preview and install instantly.
+
+<!-- TODO: Replace with actual webp demo gif link -->
+> <img src="https://via.placeholder.com/800x450.webp?text=Cross-Platform+Generation+Demo" alt="Cross-Platform Generation Demo" width="100%" />
 
 ---
 
@@ -87,7 +94,7 @@ This seamless flow from "using" to "creating" to "evolving" is what makes DawnCh
 ### Official AI Assistant
 - Open-sourced as the official reference App.
 - Used to validate AI-native interaction paradigms.
-- Explores visual + voice sessions, workspaces, page capabilities, and self-evolving runtimes.
+- Explores host-managed sessions, workspaces, page capabilities, and self-evolving runtimes.
 
 ---
 
@@ -113,7 +120,7 @@ Then this repository serves as an open experimental platform.
 ## Documentation Map
 
 - App Dev Quick Start: [`docs/public/architecture/plugins/frontend-plugins-agent-quick-start.md`](./docs/public/architecture/plugins/frontend-plugins-agent-quick-start.md)
-- AI Assistant Visual + Voice Architecture: [`docs/public/architecture/assistant/visual-voice-session-architecture.md`](./docs/public/architecture/assistant/visual-voice-session-architecture.md)
+- Host–Plugin Session Protocol: [`docs/public/architecture/assistant/host-plugin-session-protocol.md`](./docs/public/architecture/assistant/host-plugin-session-protocol.md)
 - AI GUI Workspace V1 Roadmap: [`docs/public/architecture/assistant/ai-gui-workspace-v1-roadmap.md`](./docs/public/architecture/assistant/ai-gui-workspace-v1-roadmap.md)
 - Official AI Assistant Reference Implementation: [`dawnchat-plugins/official-plugins/desktop-ai-assistant`](./dawnchat-plugins/official-plugins/desktop-ai-assistant)
 
