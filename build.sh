@@ -12,7 +12,6 @@
 #   --no-frontend           跳过前端构建
 #   --no-backend            跳过后端构建
 #   --no-tauri              跳过 Tauri 构建
-#   --cython                启用 Cython 编译核心模块
 #   --optimize              优化 Python 包体积
 #   --clean                 构建前清理
 #   --verbose               详细输出
@@ -21,7 +20,6 @@
 # 示例:
 #   ./build.sh                          # 默认 release 构建
 #   ./build.sh --mode debug             # debug 构建
-#   ./build.sh --mode release --cython  # release + Cython 加密
 #   ./build.sh --clean --optimize       # 清理后构建并优化
 #
 # ============================================================================
@@ -44,7 +42,7 @@ supports_unicode_output() {
     fi
 
     local locale_value="${LC_ALL:-${LC_CTYPE:-${LANG:-}}}"
-    locale_value="${locale_value,,}"
+    locale_value="$(printf '%s' "$locale_value" | tr '[:upper:]' '[:lower:]')"
     if [[ "$locale_value" == *"utf-8"* || "$locale_value" == *"utf8"* ]]; then
         return 0
     fi
@@ -119,7 +117,6 @@ TARGET_PLATFORM=""
 BUILD_FRONTEND=true
 BUILD_BACKEND=true
 BUILD_TAURI=true
-ENABLE_CYTHON=false
 ENABLE_OPTIMIZE=false
 EMBED_CHROMIUM=false
 ENABLE_VERBOSE_IMPORT=false
@@ -188,7 +185,6 @@ DawnChat 统一构建脚本 (Python Build Standalone 方案)
     --no-frontend           跳过前端构建
     --no-backend            跳过后端构建
     --no-tauri              跳过 Tauri 构建
-    --cython                启用 Cython 编译核心模块 (workflows)
     --optimize              优化 Python 包体积
     --embed-chromium        嵌入 Chromium 浏览器 (用于爬虫功能)
     --enable-verbose-import 开启详细的 Python 导入日志 (PYTHONVERBOSE)
@@ -213,7 +209,6 @@ DawnChat 统一构建脚本 (Python Build Standalone 方案)
     $0                              # 默认 release 构建
     $0 --cn-mirror                  # 使用国内镜像加速
     $0 --mode debug                 # debug 构建
-    $0 --mode release --cython      # release + Cython 加密
     $0 --clean --optimize           # 清理后构建并优化
 
 环境变量:
@@ -244,10 +239,6 @@ parse_args() {
                 ;;
             --no-tauri)
                 BUILD_TAURI=false
-                shift
-                ;;
-            --cython)
-                ENABLE_CYTHON=true
                 shift
                 ;;
             --optimize)
@@ -454,13 +445,6 @@ check_prerequisites() {
     # 检查 curl (下载 PBS)
     if ! command -v curl &> /dev/null; then
         missing+=("curl")
-    fi
-    
-    # 如果启用 Cython，检查 Cython
-    if [[ "$ENABLE_CYTHON" == true ]]; then
-        if ! python3 -c "import Cython" 2>/dev/null; then
-            print_warning "Cython 未安装，将自动安装..."
-        fi
     fi
     
     if [[ ${#missing[@]} -ne 0 ]]; then
@@ -735,36 +719,6 @@ copy_source_code() {
     print_success "源代码复制完成"
 }
 
-# ============ Cython 编译 ============
-compile_with_cython() {
-    if [[ "$ENABLE_CYTHON" != true ]]; then
-        return 0
-    fi
-    
-    print_step "Cython 编译核心模块"
-    
-    local python_path="$SIDECAR_DIR/python/bin/python3.11"
-    local app_dir="$SIDECAR_DIR/app"
-    
-    # 确保 Cython 已安装
-    "$SIDECAR_DIR/python/bin/pip3.11" install cython --quiet
-    
-    # 编译 workflows 目录
-    print_info "编译 workflows 模块..."
-    
-    # 使用 compile_cython.py 脚本
-    if [[ -f "$BACKEND_DIR/scripts/compile_cython.py" ]]; then
-        "$python_path" "$BACKEND_DIR/scripts/compile_cython.py" \
-            "$app_dir" "$app_dir" \
-            --modules workflows \
-            --python "$python_path"
-    else
-        print_warning "未找到 compile_cython.py，跳过 Cython 编译"
-    fi
-    
-    print_success "Cython 编译完成"
-}
-
 # ============ 优化 Python 包体积 ============
 optimize_python() {
     if [[ "$ENABLE_OPTIMIZE" != true ]]; then
@@ -775,6 +729,11 @@ optimize_python() {
     
     local python_dir="$SIDECAR_DIR/python"
     local python_path="$python_dir/bin/python3.11"
+    local is_windows_target=false
+    if [[ "$TARGET_PLATFORM" == *"windows"* || "$OSTYPE" == msys* || "$OSTYPE" == cygwin* ]]; then
+        python_path="$python_dir/python.exe"
+        is_windows_target=true
+    fi
     
     # 使用 optimize_python.py 脚本
     if [[ -f "$BACKEND_DIR/scripts/optimize_python.py" ]]; then
@@ -789,9 +748,15 @@ optimize_python() {
         find "$python_dir" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
         
         print_info "删除不需要的模块..."
-        rm -rf "$python_dir/lib/python3.11/tkinter" 2>/dev/null || true
-        rm -rf "$python_dir/lib/python3.11/idlelib" 2>/dev/null || true
-        rm -rf "$python_dir/lib/python3.11/turtledemo" 2>/dev/null || true
+        if [[ "$is_windows_target" == true ]]; then
+            rm -rf "$python_dir/Lib/tkinter" 2>/dev/null || true
+            rm -rf "$python_dir/Lib/idlelib" 2>/dev/null || true
+            rm -rf "$python_dir/Lib/turtledemo" 2>/dev/null || true
+        else
+            rm -rf "$python_dir/lib/python3.11/tkinter" 2>/dev/null || true
+            rm -rf "$python_dir/lib/python3.11/idlelib" 2>/dev/null || true
+            rm -rf "$python_dir/lib/python3.11/turtledemo" 2>/dev/null || true
+        fi
     fi
     
     # 计算优化后大小
@@ -909,7 +874,7 @@ embed_chromium() {
     
     local python_path="$SIDECAR_DIR/python/bin/python3.11"
     # Windows adapt
-    if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+    if [[ "$TARGET_PLATFORM" == *"windows"* || "$OSTYPE" == msys* || "$OSTYPE" == cygwin* ]]; then
         python_path="$SIDECAR_DIR/python/python.exe"
     fi
     
@@ -1065,7 +1030,7 @@ prepare_builtin_desktop_template() {
 
     local dest_root="$SIDECAR_DIR/dawnchat-plugins/official-plugins"
     local bun_bin="$SIDECAR_DIR/bun-bin/bun"
-    if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+    if [[ "$TARGET_PLATFORM" == *"windows"* || "$OSTYPE" == msys* || "$OSTYPE" == cygwin* ]]; then
         bun_bin="$SIDECAR_DIR/bun-bin/bun.exe"
     fi
     if [[ ! -x "$bun_bin" ]]; then
@@ -1712,7 +1677,6 @@ main() {
     echo "    前端:     $BUILD_FRONTEND"
     echo "    后端:     $BUILD_BACKEND"
     echo "    Tauri:    $BUILD_TAURI"
-    echo "    Cython:   $ENABLE_CYTHON"
     echo "    优化:     $ENABLE_OPTIMIZE"
     echo "    MLX:      $ENABLE_MLX"
     echo "    LlamaCpp: $ENABLE_LLAMACPP"
@@ -1742,7 +1706,6 @@ main() {
         install_python_deps
         set_pbs_flag
         copy_source_code
-        compile_with_cython
         optimize_python
         if [[ "$ENABLE_LLAMACPP" == true ]]; then
             copy_llamacpp_binary "$platform"
