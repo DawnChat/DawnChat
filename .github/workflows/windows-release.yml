@@ -15,13 +15,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
           fetch-depth: 0
 
-      - name: Verify submodule checkout
+      - name: Fetch plugin workspace
         shell: bash
         run: |
-          git submodule status --recursive
+          git clone --depth 1 --branch main https://github.com/chaxiu/dawnchat-plugins.git dawnchat-plugins
+
+      - name: Verify plugin workspace
+        shell: bash
+        run: |
           test -d dawnchat-plugins/sdk
           test -d dawnchat-plugins/official-plugins
 
