@@ -7,6 +7,7 @@ export interface TtsSpeakRequest {
   voice?: string;
   sid?: number;
   mode?: "manual";
+  engine?: "python" | "azure";
   interrupt?: boolean;
 }
 
@@ -35,6 +36,26 @@ export interface TtsCapabilityResponse {
 export interface TtsStreamMessage {
   event: string;
   data: Record<string, unknown>;
+}
+
+export interface AzureTtsConfigPayload {
+  api_key?: string;
+  region: string;
+  voice: string;
+  default_voice_zh?: string;
+  default_voice_en?: string;
+}
+
+export interface AzureTtsConfigStatus {
+  status: string;
+  data: {
+    configured: boolean;
+    api_key_configured: boolean;
+    region: string;
+    voice: string;
+    default_voice_zh: string;
+    default_voice_en: string;
+  };
 }
 
 const API_BASE = () => buildBackendUrl('/api/tts');
@@ -79,6 +100,52 @@ export async function getTtsCapability(pluginId?: string): Promise<TtsCapability
     throw new Error(`tts capability failed: ${response.status}`);
   }
   return (await response.json()) as TtsCapabilityResponse;
+}
+
+export async function getAzureTtsConfigStatus(): Promise<AzureTtsConfigStatus> {
+  const response = await fetch(`${API_BASE()}/providers/azure/status`);
+  if (!response.ok) {
+    throw new Error(`azure tts status failed: ${response.status}`);
+  }
+  return (await response.json()) as AzureTtsConfigStatus;
+}
+
+export async function validateAzureTtsConfig(payload: AzureTtsConfigPayload): Promise<Record<string, unknown>> {
+  const response = await fetch(`${API_BASE()}/providers/azure/validate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      api_key: payload.api_key || "",
+      region: payload.region,
+      voice: payload.voice,
+      default_voice_zh: payload.default_voice_zh || "",
+      default_voice_en: payload.default_voice_en || "",
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`azure tts validate failed: ${response.status}`);
+  }
+  const json = (await response.json()) as { data?: Record<string, unknown> };
+  return json.data || {};
+}
+
+export async function saveAzureTtsConfig(payload: AzureTtsConfigPayload): Promise<Record<string, unknown>> {
+  const response = await fetch(`${API_BASE()}/providers/azure/config`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      api_key: payload.api_key || "",
+      region: payload.region,
+      voice: payload.voice,
+      default_voice_zh: payload.default_voice_zh || "",
+      default_voice_en: payload.default_voice_en || "",
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`azure tts config save failed: ${response.status}`);
+  }
+  const json = (await response.json()) as { data?: Record<string, unknown> };
+  return json.data || {};
 }
 
 export function subscribeTtsTaskStream(

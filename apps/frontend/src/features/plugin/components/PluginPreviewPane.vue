@@ -5,6 +5,9 @@
         {{ inspectorEnabled ? labels.inspectorDisable : labels.inspectorEnable }}
       </button>
       <button class="tool-btn ui-btn ui-btn--neutral" :disabled="isLifecycleBusy" @click="reloadIframe">{{ t.common.refresh }}</button>
+      <button class="tool-btn ui-btn ui-btn--neutral" :disabled="isLifecycleBusy" @click="$emit('toggleFullscreen')">
+        {{ isCompactSurface ? labels.exitFullscreen : labels.enterFullscreen }}
+      </button>
       <button class="tool-btn ui-btn ui-btn--neutral" :disabled="isLifecycleBusy" @click="$emit('restart', pluginId)">
         {{ labels.restart }}
       </button>
@@ -114,6 +117,7 @@ const props = withDefaults(defineProps<{
   installStatus?: 'idle' | 'running' | 'success' | 'failed'
   installErrorMessage?: string | null
   showStopButton?: boolean
+  isCompactSurface?: boolean
   onCapabilityInvokeRequest?: (
     context: CapabilityInvokeExecutionContext
   ) => Promise<Record<string, unknown> | null> | Record<string, unknown> | null
@@ -121,12 +125,14 @@ const props = withDefaults(defineProps<{
     context: HostInvokeExecutionContext
   ) => Promise<Record<string, unknown>> | Record<string, unknown>
 }>(), {
-  showStopButton: true
+  showStopButton: true,
+  isCompactSurface: false,
 })
 
 const emit = defineEmits<{
   stop: [appId: string]
   restart: [appId: string]
+  toggleFullscreen: []
   retryInstall: []
   inspectorSelect: [payload: InspectorSelectPayload]
   contextPush: [payload: ContextPushPayload]
@@ -197,6 +203,8 @@ const labels = computed(() => {
     inspectorEnable: String(apps.inspectorEnable || '开启圈选'),
     inspectorDisable: String(apps.inspectorDisable || '关闭圈选'),
     restart: String(apps.restart || '重启'),
+    enterFullscreen: String(apps.fullscreenEnter || '全屏'),
+    exitFullscreen: String(apps.fullscreenExit || '退出全屏'),
     inspectorEnabledTip: String(apps.inspectorEnabledTip || '圈选模式已开启'),
     inspectorDisabledTip: String(apps.inspectorDisabledTip || '圈选模式已关闭'),
     inspectorUnsupported: String(apps.inspectorUnsupported || '当前元素无法定位源码')

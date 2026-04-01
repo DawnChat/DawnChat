@@ -17,6 +17,9 @@ const {
   hostTtsWaitForPlaybackCompletion,
   getTtsCapabilityMock,
   getTtsTaskStatusMock,
+  getAzureTtsConfigStatusMock,
+  validateAzureTtsConfigMock,
+  saveAzureTtsConfigMock,
 } = vi.hoisted(() => ({
   onBeforeRouteLeaveMock: vi.fn(),
   hostTtsStartSpeak: vi.fn(async () => 'task-voice-1'),
@@ -33,6 +36,19 @@ const {
       status: 'completed',
     },
   })),
+  getAzureTtsConfigStatusMock: vi.fn(async () => ({
+    status: 'success',
+    data: {
+      configured: false,
+      api_key_configured: false,
+      region: '',
+      voice: 'zh-CN-XiaoxiaoNeural',
+      default_voice_zh: 'zh-CN-XiaoxiaoNeural',
+      default_voice_en: 'en-US-JennyNeural',
+    },
+  })),
+  validateAzureTtsConfigMock: vi.fn(async () => ({ ok: true })),
+  saveAzureTtsConfigMock: vi.fn(async () => ({ ok: true })),
 }))
 
 vi.mock('vue-router', () => ({
@@ -186,6 +202,9 @@ vi.mock('@/features/coding-agent/tts/useHostTtsPlayback', () => ({
 }))
 
 vi.mock('@/services/tts/ttsClient', () => ({
+  getAzureTtsConfigStatus: getAzureTtsConfigStatusMock,
+  validateAzureTtsConfig: validateAzureTtsConfigMock,
+  saveAzureTtsConfig: saveAzureTtsConfigMock,
   getTtsCapability: getTtsCapabilityMock,
   getTtsTaskStatus: getTtsTaskStatusMock,
 }))
@@ -216,6 +235,7 @@ import { usePluginDevWorkbenchOrchestration } from '../usePluginDevWorkbenchOrch
 describe('usePluginDevWorkbenchOrchestration close flow', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    localStorage.clear()
     isDirtyRef.value = false
     isStreamingRef.value = false
     hostTtsStartSpeak.mockResolvedValue('task-voice-1')
@@ -230,6 +250,17 @@ describe('usePluginDevWorkbenchOrchestration close flow', () => {
       status: 'success',
       data: {
         status: 'completed',
+      },
+    })
+    getAzureTtsConfigStatusMock.mockResolvedValue({
+      status: 'success',
+      data: {
+        configured: false,
+        api_key_configured: false,
+        region: '',
+        voice: 'zh-CN-XiaoxiaoNeural',
+        default_voice_zh: 'zh-CN-XiaoxiaoNeural',
+        default_voice_en: 'en-US-JennyNeural',
       },
     })
   })
@@ -314,6 +345,11 @@ describe('usePluginDevWorkbenchOrchestration close flow', () => {
       template: '<div />',
     })
     const wrapper = mount(Harness)
+    await vi.waitFor(() => {
+      const options = (wrapper.vm as any).ttsEngineOptions.map((item: { id: string }) => item.id)
+      expect(options).toContain('python')
+    })
+    await (wrapper.vm as any).selectTtsEngine('python')
     await Promise.resolve()
     let settled = false
     const invokePromise = (wrapper.vm as any).handleHostInvokeRequest({

@@ -5,7 +5,7 @@ import WorkbenchPreviewSection from '@/features/plugin-dev-workbench/components/
 
 const PreviewPaneStub = defineComponent({
   name: 'PluginPreviewPane',
-  emits: ['restart', 'retryInstall', 'inspectorSelect', 'contextPush', 'ttsSpeakAccepted', 'ttsStopped'],
+  emits: ['restart', 'toggleFullscreen', 'retryInstall', 'inspectorSelect', 'contextPush', 'ttsSpeakAccepted', 'ttsStopped'],
   template: '<div class="preview-pane-stub"></div>',
 })
 
@@ -49,6 +49,7 @@ describe('WorkbenchPreviewSection', () => {
 
     const pane = wrapper.findComponent(PreviewPaneStub)
     pane.vm.$emit('restart', 'com.test.app')
+    pane.vm.$emit('toggleFullscreen')
     pane.vm.$emit('retryInstall')
     pane.vm.$emit('inspectorSelect', { file: 'a.vue' })
     pane.vm.$emit('contextPush', { source: 'inspector', content: 'ctx' })
@@ -57,6 +58,7 @@ describe('WorkbenchPreviewSection', () => {
     await Promise.resolve()
 
     expect(wrapper.emitted('restart')?.[0]).toEqual(['com.test.app'])
+    expect(wrapper.emitted('toggleFullscreen')?.length).toBe(1)
     expect(wrapper.emitted('retryInstall')?.length).toBe(1)
     expect(wrapper.emitted('inspectorSelect')?.length).toBe(1)
     expect(wrapper.emitted('contextPush')?.length).toBe(1)

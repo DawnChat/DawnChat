@@ -1,6 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { getTtsCapability, getTtsTaskStatus, speakTts, stopTts } from "../ttsClient";
+import {
+  getAzureTtsConfigStatus,
+  getTtsCapability,
+  getTtsTaskStatus,
+  saveAzureTtsConfig,
+  speakTts,
+  stopTts,
+  validateAzureTtsConfig,
+} from "../ttsClient";
 
 describe("ttsClient", () => {
   it("submits speak request", async () => {
@@ -49,5 +57,51 @@ describe("ttsClient", () => {
     );
     const payload = await getTtsCapability("com.demo");
     expect(payload.data.available).toBe(true);
+  });
+
+  it("queries azure tts status", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          status: "success",
+          data: {
+            configured: false,
+            api_key_configured: true,
+            region: "eastasia",
+            voice: "zh-CN-XiaoxiaoNeural",
+            default_voice_zh: "zh-CN-XiaoxiaoNeural",
+            default_voice_en: "en-US-JennyNeural",
+          }
+        }),
+      }))
+    );
+    const payload = await getAzureTtsConfigStatus();
+    expect(payload.data.region).toBe("eastasia");
+  });
+
+  it("validates azure tts config", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ status: "success", data: { ok: true } }),
+      }))
+    );
+    const payload = await validateAzureTtsConfig({ api_key: "k", region: "eastasia", voice: "zh-CN-XiaoxiaoNeural" });
+    expect(payload.ok).toBe(true);
+  });
+
+  it("saves azure tts config", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ status: "success", data: { ok: true } }),
+      }))
+    );
+    const payload = await saveAzureTtsConfig({ api_key: "k", region: "eastasia", voice: "zh-CN-XiaoxiaoNeural" });
+    expect(payload.ok).toBe(true);
   });
 });

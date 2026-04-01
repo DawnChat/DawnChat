@@ -19,7 +19,13 @@ import type { HostInvokeExecutionContext } from '@/composables/usePluginUiBridge
 import { getWorkbenchLayoutProfile } from '@/features/plugin-dev-workbench/services/workbenchLayoutProfile'
 import { resolveWorkbenchLayoutVariant } from '@/features/plugin-dev-workbench/services/workbenchLayoutVariant'
 import { useHostTtsPlayback } from '@/features/coding-agent/tts/useHostTtsPlayback'
-import { getTtsCapability, getTtsTaskStatus } from '@/services/tts/ttsClient'
+import {
+  getAzureTtsConfigStatus,
+  getTtsCapability,
+  getTtsTaskStatus,
+  saveAzureTtsConfig,
+  validateAzureTtsConfig,
+} from '@/services/tts/ttsClient'
 import { isSystemTtsSupported, speakSystemTts, stopSystemTts } from '@/services/tts/systemTtsClient'
 import { useSupabase } from '@/shared/composables/supabaseClient'
 import type { InspectorSelectPayload } from '@/types/inspector'
@@ -31,7 +37,19 @@ const WORKBENCH_TTS_ENGINE_KEY = 'plugin-dev-workbench.tts.engine.v1'
 const HOST_VOICE_TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled'])
 const HOST_VOICE_POLL_INTERVAL_MS = 200
 const HOST_VOICE_WAIT_TIMEOUT_MS = 120_000
-type WorkbenchTtsEngine = 'python' | 'system'
+type WorkbenchTtsEngine = 'azure' | 'python' | 'system'
+const AZURE_ZH_VOICE_OPTIONS = [
+  { value: 'zh-CN-XiaoxiaoNeural', label: 'Xiaoxiao (女声)' },
+  { value: 'zh-CN-YunxiNeural', label: 'Yunxi (男声)' },
+  { value: 'zh-CN-XiaochenNeural', label: 'Xiaochen (女声)' },
+  { value: 'zh-CN-YunjianNeural', label: 'Yunjian (男声)' },
+]
+const AZURE_EN_VOICE_OPTIONS = [
+  { value: 'en-US-JennyNeural', label: 'Jenny (女声)' },
+  { value: 'en-US-AriaNeural', label: 'Aria (女声)' },
+  { value: 'en-US-GuyNeural', label: 'Guy (男声)' },
+  { value: 'en-US-DavisNeural', label: 'Davis (男声)' },
+]
 
 export const usePluginDevWorkbenchOrchestration = () => {
   const route = useRoute()
@@ -245,6 +263,7 @@ export const usePluginDevWorkbenchOrchestration = () => {
     startResizeAgentLog,
   } = useWorkbenchLayoutState({
     profile: workbenchProfile,
+    layoutVariant: workbenchLayoutVariant,
   })
   const {
     init: initTtsPlayback,
@@ -260,17 +279,29 @@ export const usePluginDevWorkbenchOrchestration = () => {
   const ttsEnabled = ref(true)
   const ttsBackendAvailable = ref(false)
   const selectedTtsEngine = ref<WorkbenchTtsEngine>('system')
+  const ttsEngineBeforeAzureDialog = ref<WorkbenchTtsEngine>('system')
   const selectedTtsEngineStored = ref(false)
   const systemTtsStatus = ref<'idle' | 'playing' | 'error'>('idle')
   const systemTtsErrorMessage = ref('')
+  const azureTtsDialogVisible = ref(false)
+  const azureTtsSaving = ref(false)
+  const azureTtsErrorMessage = ref('')
+  const azureTtsApiKey = ref('')
+  const azureTtsRegion = ref('')
+  const azureTtsDefaultVoiceZh = ref('zh-CN-XiaoxiaoNeural')
+  const azureTtsDefaultVoiceEn = ref('en-US-JennyNeural')
+  const azureTtsApiKeyConfigured = ref(false)
+  const azureTtsZhVoiceOptions = AZURE_ZH_VOICE_OPTIONS
+  const azureTtsEnVoiceOptions = AZURE_EN_VOICE_OPTIONS
   const ttsEngineOptions = computed(() => {
+    const options: Array<{ id: WorkbenchTtsEngine; label: string }> = [
+      { id: 'azure', label: 'Azure TTS' },
+      { id: 'system', label: 'System TTS' },
+    ]
     if (ttsBackendAvailable.value) {
-      return [
-        { id: 'python', label: 'Python TTS' },
-        { id: 'system', label: 'System TTS' },
-      ]
+      options.splice(1, 0, { id: 'python', label: 'Python TTS' })
     }
-    return [{ id: 'system', label: 'System TTS' }]
+    return options
   })
   const { handleCapabilityInvokeRequest } = useAssistantSessionOrchestrator({
     pluginId,
@@ -300,7 +331,7 @@ export const usePluginDevWorkbenchOrchestration = () => {
     selectedTtsEngineStored.value = false
     try {
       const raw = String(localStorage.getItem(WORKBENCH_TTS_ENGINE_KEY) || '').trim()
-      if (raw === 'python' || raw === 'system') {
+      if (raw === 'python' || raw === 'system' || raw === 'azure') {
         selectedTtsEngine.value = raw
         selectedTtsEngineStored.value = true
       } else {
@@ -343,7 +374,94 @@ export const usePluginDevWorkbenchOrchestration = () => {
     applyDefaultTtsEngine()
   }
 
-  const selectTtsEngine = (value: string) => {
+  const refreshAzureTtsStatus = async () => {
+    try {
+      const response = await getAzureTtsConfigStatus()
+      azureTtsApiKeyConfigured.value = Boolean(response.data.api_key_configured)
+      azureTtsRegion.value = String(response.data.region || '').trim()
+      azureTtsDefaultVoiceZh.value = String(response.data.default_voice_zh || '').trim() || 'zh-CN-XiaoxiaoNeural'
+      azureTtsDefaultVoiceEn.value = String(response.data.default_voice_en || '').trim() || 'en-US-JennyNeural'
+    } catch (error) {
+      logger.warn('plugin_dev_workbench_azure_tts_status_failed', {
+        pluginId: pluginId.value,
+        error: String(error),
+      })
+    }
+  }
+
+  const openAzureTtsDialog = async () => {
+    azureTtsErrorMessage.value = ''
+    azureTtsApiKey.value = ''
+    ttsEngineBeforeAzureDialog.value = selectedTtsEngine.value
+    await refreshAzureTtsStatus()
+    azureTtsDialogVisible.value = true
+  }
+
+  const openAzureTtsSettings = async () => {
+    await openAzureTtsDialog()
+  }
+
+  const closeAzureTtsDialog = () => {
+    azureTtsDialogVisible.value = false
+    azureTtsSaving.value = false
+    azureTtsErrorMessage.value = ''
+    if (selectedTtsEngine.value !== 'azure') {
+      selectedTtsEngine.value = ttsEngineBeforeAzureDialog.value
+      persistSelectedTtsEngine()
+    }
+  }
+
+  const submitAzureTtsDialog = async () => {
+    const region = String(azureTtsRegion.value || '').trim()
+    const defaultVoiceZh = String(azureTtsDefaultVoiceZh.value || '').trim() || 'zh-CN-XiaoxiaoNeural'
+    const defaultVoiceEn = String(azureTtsDefaultVoiceEn.value || '').trim() || 'en-US-JennyNeural'
+    const apiKey = String(azureTtsApiKey.value || '').trim()
+    if (!region) {
+      azureTtsErrorMessage.value = 'Region 不能为空'
+      return
+    }
+    if (!apiKey && !azureTtsApiKeyConfigured.value) {
+      azureTtsErrorMessage.value = '请填写 Azure API Key'
+      return
+    }
+    azureTtsSaving.value = true
+    azureTtsErrorMessage.value = ''
+    try {
+      await validateAzureTtsConfig({
+        api_key: apiKey,
+        region,
+        voice: '',
+        default_voice_zh: defaultVoiceZh,
+        default_voice_en: defaultVoiceEn,
+      })
+      await saveAzureTtsConfig({
+        api_key: apiKey,
+        region,
+        voice: '',
+        default_voice_zh: defaultVoiceZh,
+        default_voice_en: defaultVoiceEn,
+      })
+      selectedTtsEngine.value = 'azure'
+      persistSelectedTtsEngine()
+      azureTtsApiKeyConfigured.value = true
+      azureTtsDialogVisible.value = false
+      azureTtsApiKey.value = ''
+    } catch (error) {
+      azureTtsErrorMessage.value = String(error)
+      logger.warn('plugin_dev_workbench_azure_tts_config_failed', {
+        pluginId: pluginId.value,
+        error: String(error),
+      })
+    } finally {
+      azureTtsSaving.value = false
+    }
+  }
+
+  const selectTtsEngine = async (value: string) => {
+    if (value === 'azure') {
+      await openAzureTtsDialog()
+      return
+    }
     selectedTtsEngine.value = value === 'python' ? 'python' : 'system'
     persistSelectedTtsEngine()
   }
@@ -422,16 +540,17 @@ export const usePluginDevWorkbenchOrchestration = () => {
           message: 'text is required',
         }
       }
-      const resolvedTtsEngine: WorkbenchTtsEngine = selectedTtsEngine.value === 'python' && ttsBackendAvailable.value
-        ? 'python'
-        : 'system'
-      if (resolvedTtsEngine === 'python') {
+      const resolvedTtsEngine: WorkbenchTtsEngine = selectedTtsEngine.value === 'azure'
+        ? 'azure'
+        : (selectedTtsEngine.value === 'python' && ttsBackendAvailable.value ? 'python' : 'system')
+      if (resolvedTtsEngine === 'python' || resolvedTtsEngine === 'azure') {
         const taskId = await useHostTtsPlayback().startSpeak({
           plugin_id: pluginId.value,
           text,
           voice: typeof payload.voice === 'string' ? payload.voice : undefined,
           sid: typeof payload.sid === 'number' ? payload.sid : undefined,
           mode: 'manual',
+          engine: resolvedTtsEngine,
           interrupt: payload.interrupt !== false,
         })
         const status = await waitForHostVoiceTerminal(taskId)
@@ -488,7 +607,7 @@ export const usePluginDevWorkbenchOrchestration = () => {
     }
     if (functionName === 'dawnchat.host.voice.stop') {
       const taskId = typeof payload.task_id === 'string' ? payload.task_id : undefined
-      if (selectedTtsEngine.value === 'python' && ttsBackendAvailable.value) {
+      if (selectedTtsEngine.value === 'azure' || (selectedTtsEngine.value === 'python' && ttsBackendAvailable.value)) {
         await stopTtsSpeak(taskId || undefined)
       } else {
         stopSystemTts()
@@ -503,7 +622,10 @@ export const usePluginDevWorkbenchOrchestration = () => {
       }
     }
     if (functionName === 'dawnchat.host.voice.status') {
-      if (!(selectedTtsEngine.value === 'python' && ttsBackendAvailable.value)) {
+      if (
+        selectedTtsEngine.value !== 'azure'
+        && !(selectedTtsEngine.value === 'python' && ttsBackendAvailable.value)
+      ) {
         return {
           ok: true,
           data: {
@@ -545,6 +667,27 @@ export const usePluginDevWorkbenchOrchestration = () => {
 
   const setChatInput = (value: string) => {
     chatInput.value = value
+  }
+
+  const setSurfaceMode = async (mode: PluginWorkbenchSurfaceMode) => {
+    const nextQuery: Record<string, unknown> = {
+      ...route.query,
+    }
+    if (mode === 'assistant_compact') {
+      nextQuery.surface = 'assistant_compact'
+    } else {
+      delete nextQuery.surface
+    }
+    await router.replace({
+      name: String(route.name || 'plugin-dev-workbench'),
+      params: route.params,
+      query: nextQuery,
+    })
+  }
+
+  const togglePreviewFullscreen = async () => {
+    const next = surfaceMode.value === 'assistant_compact' ? 'dev_split' : 'assistant_compact'
+    await setSurfaceMode(next)
   }
 
   const openBuildSession = () => {
@@ -670,6 +813,7 @@ export const usePluginDevWorkbenchOrchestration = () => {
     async (next, prev) => {
       if (!prev || next === prev) return
       await syncTtsStopped()
+      await refreshAzureTtsStatus()
       await refreshTtsCapability()
     }
   )
@@ -678,6 +822,7 @@ export const usePluginDevWorkbenchOrchestration = () => {
     initTtsPlayback()
     loadTtsEnabled()
     loadSelectedTtsEngine()
+    await refreshAzureTtsStatus()
     await refreshTtsCapability()
     activeMode.value = 'preview'
     previewLoadingText.value = t.value.apps.starting
@@ -796,6 +941,7 @@ export const usePluginDevWorkbenchOrchestration = () => {
     isAssistantCompactSurface,
     setWorkbenchMode,
     setChatInput,
+    togglePreviewFullscreen,
     previewWidthPx,
     agentLogHeightPx,
     isResizingPreview,
@@ -805,11 +951,24 @@ export const usePluginDevWorkbenchOrchestration = () => {
     ttsEnabled,
     selectedTtsEngine,
     ttsEngineOptions,
+    azureTtsDialogVisible,
+    azureTtsSaving,
+    azureTtsErrorMessage,
+    azureTtsApiKey,
+    azureTtsApiKeyConfigured,
+    azureTtsRegion,
+    azureTtsDefaultVoiceZh,
+    azureTtsDefaultVoiceEn,
+    azureTtsZhVoiceOptions,
+    azureTtsEnVoiceOptions,
     ttsPlaybackState,
     ttsStreamStatus,
     ttsCurrentTaskId,
     toggleTtsEnabled,
     selectTtsEngine,
+    openAzureTtsSettings,
+    closeAzureTtsDialog,
+    submitAzureTtsDialog,
     stopTtsPlayback,
     handleCapabilityInvokeRequest,
     handleHostInvokeRequest,

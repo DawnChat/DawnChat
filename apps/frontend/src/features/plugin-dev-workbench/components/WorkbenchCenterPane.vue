@@ -94,6 +94,7 @@
       @toggle-tts-enabled="emit('toggleTtsEnabled')"
       @stop-tts="emit('stopTts')"
       @select-tts-engine="(value) => emit('selectTtsEngine', value)"
+      @open-azure-tts-settings="emit('openAzureTtsSettings')"
     />
   </section>
 </template>
@@ -169,6 +170,7 @@ const emit = defineEmits<{
   toggleTtsEnabled: []
   stopTts: []
   selectTtsEngine: [value: string]
+  openAzureTtsSettings: []
 }>()
 </script>
 

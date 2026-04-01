@@ -221,6 +221,19 @@ vi.mock('@/features/coding-agent/tts/useHostTtsPlayback', () => ({
 }))
 
 vi.mock('@/services/tts/ttsClient', () => ({
+  getAzureTtsConfigStatus: vi.fn(async () => ({
+    status: 'success',
+    data: {
+      configured: false,
+      api_key_configured: false,
+      region: '',
+      voice: 'zh-CN-XiaoxiaoNeural',
+      default_voice_zh: 'zh-CN-XiaoxiaoNeural',
+      default_voice_en: 'en-US-JennyNeural',
+    },
+  })),
+  validateAzureTtsConfig: vi.fn(async () => ({ ok: true })),
+  saveAzureTtsConfig: vi.fn(async () => ({ ok: true })),
   getTtsCapability: vi.fn(async () => ({
     status: 'success',
     data: {
@@ -240,6 +253,7 @@ import { usePluginDevWorkbenchOrchestration } from '../usePluginDevWorkbenchOrch
 describe('usePluginDevWorkbenchOrchestration', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    localStorage.clear()
     activeModeRef.value = 'normal'
     installedAppsRef.value = [
       {
@@ -388,5 +402,34 @@ describe('usePluginDevWorkbenchOrchestration', () => {
 
     expect((wrapper.vm as any).surfaceMode).toBe('assistant_compact')
     expect((wrapper.vm as any).isAssistantCompactSurface).toBe(true)
+  })
+
+  it('TTS 下拉至少包含 Azure 与 System', async () => {
+    const Harness = defineComponent({
+      setup() {
+        return usePluginDevWorkbenchOrchestration()
+      },
+      template: '<div />',
+    })
+    const wrapper = mount(Harness)
+    await vi.waitFor(() => {
+      expect((wrapper.vm as any).ttsEngineOptions.length).toBeGreaterThan(0)
+    })
+    const options = (wrapper.vm as any).ttsEngineOptions.map((item: { id: string }) => item.id)
+    expect(options).toContain('azure')
+    expect(options).toContain('system')
+  })
+
+  it('选择 Azure 会打开配置弹窗而不是立即切换', async () => {
+    const Harness = defineComponent({
+      setup() {
+        return usePluginDevWorkbenchOrchestration()
+      },
+      template: '<div />',
+    })
+    const wrapper = mount(Harness)
+    await (wrapper.vm as any).selectTtsEngine('azure')
+    expect((wrapper.vm as any).azureTtsDialogVisible).toBe(true)
+    expect((wrapper.vm as any).selectedTtsEngine).not.toBe('azure')
   })
 })

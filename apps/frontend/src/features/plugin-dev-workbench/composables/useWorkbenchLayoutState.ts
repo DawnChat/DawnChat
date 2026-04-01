@@ -1,6 +1,7 @@
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import type { WorkbenchLayoutProfile } from '@/features/plugin-dev-workbench/services/workbenchLayoutProfile'
 import { getWorkbenchLayoutProfile } from '@/features/plugin-dev-workbench/services/workbenchLayoutProfile'
+import type { WorkbenchLayoutVariant } from '@/features/plugin-dev-workbench/services/workbenchLayoutVariant'
 
 const LAYOUT_STORAGE_KEY = 'plugin-dev-workbench.layout.v1'
 const DEFAULT_PREVIEW_WIDTH = 460
@@ -10,6 +11,7 @@ const MAX_PREVIEW_WIDTH = 900
 const AGENT_PREVIEW_RESIZER_WIDTH = 8
 const MIN_AGENT_LOG_HEIGHT = 120
 const MAX_AGENT_LOG_HEIGHT = 420
+const MIN_PREVIEW_CONTENT_WIDTH = 520
 
 interface StoredLayoutState {
   previewWidthPx?: number
@@ -18,6 +20,7 @@ interface StoredLayoutState {
 
 interface UseWorkbenchLayoutStateOptions {
   profile?: WorkbenchLayoutProfile | { value: WorkbenchLayoutProfile }
+  layoutVariant?: WorkbenchLayoutVariant | { value: WorkbenchLayoutVariant }
 }
 
 const clamp = (value: number, min: number, max: number) => {
@@ -42,8 +45,24 @@ export const useWorkbenchLayoutState = (options: UseWorkbenchLayoutStateOptions 
     return value.value
   }
 
+  const resolveLayoutVariant = (): WorkbenchLayoutVariant => {
+    const value = options.layoutVariant
+    if (!value) return 'split_with_iwp'
+    if (typeof value === 'string') return value
+    return value.value
+  }
+
   const applyAgentPreviewPreset = () => {
     const max = resolveAgentPreviewMaxWidth(window.innerWidth)
+    previewWidthPx.value = clamp(DEFAULT_PREVIEW_WIDTH, MIN_PREVIEW_WIDTH, max)
+  }
+
+  const applySplitNoIwpPreset = () => {
+    const containerWidth = window.innerWidth
+    const max = Math.max(
+      MIN_PREVIEW_WIDTH,
+      containerWidth - AGENT_PREVIEW_RESIZER_WIDTH - MIN_PREVIEW_CONTENT_WIDTH
+    )
     previewWidthPx.value = clamp(DEFAULT_PREVIEW_WIDTH, MIN_PREVIEW_WIDTH, max)
   }
 
@@ -59,10 +78,6 @@ export const useWorkbenchLayoutState = (options: UseWorkbenchLayoutStateOptions 
 
   const restoreState = () => {
     if (typeof window === 'undefined') return
-    if (resolveProfile().lockLayoutPersistence) {
-      applyAgentPreviewPreset()
-      return
-    }
     const raw = localStorage.getItem(LAYOUT_STORAGE_KEY)
     if (!raw) return
     try {
@@ -88,9 +103,13 @@ export const useWorkbenchLayoutState = (options: UseWorkbenchLayoutStateOptions 
     const parentRect = (event.currentTarget as HTMLElement | null)?.parentElement?.getBoundingClientRect()
 
     const onMove = (moveEvent: PointerEvent) => {
-      if (resolveProfile().previewResizeMode === 'agent_width_capped') {
+      const layoutVariant = resolveLayoutVariant()
+      const useAgentWidthResize = layoutVariant === 'split_no_iwp' || resolveProfile().previewResizeMode === 'agent_width_capped'
+      if (useAgentWidthResize) {
         const containerWidth = parentRect?.width || window.innerWidth
-        const max = resolveAgentPreviewMaxWidth(containerWidth)
+        const max = layoutVariant === 'split_no_iwp'
+          ? Math.max(MIN_PREVIEW_WIDTH, containerWidth - AGENT_PREVIEW_RESIZER_WIDTH - MIN_PREVIEW_CONTENT_WIDTH)
+          : resolveAgentPreviewMaxWidth(containerWidth)
         const next = parentRect ? (moveEvent.clientX - parentRect.left) : moveEvent.clientX
         previewWidthPx.value = clamp(next, MIN_PREVIEW_WIDTH, max)
         return
@@ -138,6 +157,32 @@ export const useWorkbenchLayoutState = (options: UseWorkbenchLayoutStateOptions 
   }
 
   onMounted(() => {
+    const profile = resolveProfile()
+    const layoutVariant = resolveLayoutVariant()
+    if (layoutVariant === 'split_no_iwp') {
+      applySplitNoIwpPreset()
+      return
+    }
+    if (profile.lockLayoutPersistence) {
+      applyAgentPreviewPreset()
+      return
+    }
+    restoreState()
+  })
+
+  const layoutPresetKey = computed(() => `${resolveProfile().layout}:${resolveLayoutVariant()}`)
+  watch(layoutPresetKey, (next, prev) => {
+    if (!prev || next === prev || typeof window === 'undefined') return
+    const layoutVariant = resolveLayoutVariant()
+    const profile = resolveProfile()
+    if (layoutVariant === 'split_no_iwp') {
+      applySplitNoIwpPreset()
+      return
+    }
+    if (profile.lockLayoutPersistence) {
+      applyAgentPreviewPreset()
+      return
+    }
     restoreState()
   })
 

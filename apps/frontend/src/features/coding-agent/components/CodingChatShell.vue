@@ -27,6 +27,7 @@
       @select-engine="handleEngineChange"
       @select-agent="handleAgentChange"
       @select-tts-engine="(value) => emit('select-tts-engine', value)"
+      @open-azure-tts-settings="emit('open-azure-tts-settings')"
       @toggle-tts-enabled="emit('toggle-tts-enabled')"
     />
 
@@ -166,6 +167,7 @@ const emit = defineEmits<{
   'toggle-tts-enabled': []
   'stop-tts': []
   'select-tts-engine': [value: string]
+  'open-azure-tts-settings': []
 }>()
 
 const { t } = useI18n()

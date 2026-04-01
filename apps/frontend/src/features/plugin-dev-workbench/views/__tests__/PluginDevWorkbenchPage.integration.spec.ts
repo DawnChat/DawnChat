@@ -126,6 +126,7 @@ const orchestrationMock = {
   isBuildRunning: false,
   setWorkbenchMode: vi.fn(),
   setChatInput: vi.fn(),
+  togglePreviewFullscreen: vi.fn(),
   previewWidthPx: 460,
   agentLogHeightPx: 188,
   isResizingPreview: false,
@@ -150,7 +151,7 @@ const HeaderStub = defineComponent({
 const PreviewStub = defineComponent({
   name: 'WorkbenchPreviewSection',
   props: ['isPreviewRenderable', 'previewLoadingText', 'showCompactShell'],
-  emits: ['restart', 'retryInstall', 'inspectorSelect', 'contextPush'],
+  emits: ['restart', 'toggleFullscreen', 'retryInstall', 'inspectorSelect', 'contextPush'],
   template: '<div />',
 })
 
@@ -167,9 +168,11 @@ const OverlaysStub = defineComponent({
   template: '<div />',
 })
 
-const ChatPanelStub = defineComponent({
-  name: 'WorkbenchCenterPane',
+const SplitWithIwpStub = defineComponent({
+  name: 'WorkbenchSplitWithIwpLayout',
   emits: [
+    'toggleFileTree',
+    'openFile',
     'composerSelectionChange',
     'updateChatInput',
     'updateMarkdown',
@@ -182,9 +185,18 @@ const ChatPanelStub = defineComponent({
   template: '<div />',
 })
 
-const FileTreeStub = defineComponent({
-  name: 'IwpFileDrawer',
-  emits: ['toggle', 'openFile'],
+const SplitNoIwpStub = defineComponent({
+  name: 'WorkbenchSplitNoIwpLayout',
+  emits: [
+    'composerSelectionChange',
+    'updateChatInput',
+    'updateMarkdown',
+    'saveMarkdown',
+    'triggerBuild',
+    'openBuildSession',
+    'backToMarkdown',
+    'startResizeAgentLog',
+  ],
   template: '<div />',
 })
 
@@ -211,8 +223,8 @@ describe('PluginDevWorkbenchPage integration', () => {
           WorkbenchHeaderBar: HeaderStub,
           WorkbenchPreviewSection: PreviewStub,
           WorkbenchPublishOverlays: OverlaysStub,
-          WorkbenchCenterPane: ChatPanelStub,
-          IwpFileDrawer: FileTreeStub,
+          WorkbenchSplitWithIwpLayout: SplitWithIwpStub,
+          WorkbenchSplitNoIwpLayout: SplitNoIwpStub,
         },
       },
     })
@@ -241,31 +253,33 @@ describe('PluginDevWorkbenchPage integration', () => {
           WorkbenchHeaderBar: HeaderStub,
           WorkbenchPreviewSection: PreviewStub,
           WorkbenchPublishOverlays: OverlaysStub,
-          WorkbenchCenterPane: ChatPanelStub,
-          IwpFileDrawer: FileTreeStub,
+          WorkbenchSplitWithIwpLayout: SplitWithIwpStub,
+          WorkbenchSplitNoIwpLayout: SplitNoIwpStub,
         },
       },
     })
 
     const preview = wrapper.findComponent(PreviewStub)
-    const chat = wrapper.findComponent(ChatPanelStub)
+    const split = wrapper.findComponent(SplitWithIwpStub)
     const inspectorPayload = { file: 'a.vue', line: 12, column: 8 }
     const contextPayload = { content: 'ctx', source: 'inspector' }
     const selectionPayload = { text: 'selected', range: [0, 8] }
 
     preview.vm.$emit('restart', 'com.test.app')
+    preview.vm.$emit('toggleFullscreen')
     preview.vm.$emit('retryInstall')
     preview.vm.$emit('inspectorSelect', inspectorPayload)
     preview.vm.$emit('contextPush', contextPayload)
-    chat.vm.$emit('composerSelectionChange', selectionPayload)
-    chat.vm.$emit('updateMarkdown', '# updated')
-    chat.vm.$emit('saveMarkdown')
-    chat.vm.$emit('triggerBuild')
-    chat.vm.$emit('backToMarkdown')
-    chat.vm.$emit('startResizeAgentLog', new PointerEvent('pointerdown'))
+    split.vm.$emit('composerSelectionChange', selectionPayload)
+    split.vm.$emit('updateMarkdown', '# updated')
+    split.vm.$emit('saveMarkdown')
+    split.vm.$emit('triggerBuild')
+    split.vm.$emit('backToMarkdown')
+    split.vm.$emit('startResizeAgentLog', new PointerEvent('pointerdown'))
     await Promise.resolve()
 
     expect(orchestrationMock.handleRestartPreview).toHaveBeenCalledWith('com.test.app')
+    expect(orchestrationMock.togglePreviewFullscreen).toHaveBeenCalledTimes(1)
     expect(orchestrationMock.handleRetryInstall).toHaveBeenCalledTimes(1)
     expect(orchestrationMock.handleInspectorSelect).toHaveBeenCalledWith(inspectorPayload)
     expect(orchestrationMock.handleContextPush).toHaveBeenCalledWith(contextPayload)
@@ -284,8 +298,8 @@ describe('PluginDevWorkbenchPage integration', () => {
           WorkbenchHeaderBar: HeaderStub,
           WorkbenchPreviewSection: PreviewStub,
           WorkbenchPublishOverlays: OverlaysStub,
-          WorkbenchCenterPane: ChatPanelStub,
-          IwpFileDrawer: FileTreeStub,
+          WorkbenchSplitWithIwpLayout: SplitWithIwpStub,
+          WorkbenchSplitNoIwpLayout: SplitNoIwpStub,
         },
       },
     })
@@ -333,8 +347,8 @@ describe('PluginDevWorkbenchPage integration', () => {
             WorkbenchHeaderBar: HeaderStub,
             WorkbenchPreviewSection: PreviewStub,
             WorkbenchPublishOverlays: OverlaysStub,
-            WorkbenchCenterPane: ChatPanelStub,
-            IwpFileDrawer: FileTreeStub,
+            WorkbenchSplitWithIwpLayout: SplitWithIwpStub,
+            WorkbenchSplitNoIwpLayout: SplitNoIwpStub,
           },
         },
       })
@@ -354,8 +368,8 @@ describe('PluginDevWorkbenchPage integration', () => {
           WorkbenchHeaderBar: HeaderStub,
           WorkbenchPreviewSection: PreviewStub,
           WorkbenchPublishOverlays: OverlaysStub,
-          WorkbenchCenterPane: ChatPanelStub,
-          IwpFileDrawer: FileTreeStub,
+          WorkbenchSplitWithIwpLayout: SplitWithIwpStub,
+          WorkbenchSplitNoIwpLayout: SplitNoIwpStub,
         },
       },
     })
@@ -376,14 +390,15 @@ describe('PluginDevWorkbenchPage integration', () => {
           WorkbenchHeaderBar: HeaderStub,
           WorkbenchPreviewSection: PreviewStub,
           WorkbenchPublishOverlays: OverlaysStub,
-          WorkbenchCenterPane: ChatPanelStub,
-          IwpFileDrawer: FileTreeStub,
+          WorkbenchSplitWithIwpLayout: SplitWithIwpStub,
+          WorkbenchSplitNoIwpLayout: SplitNoIwpStub,
         },
       },
     })
     const header = wrapper.findComponent(HeaderStub)
     expect(header.props('showModeSwitch')).toBe(false)
-    expect(wrapper.findComponent(FileTreeStub).exists()).toBe(false)
+    expect(wrapper.findComponent(SplitWithIwpStub).exists()).toBe(false)
+    expect(wrapper.findComponent(SplitNoIwpStub).exists()).toBe(true)
     expect(wrapper.find('.plugin-dev-workbench').classes()).toContain('agent-preview-layout')
   })
 
@@ -397,12 +412,13 @@ describe('PluginDevWorkbenchPage integration', () => {
           WorkbenchHeaderBar: HeaderStub,
           WorkbenchPreviewSection: PreviewStub,
           WorkbenchPublishOverlays: OverlaysStub,
-          WorkbenchCenterPane: ChatPanelStub,
-          IwpFileDrawer: FileTreeStub,
+          WorkbenchSplitWithIwpLayout: SplitWithIwpStub,
+          WorkbenchSplitNoIwpLayout: SplitNoIwpStub,
         },
       },
     })
-    expect(wrapper.findComponent(ChatPanelStub).exists()).toBe(false)
+    expect(wrapper.findComponent(SplitWithIwpStub).exists()).toBe(false)
+    expect(wrapper.findComponent(SplitNoIwpStub).exists()).toBe(false)
     const preview = wrapper.findComponent(PreviewStub)
     expect(preview.props('showCompactShell')).toBe(true)
     expect(wrapper.find('.plugin-dev-workbench').classes()).toContain('assistant-compact-layout')

@@ -67,12 +67,23 @@
           </div>
           <div v-if="ttsEngineSelectOptions.length > 0" class="settings-field settings-field-tts">
             <div class="settings-label">{{ labels.ttsEngine }}</div>
-            <PluginDevInlineSelect
-              :model-value="selectedTtsEngine"
-              :options="ttsEngineSelectOptions"
-              label="TTS"
-              @update:model-value="(value) => emit('select-tts-engine', value)"
-            />
+            <div class="tts-engine-row">
+              <PluginDevInlineSelect
+                :model-value="selectedTtsEngine"
+                :options="ttsEngineSelectOptions"
+                label="TTS"
+                @update:model-value="(value) => emit('select-tts-engine', value)"
+              />
+              <button
+                v-if="selectedTtsEngine === 'azure'"
+                class="icon-btn icon-btn-azure-config"
+                type="button"
+                title="配置 Azure TTS"
+                @click="emit('open-azure-tts-settings')"
+              >
+                <Pencil class="settings-icon" aria-hidden="true" />
+              </button>
+            </div>
           </div>
           <div v-if="showTtsControl" class="settings-field settings-field-tts-switch">
             <div class="settings-label">{{ labels.ttsVoiceSwitch || '语音播报' }}</div>
@@ -95,7 +106,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { Settings2 } from 'lucide-vue-next'
+import { Pencil, Settings2 } from 'lucide-vue-next'
 import { useI18n } from '@/composables/useI18n'
 import PluginDevInlineSelect, { type PluginDevInlineSelectOption } from '@/features/coding-agent/components/plugin-dev-chat/PluginDevInlineSelect.vue'
 
@@ -156,6 +167,7 @@ const emit = defineEmits<{
   'select-engine': [value: string]
   'select-agent': [value: string]
   'select-tts-engine': [value: string]
+  'open-azure-tts-settings': []
   'toggle-tts-enabled': []
 }>()
 
@@ -366,7 +378,8 @@ onUnmounted(() => {
 }
 
 .settings-popover {
-  width: 272px;
+  width: 248px;
+  --settings-select-width: 190px;
   padding: 0.7rem;
   display: flex;
   flex-direction: column;
@@ -384,8 +397,28 @@ onUnmounted(() => {
   color: var(--color-text-secondary);
 }
 
+.settings-field :deep(.inline-select-root) {
+  width: min(var(--settings-select-width), 100%);
+  max-width: 100%;
+}
+
 .settings-field :deep(.inline-select-trigger) {
   width: 100%;
+}
+
+.tts-engine-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.tts-engine-row :deep(.inline-select-root) {
+  flex: 0 0 auto;
+}
+
+.icon-btn-azure-config {
+  min-width: 28px;
+  padding: 0 0.38rem;
 }
 
 .settings-field :deep(.inline-select-label) {

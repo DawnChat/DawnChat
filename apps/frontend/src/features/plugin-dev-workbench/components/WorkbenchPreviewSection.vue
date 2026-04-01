@@ -12,9 +12,11 @@
         :install-status="previewInstallStatus"
         :install-error-message="previewInstallErrorMessage"
         :show-stop-button="false"
+        :is-compact-surface="showCompactShell"
         :on-capability-invoke-request="onCapabilityInvokeRequest"
         :on-host-invoke-request="onHostInvokeRequest"
         @restart="(appId) => emit('restart', appId)"
+        @toggle-fullscreen="emit('toggleFullscreen')"
         @retry-install="emit('retryInstall')"
         @inspector-select="(payload) => emit('inspectorSelect', payload)"
         @context-push="(payload) => emit('contextPush', payload)"
@@ -87,6 +89,7 @@ defineProps<{
 
 const emit = defineEmits<{
   restart: [appId: string]
+  toggleFullscreen: []
   retryInstall: []
   inspectorSelect: [payload: InspectorSelectPayload]
   contextPush: [payload: ContextPushPayload]

@@ -40,19 +40,8 @@
       @close="handleCloseWorkbench"
     />
     <template v-if="workbenchLayoutVariant !== 'compact'">
-      <IwpFileDrawer
+      <WorkbenchSplitWithIwpLayout
         v-if="workbenchLayoutVariant === 'split_with_iwp'"
-        :collapsed="fileTreeCollapsed"
-        :loading="filesLoading"
-        :files="fileList"
-        :active-file-path="activeFilePath"
-        :title="t.apps.iwpFilesTitle"
-        :loading-label="t.apps.iwpLoadingFiles"
-        :empty-label="t.apps.iwpNoFiles"
-        @toggle="toggleFileTree"
-        @open-file="openFile"
-      />
-      <WorkbenchCenterPane
         :workbench-mode="workbenchMode"
         :allow-requirements-mode="hasIwpRequirements"
         :center-pane-mode="centerPaneMode"
@@ -92,6 +81,77 @@
         :agent-log-running-label="t.apps.workbenchAgentLogRunning"
         :agent-log-idle-label="t.apps.workbenchAgentLogIdle"
         :agent-log-height="agentLogHeightPx"
+        :is-resizing-preview="isResizingPreview"
+        :is-resizing-agent-log="isResizingAgentLog"
+        :tts-enabled="ttsEnabled"
+        :tts-playback-state="ttsPlaybackState"
+        :tts-stream-status="ttsStreamStatus"
+        :selected-tts-engine="selectedTtsEngine"
+        :tts-engine-options="ttsEngineOptions"
+        :file-tree-collapsed="fileTreeCollapsed"
+        :files-loading="filesLoading"
+        :file-list="fileList"
+        :iwp-files-title="t.apps.iwpFilesTitle"
+        :iwp-loading-files="t.apps.iwpLoadingFiles"
+        :iwp-no-files="t.apps.iwpNoFiles"
+        @update-chat-input="setChatInput"
+        @composer-selection-change="handleComposerSelectionChange"
+        @update-markdown="updateContent"
+        @save-markdown="saveCurrentFile"
+        @trigger-build="triggerBuild"
+        @open-build-session="openBuildSession"
+        @back-to-markdown="backToMarkdown"
+        @start-resize-preview="startResizePreview"
+        @start-resize-agent-log="startResizeAgentLog"
+        @toggle-tts-enabled="toggleTtsEnabled"
+        @stop-tts="stopTtsPlayback"
+        @select-tts-engine="selectTtsEngine"
+        @open-azure-tts-settings="openAzureTtsSettings"
+        @toggle-file-tree="toggleFileTree"
+        @open-file="openFile"
+      />
+      <WorkbenchSplitNoIwpLayout
+        v-else
+        :workbench-mode="workbenchMode"
+        :allow-requirements-mode="hasIwpRequirements"
+        :center-pane-mode="centerPaneMode"
+        :plugin-id="pluginId"
+        :chat-input="chatInput"
+        :preview-chat-blocked="previewChatBlocked"
+        :iwp-root="iwpRoot"
+        :active-file-path="activeFilePath"
+        :markdown-content="markdownContent"
+        :file-loading="fileLoading"
+        :file-saving="fileSaving"
+        :can-build="canBuild"
+        :is-dirty="isDirty"
+        :has-active-file="hasActiveFile"
+        :build-state="buildState"
+        :save-label="t.apps.iwpSave"
+        :saving-label="t.apps.iwpSaving"
+        :build-button-label="t.apps.iwpBuild"
+        :editor-loading-label="t.apps.iwpLoadingFile"
+        :editor-placeholder="t.apps.iwpEditorPlaceholder"
+        :empty-path-label="t.apps.iwpEmptyFile"
+        :saved-label="t.apps.iwpSaved"
+        :unsaved-label="t.apps.iwpUnsaved"
+        :build-session-label="t.apps.iwpBuildSessionLabel"
+        :open-build-session-label="t.apps.iwpOpenBuildSession"
+        :readonly-title="t.apps.iwpReadonlyTitle"
+        :readonly-file-path="readonlyFilePath"
+        :readonly-file-line="readonlyFileLine"
+        :readonly-file-content="readonlyFileContent"
+        :readonly-loading="readonlyLoading"
+        :readonly-error="readonlyError"
+        :back-to-markdown-label="t.apps.iwpBackToMarkdown"
+        :readonly-loading-label="t.apps.iwpReadonlyLoading"
+        :readonly-empty-content-label="t.apps.iwpReadonlyEmpty"
+        :agent-log-title="t.apps.workbenchAgentLogTitle"
+        :agent-log-empty-label="t.apps.workbenchAgentLogEmpty"
+        :agent-log-running-label="t.apps.workbenchAgentLogRunning"
+        :agent-log-idle-label="t.apps.workbenchAgentLogIdle"
+        :agent-log-height="agentLogHeightPx"
+        :is-resizing-preview="isResizingPreview"
         :is-resizing-agent-log="isResizingAgentLog"
         :tts-enabled="ttsEnabled"
         :tts-playback-state="ttsPlaybackState"
@@ -105,18 +165,13 @@
         @trigger-build="triggerBuild"
         @open-build-session="openBuildSession"
         @back-to-markdown="backToMarkdown"
+        @start-resize-preview="startResizePreview"
         @start-resize-agent-log="startResizeAgentLog"
         @toggle-tts-enabled="toggleTtsEnabled"
         @stop-tts="stopTtsPlayback"
         @select-tts-engine="selectTtsEngine"
+        @open-azure-tts-settings="openAzureTtsSettings"
       />
-      <div
-        class="column-resizer"
-        :class="{ active: isResizingPreview }"
-        @pointerdown="startResizePreview"
-      >
-        <span class="column-resizer-line"></span>
-      </div>
     </template>
     <WorkbenchPreviewSection
       :is-preview-renderable="isPreviewRenderable"
@@ -139,6 +194,7 @@
       :on-capability-invoke-request="handleCapabilityInvokeRequest"
       :on-host-invoke-request="handleHostInvokeRequest"
       @restart="handleRestartPreview"
+      @toggle-fullscreen="togglePreviewFullscreen"
       @retry-install="handleRetryInstall"
       @inspector-select="handleInspectorSelect"
       @context-push="handleContextPush"
@@ -184,6 +240,25 @@
       @submit-mobile-publish="handleMobilePublish"
       @refresh-mobile-share="handleMobileRefreshShare"
     />
+    <WorkbenchAzureTtsConfigDialog
+      :visible="azureTtsDialogVisible"
+      :busy="azureTtsSaving"
+      title="Azure TTS 配置"
+      :api-key="azureTtsApiKey"
+      :region="azureTtsRegion"
+      :default-voice-zh="azureTtsDefaultVoiceZh"
+      :default-voice-en="azureTtsDefaultVoiceEn"
+      :zh-voice-options="azureTtsZhVoiceOptions"
+      :en-voice-options="azureTtsEnVoiceOptions"
+      :api-key-configured="azureTtsApiKeyConfigured"
+      :error-message="azureTtsErrorMessage"
+      @update:api-key="handleAzureApiKeyChange"
+      @update:region="handleAzureRegionChange"
+      @update:default-voice-zh="handleAzureDefaultVoiceZhChange"
+      @update:default-voice-en="handleAzureDefaultVoiceEnChange"
+      @cancel="closeAzureTtsDialog"
+      @submit="submitAzureTtsDialog"
+    />
   </div>
 </template>
 
@@ -191,9 +266,10 @@
 import WorkbenchHeaderBar from '@/features/plugin-dev-workbench/components/WorkbenchHeaderBar.vue'
 import WorkbenchPreviewSection from '@/features/plugin-dev-workbench/components/WorkbenchPreviewSection.vue'
 import WorkbenchPublishOverlays from '@/features/plugin-dev-workbench/components/WorkbenchPublishOverlays.vue'
-import IwpFileDrawer from '@/features/plugin-dev-workbench/components/IwpFileDrawer.vue'
-import WorkbenchCenterPane from '@/features/plugin-dev-workbench/components/WorkbenchCenterPane.vue'
 import WorkbenchExitConfirmDialog from '@/features/plugin-dev-workbench/components/WorkbenchExitConfirmDialog.vue'
+import WorkbenchAzureTtsConfigDialog from '@/features/plugin-dev-workbench/components/WorkbenchAzureTtsConfigDialog.vue'
+import WorkbenchSplitWithIwpLayout from '@/features/plugin-dev-workbench/components/WorkbenchSplitWithIwpLayout.vue'
+import WorkbenchSplitNoIwpLayout from '@/features/plugin-dev-workbench/components/WorkbenchSplitNoIwpLayout.vue'
 import { usePluginDevWorkbenchOrchestration } from '@/features/plugin-dev-workbench/composables/usePluginDevWorkbenchOrchestration'
 
 const {
@@ -280,6 +356,7 @@ const {
   isAssistantCompactSurface,
   setWorkbenchMode,
   setChatInput,
+  togglePreviewFullscreen,
   previewWidthPx,
   agentLogHeightPx,
   isResizingPreview,
@@ -289,14 +366,43 @@ const {
   ttsEnabled,
   selectedTtsEngine,
   ttsEngineOptions,
+  azureTtsDialogVisible,
+  azureTtsSaving,
+  azureTtsErrorMessage,
+  azureTtsApiKey,
+  azureTtsApiKeyConfigured,
+  azureTtsRegion,
+  azureTtsDefaultVoiceZh,
+  azureTtsDefaultVoiceEn,
+  azureTtsZhVoiceOptions,
+  azureTtsEnVoiceOptions,
   ttsPlaybackState,
   ttsStreamStatus,
   toggleTtsEnabled,
   selectTtsEngine,
+  openAzureTtsSettings,
+  closeAzureTtsDialog,
+  submitAzureTtsDialog,
   stopTtsPlayback,
   handleCapabilityInvokeRequest,
   handleHostInvokeRequest,
 } = usePluginDevWorkbenchOrchestration()
+
+const handleAzureApiKeyChange = (value: string) => {
+  azureTtsApiKey.value = value
+}
+
+const handleAzureRegionChange = (value: string) => {
+  azureTtsRegion.value = value
+}
+
+const handleAzureDefaultVoiceZhChange = (value: string) => {
+  azureTtsDefaultVoiceZh.value = value
+}
+
+const handleAzureDefaultVoiceEnChange = (value: string) => {
+  azureTtsDefaultVoiceEn.value = value
+}
 </script>
 
 <style scoped>
@@ -320,27 +426,7 @@ const {
 }
 
 .plugin-dev-workbench.split-no-iwp-layout {
-  grid-template-columns: minmax(520px, 1fr) 8px minmax(360px, var(--preview-pane-width, 460px));
+  grid-template-columns: minmax(360px, var(--agent-pane-width, 460px)) 8px minmax(520px, 1fr);
 }
 
-.column-resizer {
-  min-height: 0;
-  cursor: col-resize;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--wb-pane-side);
-}
-
-.column-resizer-line {
-  width: 2px;
-  height: 64px;
-  border-radius: 999px;
-  background: var(--wb-border-subtle);
-}
-
-.column-resizer:hover .column-resizer-line,
-.column-resizer.active .column-resizer-line {
-  background: var(--color-primary);
-}
 </style>
