@@ -154,6 +154,7 @@ SDK_DIR="$PROJECT_ROOT/dawnchat-plugins/sdk"
 FRONTEND_DIR="$PROJECT_ROOT/apps/frontend"
 TAURI_DIR="$PROJECT_ROOT/apps/desktop/src-tauri"
 SIDECAR_DIR="$TAURI_DIR/sidecars/dawnchat-backend"
+MACOS_ENTITLEMENTS_FILE="${MACOS_ENTITLEMENTS_FILE:-$TAURI_DIR/Entitlements.plist}"
 CACHE_DIR="$PROJECT_ROOT/.cache/pbs"
 OFFICIAL_PLUGINS_DIR="$PROJECT_ROOT/dawnchat-plugins/official-plugins"
 RUNTIME_ASSETS_DIR="${DAWNCHAT_RUNTIME_ASSETS_DIR:-$PROJECT_ROOT/runtime-assets}"
@@ -1425,11 +1426,27 @@ sign_macos_sidecar_binaries() {
     local identity
     identity="$(resolve_macos_signing_identity)"
     check_macos_signing_identity "$identity"
+    local entitlements_file
+    entitlements_file="$(resolve_macos_entitlements_file)"
+    if [[ -n "$entitlements_file" ]]; then
+        print_info "sidecar 可执行文件将注入 entitlements: $entitlements_file"
+    else
+        print_warning "未找到 macOS entitlements 文件，sidecar 将仅使用 hardened runtime 签名"
+    fi
     print_step "签名 sidecar Mach-O 二进制"
     local signed_count=0
     while IFS= read -r candidate; do
         if file "$candidate" | grep -q "Mach-O"; then
-            codesign --force --sign "$identity" --timestamp --options runtime "$candidate"
+            local sign_args=(
+                --force
+                --sign "$identity"
+                --timestamp
+                --options runtime
+            )
+            if [[ -n "$entitlements_file" && "$candidate" != *.dylib && "$candidate" != *.so && "$candidate" != *.node ]]; then
+                sign_args+=(--entitlements "$entitlements_file")
+            fi
+            codesign "${sign_args[@]}" "$candidate"
             signed_count=$((signed_count + 1))
         fi
     done < <(find "$SIDECAR_DIR" -type f \( -perm -111 -o -name "*.dylib" -o -name "*.so" -o -name "*.node" \))
@@ -1444,6 +1461,19 @@ resolve_macos_signing_identity() {
     local detected
     detected="$(security find-identity -p codesigning -v 2>/dev/null | grep "Developer ID Application:" | head -n1 | sed -E 's/.*"(.+)"/\1/')"
     echo "$detected"
+}
+
+resolve_macos_entitlements_file() {
+    if [[ "$OSTYPE" != "darwin"* ]]; then
+        echo ""
+        return
+    fi
+    local candidate="$MACOS_ENTITLEMENTS_FILE"
+    if [[ -f "$candidate" ]]; then
+        echo "$candidate"
+        return
+    fi
+    echo ""
 }
 
 check_macos_signing_identity() {
