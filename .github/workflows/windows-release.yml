@@ -12,6 +12,9 @@ permissions:
 jobs:
   build-windows:
     runs-on: windows-latest
+    env:
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL != '' && secrets.VITE_SUPABASE_URL || vars.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY != '' && secrets.VITE_SUPABASE_ANON_KEY || vars.VITE_SUPABASE_ANON_KEY }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -46,6 +49,20 @@ jobs:
       - name: Install dependencies
         shell: bash
         run: pnpm install --frozen-lockfile
+
+      - name: Verify frontend build env
+        shell: bash
+        run: |
+          require_env() {
+            local name="$1"
+            if [[ -z "${!name:-}" ]]; then
+              echo "Missing required frontend build env: $name"
+              exit 1
+            fi
+          }
+
+          require_env VITE_SUPABASE_URL
+          require_env VITE_SUPABASE_ANON_KEY
 
       - name: Install Poetry
         shell: bash

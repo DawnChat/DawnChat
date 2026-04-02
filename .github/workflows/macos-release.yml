@@ -22,6 +22,8 @@ jobs:
       IS_RC_TAG: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && contains(github.ref_name, '-rc') }}
       SHOULD_SIGN: ${{ ((github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) || (github.event_name == 'workflow_dispatch' && inputs.sign_and_notarize == true)) && secrets.MACOS_CERT_P12_B64 != '' && secrets.MACOS_CERT_PASSWORD != '' && secrets.APPLE_SIGNING_IDENTITY != '' }}
       SHOULD_NOTARIZE: ${{ ((github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) || (github.event_name == 'workflow_dispatch' && inputs.sign_and_notarize == true)) && secrets.MACOS_CERT_P12_B64 != '' && secrets.MACOS_CERT_PASSWORD != '' && secrets.APPLE_SIGNING_IDENTITY != '' && secrets.ASC_API_KEY_P8_B64 != '' && secrets.ASC_KEY_ID != '' && secrets.ASC_ISSUER_ID != '' && secrets.APPLE_TEAM_ID != '' }}
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL != '' && secrets.VITE_SUPABASE_URL || vars.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY != '' && secrets.VITE_SUPABASE_ANON_KEY || vars.VITE_SUPABASE_ANON_KEY }}
       KEYCHAIN_NAME: dawnchat-build.keychain
       KEYCHAIN_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
       NOTARY_PROFILE: dawnchat-notary
@@ -62,6 +64,19 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Verify frontend build env
+        run: |
+          require_env() {
+            local name="$1"
+            if [[ -z "${!name:-}" ]]; then
+              echo "Missing required frontend build env: $name"
+              exit 1
+            fi
+          }
+
+          require_env VITE_SUPABASE_URL
+          require_env VITE_SUPABASE_ANON_KEY
 
       - name: Install Poetry
         run: |
