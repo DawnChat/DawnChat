@@ -189,12 +189,11 @@ If you only want to download the TTS models:
 ```
 
 The Kokoro TTS model uses the official public link from `sherpa-onnx`.
-For Bun / uv / OpenCode, the script points to their official GitHub Release stable versions by default (can be overridden via environment variables):
+For Bun / uv / OpenCode, the version, download URL, and SHA256 are now centralized in `scripts/runtime-assets-manifest.json`.
+You can override the manifest path if needed:
 
 ```bash
-export DAWNCHAT_BUN_VERSION=bun-v1.3.11
-export DAWNCHAT_UV_VERSION=0.11.2
-export DAWNCHAT_OPENCODE_VERSION=v1.3.10
+export DAWNCHAT_RUNTIME_ASSETS_MANIFEST_PATH=/path/to/runtime-assets-manifest.json
 ```
 
 ### Start Development Environment
@@ -240,6 +239,9 @@ pnpm run lint:backend
 pnpm run typecheck:backend
 pnpm --filter @dawnchat/frontend run typecheck
 cd apps/desktop/src-tauri && cargo fmt --all -- --check
+
+# Runtime build hardening quick verification
+./scripts/ci/verify-runtime-hardening.sh
 ```
 
 ### Logging Policy

@@ -111,6 +111,49 @@ resolve_runtime_asset_dir() {
     return 1
 }
 
+calc_sha256() {
+    local file_path="$1"
+    if command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$file_path" | awk '{print $1}'
+        return 0
+    fi
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$file_path" | awk '{print $1}'
+        return 0
+    fi
+    print_error "未找到 sha256 计算工具（shasum/sha256sum）"
+    return 1
+}
+
+load_manifest_asset() {
+    local asset="$1"
+    local platform="$2"
+    eval "$(
+        python3 "$PROJECT_ROOT/scripts/runtime_asset_manifest.py" get \
+            --manifest "$RUNTIME_ASSETS_MANIFEST_PATH" \
+            --asset "$asset" \
+            --platform "$platform" \
+            --format shell
+    )"
+    if [[ -z "${ASSET_URL:-}" || -z "${ASSET_FILENAME:-}" || -z "${ASSET_SHA256:-}" ]]; then
+        print_error "Manifest 资产字段不完整: asset=$asset platform=$platform"
+        exit 1
+    fi
+}
+
+verify_checksum() {
+    local file_path="$1"
+    local expected_sha="$2"
+    local actual_sha
+    actual_sha="$(calc_sha256 "$file_path")"
+    if [[ "$actual_sha" != "$expected_sha" ]]; then
+        print_error "SHA256 校验失败: $file_path"
+        print_error "expected=$expected_sha"
+        print_error "actual=$actual_sha"
+        return 1
+    fi
+}
+
 # ============ 默认配置 ============
 BUILD_MODE="release"
 TARGET_PLATFORM=""
@@ -135,10 +178,7 @@ NOTARY_TIMEOUT_MINUTES=240
 NOTARY_PROFILE="${NOTARY_PROFILE:-dawnchat-notary}"
 MACOS_SIGNING_IDENTITY="${MACOS_SIGNING_IDENTITY:-}"
 
-# PBS 配置 (版本号格式: YYYYMMDD)
-# 查看最新版本: https://github.com/astral-sh/python-build-standalone/releases
-PBS_VERSION="20251202"
-PYTHON_VERSION="3.11.14"
+# PBS 版本与下载 URL 统一由 runtime manifest 提供
 
 # MLX 依赖版本（可通过环境变量覆盖）
 MLX_VERSION="${MLX_VERSION:-0.30.4}"
@@ -163,6 +203,7 @@ TTS_MODELS_ASSETS_DIR="$RUNTIME_ASSETS_DIR/tts-models"
 UV_BINARY_ASSETS_DIR="$RUNTIME_ASSETS_DIR/uv-binary"
 BUN_BINARY_ASSETS_DIR="$RUNTIME_ASSETS_DIR/bun-bin"
 OPENCODE_BINARY_ASSETS_DIR="$RUNTIME_ASSETS_DIR/opencode-bin"
+RUNTIME_ASSETS_MANIFEST_PATH="${DAWNCHAT_RUNTIME_ASSETS_MANIFEST_PATH:-$PROJECT_ROOT/scripts/runtime-assets-manifest.json}"
 
 # Llama.cpp 版本
 LLAMA_VERSION="b7204"
@@ -509,9 +550,11 @@ download_pbs_python() {
     local platform="$1"
     
     print_step "下载 Python Build Standalone ($platform)"
-    
-    local filename="cpython-${PYTHON_VERSION}+${PBS_VERSION}-${platform}-install_only.tar.gz"
-    local url="https://github.com/astral-sh/python-build-standalone/releases/download/${PBS_VERSION}/${filename}"
+
+    load_manifest_asset "pbs-python" "$platform"
+    local filename="$ASSET_FILENAME"
+    local url="$ASSET_URL"
+    local checksum="$ASSET_SHA256"
     local cache_file="$CACHE_DIR/$filename"
     
     # 创建缓存目录
@@ -519,12 +562,11 @@ download_pbs_python() {
     
     # 检查缓存
     if [[ -f "$cache_file" ]]; then
-        # 验证缓存文件是否有效 (至少 1MB)
-        local file_size=$(stat -f%z "$cache_file" 2>/dev/null || stat -c%s "$cache_file" 2>/dev/null || echo "0")
-        if [[ "$file_size" -lt 1000000 ]]; then
-            print_warning "缓存文件可能已损坏 (大小: ${file_size} bytes)，重新下载..."
+        if ! verify_checksum "$cache_file" "$checksum"; then
+            print_warning "缓存文件 SHA256 校验失败，重新下载..."
             rm -f "$cache_file"
         else
+            local file_size=$(stat -f%z "$cache_file" 2>/dev/null || stat -c%s "$cache_file" 2>/dev/null || echo "0")
             print_info "使用缓存: $cache_file (大小: $(($file_size / 1024 / 1024))MB)"
         fi
     fi
@@ -542,8 +584,10 @@ download_pbs_python() {
         local file_size=$(stat -f%z "$cache_file" 2>/dev/null || stat -c%s "$cache_file" 2>/dev/null || echo "0")
         if [[ "$file_size" -lt 1000000 ]]; then
             print_error "下载失败: 文件大小异常 (${file_size} bytes)"
-            print_info "请检查 PBS 版本是否正确: PBS_VERSION=$PBS_VERSION, PYTHON_VERSION=$PYTHON_VERSION"
-            print_info "查看可用版本: https://github.com/astral-sh/python-build-standalone/releases"
+            rm -f "$cache_file"
+            exit 1
+        fi
+        if ! verify_checksum "$cache_file" "$checksum"; then
             rm -f "$cache_file"
             exit 1
         fi
@@ -591,26 +635,22 @@ install_python_deps() {
     
     cd "$BACKEND_DIR"
     
+    local release_requirements_path="$BACKEND_DIR/requirements-release.txt"
+    local install_requirements_path="requirements.txt"
+
     # 检查 pyproject.toml 是否比 poetry.lock 新
     local pyproject_path="$BACKEND_DIR/pyproject.toml"
     local lock_path="$BACKEND_DIR/poetry.lock"
     
     if [[ -f "$pyproject_path" && -f "$lock_path" ]]; then
         if [[ "$pyproject_path" -nt "$lock_path" ]]; then
-            print_warning "检测到 pyproject.toml 已更新，但 poetry.lock 未更新"
-            print_info "正在运行 poetry lock 更新依赖锁定文件..."
-            if poetry lock; then
-                print_success "poetry.lock 更新成功"
-            else
-                print_error "poetry lock 失败，请手动运行: cd $BACKEND_DIR && poetry lock"
-                exit 1
-            fi
+            print_error "检测到 pyproject.toml 已更新，但 poetry.lock 未更新"
+            print_error "为保证可复现构建，build.sh 不会自动执行 poetry lock"
+            print_error "请先手动运行: cd $BACKEND_DIR && poetry lock"
+            exit 1
         fi
     fi
-    
-    # 导出 requirements.txt
-    print_info "导出依赖列表..."
-    
+
     # 检查 poetry export 是否可用
     if ! poetry export --help &> /dev/null; then
         print_warning "poetry export 命令不可用，尝试安装 poetry-plugin-export..."
@@ -622,11 +662,34 @@ install_python_deps() {
         fi
     fi
 
-    poetry export -f requirements.txt --without-hashes -o requirements.txt
-    
-    # 确保 gradio/nicegui 版本与 lock 文件一致
-    print_info "同步 PBS 依赖版本..."
-    python3 "$PROJECT_ROOT/scripts/ensure_pbs_deps.py" "$BACKEND_DIR/poetry.lock" "requirements.txt"
+    if [[ "$BUILD_MODE" == "release" ]]; then
+        if [[ ! -f "$release_requirements_path" ]]; then
+            print_error "缺少 release 依赖锁定文件: $release_requirements_path"
+            print_error "请执行: cd $BACKEND_DIR && poetry export -f requirements.txt -o requirements-release.txt"
+            exit 1
+        fi
+
+        local temp_export
+        temp_export="$(mktemp)"
+        poetry export -f requirements.txt -o "$temp_export"
+        if ! cmp -s "$temp_export" "$release_requirements_path"; then
+            rm -f "$temp_export"
+            print_error "requirements-release.txt 与 poetry.lock 不一致"
+            print_error "请执行: cd $BACKEND_DIR && poetry export -f requirements.txt -o requirements-release.txt"
+            exit 1
+        fi
+        rm -f "$temp_export"
+        install_requirements_path="$release_requirements_path"
+        print_info "release 模式使用锁定依赖: $install_requirements_path"
+    else
+        print_info "导出开发依赖列表..."
+        poetry export -f requirements.txt --without-hashes -o requirements.txt
+
+        # 确保 gradio/nicegui 版本与 lock 文件一致
+        print_info "同步 PBS 依赖版本..."
+        python3 "$PROJECT_ROOT/scripts/ensure_pbs_deps.py" "$BACKEND_DIR/poetry.lock" "requirements.txt"
+        install_requirements_path="requirements.txt"
+    fi
 
     local mlx_specs=()
     if [[ "$ENABLE_MLX" == true ]]; then
@@ -646,13 +709,18 @@ install_python_deps() {
         mirror_args+=("--index-url" "$PYPI_MIRROR")
     fi
 
-    # 升级 pip
-    print_info "升级 pip..."
-    "${pip_cmd[@]}" install --upgrade pip --quiet "${mirror_args[@]}"
+    # 升级 pip（release 构建保持最小变动，避免引入额外漂移）
+    if [[ "$BUILD_MODE" != "release" ]]; then
+        print_info "升级 pip..."
+        "${pip_cmd[@]}" install --upgrade pip --quiet "${mirror_args[@]}"
+    fi
     
     # 安装依赖
     print_info "安装依赖 (这可能需要几分钟)..."
-    local pip_args=("-r" "requirements.txt" "--no-cache-dir")
+    local pip_args=("-r" "$install_requirements_path" "--no-cache-dir")
+    if [[ "$BUILD_MODE" == "release" ]]; then
+        pip_args+=("--require-hashes")
+    fi
     pip_args+=("${mirror_args[@]}")
     
     if [[ "$VERBOSE" == true ]]; then
@@ -669,7 +737,11 @@ install_python_deps() {
     # 安装 DawnChat SDK (用于 Plugin)
     print_info "安装 DawnChat SDK..."
     if [[ -d "$SDK_DIR" ]]; then
-        "${pip_cmd[@]}" install "$SDK_DIR" --no-cache-dir --quiet "${mirror_args[@]}"
+        local sdk_args=("$SDK_DIR" "--no-cache-dir" "--quiet")
+        if [[ "$BUILD_MODE" == "release" ]]; then
+            sdk_args+=("--no-deps")
+        fi
+        "${pip_cmd[@]}" install "${sdk_args[@]}" "${mirror_args[@]}"
         print_info "DawnChat SDK 安装成功"
     else
         print_warning "未找到 SDK 目录: $SDK_DIR，跳过安装"

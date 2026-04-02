@@ -4,18 +4,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 source "$PROJECT_ROOT/scripts/dev/common.sh"
+MANIFEST_PATH="${DAWNCHAT_RUNTIME_ASSETS_MANIFEST_PATH:-$PROJECT_ROOT/scripts/runtime-assets-manifest.json}"
 
 RUNTIME_ASSETS_DIR="${DAWNCHAT_RUNTIME_ASSETS_DIR:-$PROJECT_ROOT/runtime-assets}"
 DOWNLOAD_CACHE_DIR="${DAWNCHAT_RUNTIME_ASSETS_CACHE_DIR:-$PROJECT_ROOT/.cache/runtime-assets}"
 KOKORO_MODEL_URL="${DAWNCHAT_TTS_KOKORO_URL:-https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-int8-multi-lang-v1_1.tar.bz2}"
 KOKORO_MODEL_DIR_NAME="${KOKORO_MODEL_DIR_NAME:-kokoro-multi-lang-v1_1}"
-BUN_VERSION="${DAWNCHAT_BUN_VERSION:-bun-v1.3.11}"
-UV_VERSION="${DAWNCHAT_UV_VERSION:-0.11.2}"
-OPENCODE_VERSION="${DAWNCHAT_OPENCODE_VERSION:-v1.3.10}"
-RUNTIME_ASSETS_BASE_URL="${DAWNCHAT_RUNTIME_ASSETS_BASE_URL:-}"
-DAWNCHAT_BUN_BASE_URL="${DAWNCHAT_BUN_BASE_URL:-${RUNTIME_ASSETS_BASE_URL:-https://github.com/oven-sh/bun/releases/download/$BUN_VERSION}}"
-DAWNCHAT_UV_BASE_URL="${DAWNCHAT_UV_BASE_URL:-${RUNTIME_ASSETS_BASE_URL:-https://github.com/astral-sh/uv/releases/download/$UV_VERSION}}"
-DAWNCHAT_OPENCODE_BASE_URL="${DAWNCHAT_OPENCODE_BASE_URL:-${RUNTIME_ASSETS_BASE_URL:-https://github.com/anomalyco/opencode/releases/download/$OPENCODE_VERSION}}"
 DAWNCHAT_LLAMACPP_VERSION="${DAWNCHAT_LLAMACPP_VERSION:-b7204}"
 DAWNCHAT_LLAMACPP_BASE_URL="${DAWNCHAT_LLAMACPP_BASE_URL:-https://github.com/ggml-org/llama.cpp/releases/download/$DAWNCHAT_LLAMACPP_VERSION}"
 
@@ -44,22 +38,14 @@ usage() {
 
 环境变量:
   DAWNCHAT_RUNTIME_ASSETS_DIR
-  DAWNCHAT_RUNTIME_ASSETS_BASE_URL
-  DAWNCHAT_BUN_VERSION
-  DAWNCHAT_UV_VERSION
-  DAWNCHAT_OPENCODE_VERSION
-  DAWNCHAT_BUN_BASE_URL
-  DAWNCHAT_UV_BASE_URL
-  DAWNCHAT_OPENCODE_BASE_URL
+  DAWNCHAT_RUNTIME_ASSETS_MANIFEST_PATH
   DAWNCHAT_LLAMACPP_BASE_URL
   DAWNCHAT_LLAMACPP_VERSION
   DAWNCHAT_TTS_KOKORO_URL
 
 说明:
   - TTS 模型默认使用 sherpa-onnx 官方链接。
-  - Bun / uv / OpenCode 默认使用各自官方 GitHub Release 稳定版。
-  - 可通过 DAWNCHAT_BUN_VERSION / DAWNCHAT_UV_VERSION / DAWNCHAT_OPENCODE_VERSION 覆盖默认版本。
-  - 若配置了 DAWNCHAT_RUNTIME_ASSETS_BASE_URL，则 Bun / uv / OpenCode 可统一从同一 Release 前缀下载。
+  - Bun / uv / OpenCode 的版本、URL、SHA256 由 runtime manifest 统一定义。
   - 统一资源目录默认写入 runtime-assets/。
 EOF
 }
@@ -150,23 +136,55 @@ llamacpp_dir_for_platform() {
     esac
 }
 
-require_base_url() {
-    local family="$1"
-    local base_url="$2"
-    if [[ -n "$base_url" ]]; then
-        echo "$base_url"
-        return 0
-    fi
-    print_warning "未配置 $family 下载地址，跳过。请设置对应 BASE URL 或 DAWNCHAT_RUNTIME_ASSETS_BASE_URL"
-    return 1
-}
-
 download_file() {
     local url="$1"
     local output="$2"
     mkdir -p "$(dirname "$output")"
     print_info "下载 $(mask_url "$url")"
     curl -L --progress-bar --fail "$url" -o "$output"
+}
+
+calc_sha256() {
+    local file_path="$1"
+    if command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$file_path" | awk '{print $1}'
+        return 0
+    fi
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$file_path" | awk '{print $1}'
+        return 0
+    fi
+    print_error "未找到 sha256 计算工具（shasum/sha256sum）"
+    return 1
+}
+
+load_manifest_asset() {
+    local asset="$1"
+    local platform="$2"
+    eval "$(
+        python3 "$PROJECT_ROOT/scripts/runtime_asset_manifest.py" get \
+            --manifest "$MANIFEST_PATH" \
+            --asset "$asset" \
+            --platform "$platform" \
+            --format shell
+    )"
+    if [[ -z "${ASSET_URL:-}" || -z "${ASSET_FILENAME:-}" || -z "${ASSET_SHA256:-}" ]]; then
+        print_error "Manifest 资产字段不完整: asset=$asset, platform=$platform"
+        return 1
+    fi
+}
+
+verify_checksum() {
+    local file_path="$1"
+    local expected_sha="$2"
+    local actual_sha
+    actual_sha="$(calc_sha256 "$file_path")"
+    if [[ "$actual_sha" != "$expected_sha" ]]; then
+        print_error "SHA256 校验失败: $file_path"
+        print_error "expected=$expected_sha"
+        print_error "actual=$actual_sha"
+        return 1
+    fi
 }
 
 extract_archive_to_dir() {
@@ -214,6 +232,31 @@ extract_archive_to_dir() {
     rm -rf "$staging_dir"
 }
 
+download_manifest_asset() {
+    local asset_name="$1"
+    local target_parent="$2"
+    local platform
+    platform="$(platform_value)"
+    load_manifest_asset "$asset_name" "$platform"
+    local archive_path="$DOWNLOAD_CACHE_DIR/$ASSET_FILENAME"
+    local target_dir="$target_parent/$ASSET_EXTRACT_DIR"
+
+    if [[ -f "$archive_path" ]]; then
+        if ! verify_checksum "$archive_path" "$ASSET_SHA256"; then
+            print_warning "缓存包校验失败，删除后重新下载: $archive_path"
+            rm -f "$archive_path"
+        fi
+    fi
+
+    if [[ ! -f "$archive_path" ]]; then
+        download_file "$ASSET_URL" "$archive_path"
+        verify_checksum "$archive_path" "$ASSET_SHA256"
+    fi
+
+    extract_archive_to_dir "$archive_path" "$target_dir" "$ASSET_EXTRACT_DIR"
+    print_success "$asset_name 资源准备完成: $target_dir"
+}
+
 download_archive_family() {
     local family="$1"
     local base_url="$2"
@@ -237,50 +280,15 @@ download_tts_model() {
 }
 
 download_bun() {
-    local platform
-    platform="$(platform_value)"
-    local dir_name
-    dir_name="$(bun_dir_for_platform "$platform")" || {
-        print_warning "当前平台不支持 Bun 自动下载: $platform"
-        return 0
-    }
-    local base_url
-    base_url="$(require_base_url "Bun" "$DAWNCHAT_BUN_BASE_URL")" || return 0
-    download_archive_family "Bun" "$base_url" "$dir_name" "$dir_name.zip" "$RUNTIME_ASSETS_DIR/bun-bin"
+    download_manifest_asset "bun" "$RUNTIME_ASSETS_DIR/bun-bin"
 }
 
 download_uv() {
-    local platform
-    platform="$(platform_value)"
-    local dir_name
-    dir_name="$(uv_dir_for_platform "$platform")" || {
-        print_warning "当前平台不支持 uv 自动下载: $platform"
-        return 0
-    }
-    local base_url
-    base_url="$(require_base_url "uv" "$DAWNCHAT_UV_BASE_URL")" || return 0
-    local archive_ext="tar.gz"
-    if [[ "$platform" == "x86_64-pc-windows-msvc" || "$platform" == "aarch64-pc-windows-msvc" ]]; then
-        archive_ext="zip"
-    fi
-    download_archive_family "uv" "$base_url" "$dir_name" "$dir_name.$archive_ext" "$RUNTIME_ASSETS_DIR/uv-binary"
+    download_manifest_asset "uv" "$RUNTIME_ASSETS_DIR/uv-binary"
 }
 
 download_opencode() {
-    local platform
-    platform="$(platform_value)"
-    local dir_name
-    dir_name="$(opencode_dir_for_platform "$platform")" || {
-        print_warning "当前平台不支持 OpenCode 自动下载: $platform"
-        return 0
-    }
-    local base_url
-    base_url="$(require_base_url "OpenCode" "$DAWNCHAT_OPENCODE_BASE_URL")" || return 0
-    local archive_ext="tar.gz"
-    if [[ "$platform" == "aarch64-apple-darwin" || "$platform" == "x86_64-apple-darwin" || "$platform" == "x86_64-pc-windows-msvc" ]]; then
-        archive_ext="zip"
-    fi
-    download_archive_family "OpenCode" "$base_url" "$dir_name" "$dir_name.$archive_ext" "$RUNTIME_ASSETS_DIR/opencode-bin"
+    download_manifest_asset "opencode" "$RUNTIME_ASSETS_DIR/opencode-bin"
 }
 
 download_llamacpp() {

@@ -1,0 +1,241 @@
+{
+  "schema_version": 1,
+  "assets": {
+    "pbs-python": {
+      "platforms": {
+        "aarch64-apple-darwin": {
+          "version": "20251202",
+          "python_version": "3.11.14",
+          "filename": "cpython-3.11.14+20251202-aarch64-apple-darwin-install_only.tar.gz",
+          "archive_format": "tar.gz",
+          "extract_dir": "python",
+          "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20251202/cpython-3.11.14+20251202-aarch64-apple-darwin-install_only.tar.gz",
+          "sha256": "bcaa4592b5c6c60028d4911870eaeb993d9d976ccb225faf31092e84c7ed2818",
+          "required": true
+        },
+        "x86_64-apple-darwin": {
+          "version": "20251202",
+          "python_version": "3.11.14",
+          "filename": "cpython-3.11.14+20251202-x86_64-apple-darwin-install_only.tar.gz",
+          "archive_format": "tar.gz",
+          "extract_dir": "python",
+          "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20251202/cpython-3.11.14+20251202-x86_64-apple-darwin-install_only.tar.gz",
+          "sha256": "7be636370a4b61425a95e1c8ea237dabc15d9aaf5fab1de62054493e21e44f78",
+          "required": true
+        },
+        "x86_64-unknown-linux-gnu": {
+          "version": "20251202",
+          "python_version": "3.11.14",
+          "filename": "cpython-3.11.14+20251202-x86_64-unknown-linux-gnu-install_only.tar.gz",
+          "archive_format": "tar.gz",
+          "extract_dir": "python",
+          "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20251202/cpython-3.11.14+20251202-x86_64-unknown-linux-gnu-install_only.tar.gz",
+          "sha256": "d974d1d53b2e8f5b499df3d8a8ab6505b3ffd96f848487b9ffe249a088a12e0d",
+          "required": true
+        },
+        "aarch64-unknown-linux-gnu": {
+          "version": "20251202",
+          "python_version": "3.11.14",
+          "filename": "cpython-3.11.14+20251202-aarch64-unknown-linux-gnu-install_only.tar.gz",
+          "archive_format": "tar.gz",
+          "extract_dir": "python",
+          "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20251202/cpython-3.11.14+20251202-aarch64-unknown-linux-gnu-install_only.tar.gz",
+          "sha256": "b410ee76ca3b3bef3da451482e77af7364eb1b0f7f2dfce7e2b0747af6bb754c",
+          "required": true
+        },
+        "x86_64-pc-windows-msvc": {
+          "version": "20251202",
+          "python_version": "3.11.14",
+          "filename": "cpython-3.11.14+20251202-x86_64-pc-windows-msvc-install_only.tar.gz",
+          "archive_format": "tar.gz",
+          "extract_dir": "python",
+          "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20251202/cpython-3.11.14+20251202-x86_64-pc-windows-msvc-install_only.tar.gz",
+          "sha256": "7d008539586ab5a2eb40f9a9eea6c16a1c917f90619e81b3dbe5797620f9f8b3",
+          "required": true
+        },
+        "aarch64-pc-windows-msvc": {
+          "version": "20251202",
+          "python_version": "3.11.14",
+          "filename": "cpython-3.11.14+20251202-aarch64-pc-windows-msvc-install_only.tar.gz",
+          "archive_format": "tar.gz",
+          "extract_dir": "python",
+          "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20251202/cpython-3.11.14+20251202-aarch64-pc-windows-msvc-install_only.tar.gz",
+          "sha256": "e01acb5d1f03433311b5ae28572dc8462f539bad3e4e02282fe81596ddc0e180",
+          "required": true
+        }
+      }
+    },
+    "bun": {
+      "platforms": {
+        "aarch64-apple-darwin": {
+          "version": "bun-v1.3.11",
+          "filename": "bun-darwin-aarch64.zip",
+          "archive_format": "zip",
+          "extract_dir": "bun-darwin-aarch64",
+          "url": "https://github.com/oven-sh/bun/releases/download/bun-v1.3.11/bun-darwin-aarch64.zip",
+          "sha256": "6f5a3467ed9caec4795bf78cd476507d9f870c7d57b86c945fcb338126772ffc",
+          "required": true,
+          "executable": "bun"
+        },
+        "x86_64-apple-darwin": {
+          "version": "bun-v1.3.11",
+          "filename": "bun-darwin-x64.zip",
+          "archive_format": "zip",
+          "extract_dir": "bun-darwin-x64",
+          "url": "https://github.com/oven-sh/bun/releases/download/bun-v1.3.11/bun-darwin-x64.zip",
+          "sha256": "c4fe2b9247218b0295f24e895aaec8fee62e74452679a9026b67eacbd611a286",
+          "required": true,
+          "executable": "bun"
+        },
+        "x86_64-unknown-linux-gnu": {
+          "version": "bun-v1.3.11",
+          "filename": "bun-linux-x64.zip",
+          "archive_format": "zip",
+          "extract_dir": "bun-linux-x64",
+          "url": "https://github.com/oven-sh/bun/releases/download/bun-v1.3.11/bun-linux-x64.zip",
+          "sha256": "8611ba935af886f05a6f38740a15160326c15e5d5d07adef966130b4493607ed",
+          "required": true,
+          "executable": "bun"
+        },
+        "aarch64-unknown-linux-gnu": {
+          "version": "bun-v1.3.11",
+          "filename": "bun-linux-aarch64.zip",
+          "archive_format": "zip",
+          "extract_dir": "bun-linux-aarch64",
+          "url": "https://github.com/oven-sh/bun/releases/download/bun-v1.3.11/bun-linux-aarch64.zip",
+          "sha256": "d13944da12a53ecc74bf6a720bd1d04c4555c038dfe422365356a7be47691fdf",
+          "required": true,
+          "executable": "bun"
+        },
+        "x86_64-pc-windows-msvc": {
+          "version": "bun-v1.3.11",
+          "filename": "bun-windows-x64.zip",
+          "archive_format": "zip",
+          "extract_dir": "bun-windows-x64",
+          "url": "https://github.com/oven-sh/bun/releases/download/bun-v1.3.11/bun-windows-x64.zip",
+          "sha256": "066f8694f8b7d8df592452746d18f01710d4053e93030922dbc6e8c34a8c4b9f",
+          "required": true,
+          "executable": "bun.exe"
+        }
+      }
+    },
+    "uv": {
+      "platforms": {
+        "aarch64-apple-darwin": {
+          "version": "0.11.2",
+          "filename": "uv-aarch64-apple-darwin.tar.gz",
+          "archive_format": "tar.gz",
+          "extract_dir": "uv-aarch64-apple-darwin",
+          "url": "https://github.com/astral-sh/uv/releases/download/0.11.2/uv-aarch64-apple-darwin.tar.gz",
+          "sha256": "4beaa9550f93ef7f0fc02f7c28c9c48cd61fe30db00f5ac8947e0a425c3fb282",
+          "required": true,
+          "executable": "uv"
+        },
+        "x86_64-apple-darwin": {
+          "version": "0.11.2",
+          "filename": "uv-x86_64-apple-darwin.tar.gz",
+          "archive_format": "tar.gz",
+          "extract_dir": "uv-x86_64-apple-darwin",
+          "url": "https://github.com/astral-sh/uv/releases/download/0.11.2/uv-x86_64-apple-darwin.tar.gz",
+          "sha256": "a9c3653245031304c50dd60ac0301bf6c112e12c38c32302a71d4fa6a63ba2cb",
+          "required": true,
+          "executable": "uv"
+        },
+        "x86_64-unknown-linux-gnu": {
+          "version": "0.11.2",
+          "filename": "uv-x86_64-unknown-linux-gnu.tar.gz",
+          "archive_format": "tar.gz",
+          "extract_dir": "uv-x86_64-unknown-linux-gnu",
+          "url": "https://github.com/astral-sh/uv/releases/download/0.11.2/uv-x86_64-unknown-linux-gnu.tar.gz",
+          "sha256": "7ac2ca0449c8d68dae9b99e635cd3bc9b22a4cb1de64b7c43716398447d42981",
+          "required": true,
+          "executable": "uv"
+        },
+        "aarch64-unknown-linux-gnu": {
+          "version": "0.11.2",
+          "filename": "uv-aarch64-unknown-linux-gnu.tar.gz",
+          "archive_format": "tar.gz",
+          "extract_dir": "uv-aarch64-unknown-linux-gnu",
+          "url": "https://github.com/astral-sh/uv/releases/download/0.11.2/uv-aarch64-unknown-linux-gnu.tar.gz",
+          "sha256": "04792cac761c4a6ba78267f36f2af541b7f92196d42ac55d21d3ff6b0f5ab6a5",
+          "required": true,
+          "executable": "uv"
+        },
+        "x86_64-pc-windows-msvc": {
+          "version": "0.11.2",
+          "filename": "uv-x86_64-pc-windows-msvc.zip",
+          "archive_format": "zip",
+          "extract_dir": "uv-x86_64-pc-windows-msvc",
+          "url": "https://github.com/astral-sh/uv/releases/download/0.11.2/uv-x86_64-pc-windows-msvc.zip",
+          "sha256": "171b7ccda1bbd562da6babeffcf533a1c6cc7862cf998da826e1db534fc43e48",
+          "required": true,
+          "executable": "uv.exe"
+        },
+        "aarch64-pc-windows-msvc": {
+          "version": "0.11.2",
+          "filename": "uv-aarch64-pc-windows-msvc.zip",
+          "archive_format": "zip",
+          "extract_dir": "uv-aarch64-pc-windows-msvc",
+          "url": "https://github.com/astral-sh/uv/releases/download/0.11.2/uv-aarch64-pc-windows-msvc.zip",
+          "sha256": "ffdded8338205f53727b51d404563a5ac8eaa9aea53279a7b7c42177e11d478c",
+          "required": true,
+          "executable": "uv.exe"
+        }
+      }
+    },
+    "opencode": {
+      "platforms": {
+        "aarch64-apple-darwin": {
+          "version": "v1.3.10",
+          "filename": "opencode-darwin-arm64.zip",
+          "archive_format": "zip",
+          "extract_dir": "opencode-darwin-arm64",
+          "url": "https://github.com/anomalyco/opencode/releases/download/v1.3.10/opencode-darwin-arm64.zip",
+          "sha256": "944a4970f0e962132027662c4769e70873b8a358ab8db492676aaf9a527ad7b9",
+          "required": true,
+          "executable": "opencode"
+        },
+        "x86_64-apple-darwin": {
+          "version": "v1.3.10",
+          "filename": "opencode-darwin-x64.zip",
+          "archive_format": "zip",
+          "extract_dir": "opencode-darwin-x64",
+          "url": "https://github.com/anomalyco/opencode/releases/download/v1.3.10/opencode-darwin-x64.zip",
+          "sha256": "3ac437921f1c38879e85be0fbbbaaaf61795ff5adb4347e6acf25ca790c0a7eb",
+          "required": true,
+          "executable": "opencode"
+        },
+        "x86_64-unknown-linux-gnu": {
+          "version": "v1.3.10",
+          "filename": "opencode-linux-x64.tar.gz",
+          "archive_format": "tar.gz",
+          "extract_dir": "opencode-linux-x64",
+          "url": "https://github.com/anomalyco/opencode/releases/download/v1.3.10/opencode-linux-x64.tar.gz",
+          "sha256": "ba53196de632142a86b1df77a0777fae313620ac8fe54d11c83c310d4aeeca74",
+          "required": true,
+          "executable": "opencode"
+        },
+        "aarch64-unknown-linux-gnu": {
+          "version": "v1.3.10",
+          "filename": "opencode-linux-arm64.tar.gz",
+          "archive_format": "tar.gz",
+          "extract_dir": "opencode-linux-arm64",
+          "url": "https://github.com/anomalyco/opencode/releases/download/v1.3.10/opencode-linux-arm64.tar.gz",
+          "sha256": "2d9a3390e978a01306a9b0b66a5e0f2024412405b1920228ba88016fa9320f28",
+          "required": true,
+          "executable": "opencode"
+        },
+        "x86_64-pc-windows-msvc": {
+          "version": "v1.3.10",
+          "filename": "opencode-windows-x64.zip",
+          "archive_format": "zip",
+          "extract_dir": "opencode-windows-x64",
+          "url": "https://github.com/anomalyco/opencode/releases/download/v1.3.10/opencode-windows-x64.zip",
+          "sha256": "12e6c7deb86a24f0be6d9339070de92e2d863187ecc013a493d2aca27ab7e8f2",
+          "required": true,
+          "executable": "opencode.exe"
+        }
+      }
+    }
+  }
+}
