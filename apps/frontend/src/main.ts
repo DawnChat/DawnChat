@@ -1,12 +1,3 @@
-import { createApp } from 'vue'
-import { createPinia } from 'pinia'
-import './style.css'
-import App from './App.vue'
-import { initBackendUrl } from './utils/backendUrl'
-import { logger } from './utils/logger'
-import { router } from './app/router'
-import { normalizeAuthCallbackHash } from './app/router/deepLink'
-
 const serializeUnknownError = (error: unknown) => {
   if (error instanceof Error) {
     return {
@@ -27,8 +18,30 @@ const serializeUnknownError = (error: unknown) => {
   return error
 }
 
+const writeBootstrapLog = (event: string, data?: unknown) => {
+  const timestamp = new Date().toISOString()
+  let line = `[${timestamp}] [BOOTSTRAP] ${event}`
+  if (data !== undefined) {
+    try {
+      line += `\n${JSON.stringify(data, null, 2)}`
+    } catch {
+      line += `\n${String(data)}`
+    }
+  }
+
+  console.info(line)
+
+  const invoke = (window as any).__TAURI_INTERNALS__?.invoke
+  if (typeof invoke === 'function') {
+    void invoke('append_frontend_log', { line }).catch((error: unknown) => {
+      console.error('[bootstrap] append_frontend_log failed')
+      console.error(error)
+    })
+  }
+}
+
 window.addEventListener('error', (event) => {
-  logger.error('window_error', {
+  writeBootstrapLog('window_error', {
     message: event.message,
     filename: event.filename,
     lineno: event.lineno,
@@ -38,40 +51,22 @@ window.addEventListener('error', (event) => {
 })
 
 window.addEventListener('unhandledrejection', (event) => {
-  logger.error('window_unhandledrejection', {
+  writeBootstrapLog('window_unhandledrejection', {
     reason: serializeUnknownError(event.reason)
   })
 })
 
-const startApp = async () => {
-  if (normalizeAuthCallbackHash()) {
-    return
-  }
+void (async () => {
+  writeBootstrapLog('frontend_bootstrap_loaded', {
+    href: typeof window.location?.href === 'string' ? window.location.href : undefined,
+    tauri: '__TAURI_INTERNALS__' in window
+  })
 
-  await initBackendUrl()
-  const app = createApp(App)
-  const pinia = createPinia()
-  app.config.errorHandler = (error, instance, info) => {
-    const componentType = (instance as any)?.$?.type
-    const componentName =
-      componentType && typeof componentType === 'object'
-        ? String(componentType.name ?? 'anonymous_component')
-        : undefined
-
-    logger.error('vue_runtime_error', {
-      info,
-      component: componentName,
-      error: serializeUnknownError(error)
-    })
-  }
-  app.use(pinia)
-  app.use(router)
-  await router.isReady()
-  app.mount('#app')
-}
-
-void startApp().catch((error) => {
-  logger.error('start_app_failed', {
+  const { startApp } = await import('./main-app')
+  writeBootstrapLog('main_app_import_succeeded')
+  await startApp()
+})().catch((error) => {
+  writeBootstrapLog('main_app_import_or_start_failed', {
     error: serializeUnknownError(error)
   })
 })
