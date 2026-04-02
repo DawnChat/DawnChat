@@ -23,8 +23,10 @@ class _InstructionResolverStub:
 
 @pytest.mark.asyncio
 async def test_compose_builds_baseline_with_resolved_instructions(monkeypatch) -> None:
-    async def _get_api_key(provider_id: str):
+    async def _get_marked_api_key(provider_id: str):
         return "sk-test" if provider_id == "openai" else None
+    async def _list_providers_with_key_marker():
+        return ["openai"]
 
     async def _get_app_config(key: str):
         if key == "provider.openai.enabled_models":
@@ -34,7 +36,8 @@ async def test_compose_builds_baseline_with_resolved_instructions(monkeypatch) -
     async def _get_config(key: str):
         return None
 
-    monkeypatch.setattr(storage_manager, "get_api_key", _get_api_key)
+    monkeypatch.setattr(storage_manager, "get_marked_api_key", _get_marked_api_key)
+    monkeypatch.setattr(storage_manager, "list_providers_with_key_marker", _list_providers_with_key_marker)
     monkeypatch.setattr(storage_manager, "get_app_config", _get_app_config)
     monkeypatch.setattr(storage_manager, "get_config", _get_config)
 
@@ -60,8 +63,10 @@ async def test_compose_builds_baseline_with_resolved_instructions(monkeypatch) -
 
 @pytest.mark.asyncio
 async def test_compose_can_disable_shared_instructions(monkeypatch) -> None:
-    async def _get_api_key(provider_id: str):
+    async def _get_marked_api_key(provider_id: str):
         return "sk-test" if provider_id == "openai" else None
+    async def _list_providers_with_key_marker():
+        return ["openai"]
 
     async def _get_app_config(key: str):
         if key == "provider.openai.enabled_models":
@@ -71,7 +76,8 @@ async def test_compose_can_disable_shared_instructions(monkeypatch) -> None:
     async def _get_config(key: str):
         return None
 
-    monkeypatch.setattr(storage_manager, "get_api_key", _get_api_key)
+    monkeypatch.setattr(storage_manager, "get_marked_api_key", _get_marked_api_key)
+    monkeypatch.setattr(storage_manager, "list_providers_with_key_marker", _list_providers_with_key_marker)
     monkeypatch.setattr(storage_manager, "get_app_config", _get_app_config)
     monkeypatch.setattr(storage_manager, "get_config", _get_config)
 
@@ -92,8 +98,10 @@ async def test_compose_can_disable_shared_instructions(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_compose_injects_plugin_backend_mcp_for_plugin_workspace(monkeypatch) -> None:
-    async def _get_api_key(provider_id: str):
+    async def _get_marked_api_key(provider_id: str):
         return "sk-test" if provider_id == "openai" else None
+    async def _list_providers_with_key_marker():
+        return ["openai"]
 
     async def _get_app_config(key: str):
         if key == "provider.openai.enabled_models":
@@ -103,7 +111,8 @@ async def test_compose_injects_plugin_backend_mcp_for_plugin_workspace(monkeypat
     async def _get_config(key: str):
         return None
 
-    monkeypatch.setattr(storage_manager, "get_api_key", _get_api_key)
+    monkeypatch.setattr(storage_manager, "get_marked_api_key", _get_marked_api_key)
+    monkeypatch.setattr(storage_manager, "list_providers_with_key_marker", _list_providers_with_key_marker)
     monkeypatch.setattr(storage_manager, "get_app_config", _get_app_config)
     monkeypatch.setattr(storage_manager, "get_config", _get_config)
 
@@ -137,8 +146,10 @@ async def test_compose_injects_plugin_backend_mcp_for_plugin_workspace(monkeypat
 
 @pytest.mark.asyncio
 async def test_compose_injects_plugin_mcp_by_default_without_plugin_context(monkeypatch) -> None:
-    async def _get_api_key(provider_id: str):
+    async def _get_marked_api_key(provider_id: str):
         return "sk-test" if provider_id == "openai" else None
+    async def _list_providers_with_key_marker():
+        return ["openai"]
 
     async def _get_app_config(key: str):
         if key == "provider.openai.enabled_models":
@@ -148,7 +159,8 @@ async def test_compose_injects_plugin_mcp_by_default_without_plugin_context(monk
     async def _get_config(key: str):
         return None
 
-    monkeypatch.setattr(storage_manager, "get_api_key", _get_api_key)
+    monkeypatch.setattr(storage_manager, "get_marked_api_key", _get_marked_api_key)
+    monkeypatch.setattr(storage_manager, "list_providers_with_key_marker", _list_providers_with_key_marker)
     monkeypatch.setattr(storage_manager, "get_app_config", _get_app_config)
     monkeypatch.setattr(storage_manager, "get_config", _get_config)
 
@@ -166,3 +178,36 @@ async def test_compose_injects_plugin_mcp_by_default_without_plugin_context(monk
     python_injected = result.config["mcp"]["dawnchat_plugin_python"]
     assert python_injected["url"] == "http://127.0.0.1:7777/api/opencode/mcp/plugin/__default_plugin__/python"
     assert python_injected["headers"]["X-DawnChat-Plugin-ID"] == "__default_plugin__"
+
+
+@pytest.mark.asyncio
+async def test_compose_skips_unmarked_providers(monkeypatch) -> None:
+    read_candidates: list[str] = []
+
+    async def _get_marked_api_key(provider_id: str):
+        read_candidates.append(provider_id)
+        if provider_id == "openai":
+            return "sk-test"
+        return None
+
+    async def _list_providers_with_key_marker():
+        return ["openai"]
+
+    async def _get_app_config(key: str):
+        if key == "provider.openai.enabled_models":
+            return ["gpt-4o-mini"]
+        return None
+
+    async def _get_config(key: str):
+        return None
+
+    monkeypatch.setattr(storage_manager, "get_marked_api_key", _get_marked_api_key)
+    monkeypatch.setattr(storage_manager, "list_providers_with_key_marker", _list_providers_with_key_marker)
+    monkeypatch.setattr(storage_manager, "get_app_config", _get_app_config)
+    monkeypatch.setattr(storage_manager, "get_config", _get_config)
+
+    composer = OpenCodeBaselineConfigComposer(_InstructionResolverStub())
+    result = await composer.compose(host="127.0.0.1", port=4096, workspace=Path("/tmp/demo"))
+
+    assert "openai" in result.config["provider"]
+    assert read_candidates == ["openai"]

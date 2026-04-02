@@ -454,6 +454,10 @@ class OpenCodeManager:
     def _clear_quarantine_if_needed(binary_path: Path) -> None:
         if platform.system() != "Darwin":
             return
+        run_mode = str(os.getenv("DAWNCHAT_RUN_MODE", "")).strip().lower()
+        if Config.IS_PBS_APP and run_mode == "release":
+            logger.info("正式 release 环境，跳过 OpenCode quarantine 清理: %s", binary_path)
+            return
         try:
             result = subprocess.run(
                 ["xattr", "-d", "com.apple.quarantine", str(binary_path)],

@@ -6,6 +6,7 @@
 
 from pathlib import Path
 import sqlite3
+import time
 from typing import Optional
 
 from sqlmodel import SQLModel, create_engine
@@ -28,6 +29,9 @@ class StorageManager:
     """
     
     _instance: Optional['StorageManager'] = None
+    _API_KEY_MARKER_PREFIX = "provider."
+    _API_KEY_MARKER_SUFFIX = ".has_key"
+    _API_KEY_CACHE_TTL_SECONDS = 300
     
     def __new__(cls):
         """单例模式"""
@@ -41,6 +45,7 @@ class StorageManager:
             return
         
         self._initialized = True
+        self._api_key_cache: dict[str, tuple[str, float]] = {}
         
         # 确保存储目录存在
         Config.ensure_directories()
@@ -172,7 +177,19 @@ class StorageManager:
         Returns:
             API 密钥或 None
         """
-        return await self.secure_storage.get(f"{provider}_api_key")
+        normalized_provider = str(provider or "").strip()
+        if not normalized_provider:
+            return None
+        cached_value = self._get_cached_api_key(normalized_provider)
+        if cached_value is not None:
+            return cached_value
+        value = await self.secure_storage.get(f"{normalized_provider}_api_key")
+        if isinstance(value, str) and value.strip():
+            normalized_value = value.strip()
+            self._set_cached_api_key(normalized_provider, normalized_value)
+            return normalized_value
+        self._invalidate_api_key_cache(normalized_provider)
+        return None
     
     async def set_api_key(self, provider: str, api_key: str) -> None:
         """
@@ -182,8 +199,14 @@ class StorageManager:
             provider: 提供商名称
             api_key: API 密钥
         """
-        await self.secure_storage.set(f"{provider}_api_key", api_key)
-        logger.info(f"API 密钥已设置: {provider}")
+        normalized_provider = str(provider or "").strip()
+        normalized_key = str(api_key or "").strip()
+        if not normalized_provider or not normalized_key:
+            raise ValueError("provider 和 api_key 不能为空")
+        await self.secure_storage.set(f"{normalized_provider}_api_key", normalized_key)
+        await self.set_provider_has_key(normalized_provider, True)
+        self._set_cached_api_key(normalized_provider, normalized_key)
+        logger.info(f"API 密钥已设置: {normalized_provider}")
     
     async def delete_api_key(self, provider: str) -> bool:
         """
@@ -195,10 +218,97 @@ class StorageManager:
         Returns:
             是否删除成功
         """
-        result = await self.secure_storage.delete(f"{provider}_api_key")
+        normalized_provider = str(provider or "").strip()
+        if not normalized_provider:
+            return False
+        result = await self.secure_storage.delete(f"{normalized_provider}_api_key")
         if result:
-            logger.info(f"API 密钥已删除: {provider}")
+            await self.set_provider_has_key(normalized_provider, False)
+            self._invalidate_api_key_cache(normalized_provider)
+            logger.info(f"API 密钥已删除: {normalized_provider}")
         return result
+
+    def _provider_has_key_config_key(self, provider: str) -> str:
+        return f"{self._API_KEY_MARKER_PREFIX}{provider}{self._API_KEY_MARKER_SUFFIX}"
+
+    def _provider_from_marker_key(self, marker_key: str) -> str:
+        if (
+            not marker_key.startswith(self._API_KEY_MARKER_PREFIX)
+            or not marker_key.endswith(self._API_KEY_MARKER_SUFFIX)
+        ):
+            return ""
+        return marker_key[
+            len(self._API_KEY_MARKER_PREFIX) : len(marker_key) - len(self._API_KEY_MARKER_SUFFIX)
+        ]
+
+    def _get_cached_api_key(self, provider: str) -> Optional[str]:
+        cached = self._api_key_cache.get(provider)
+        if not cached:
+            return None
+        value, expires_at = cached
+        if time.monotonic() >= expires_at:
+            self._api_key_cache.pop(provider, None)
+            return None
+        return value
+
+    def _set_cached_api_key(self, provider: str, api_key: str) -> None:
+        self._api_key_cache[provider] = (
+            api_key,
+            time.monotonic() + self._API_KEY_CACHE_TTL_SECONDS,
+        )
+
+    def _invalidate_api_key_cache(self, provider: str) -> None:
+        self._api_key_cache.pop(provider, None)
+
+    async def get_provider_has_key(self, provider: str) -> bool:
+        """读取 provider 是否可能存在 API Key 的本地标记。"""
+        normalized_provider = str(provider or "").strip()
+        if not normalized_provider:
+            return False
+        marker_key = self._provider_has_key_config_key(normalized_provider)
+        value = await self.get_app_config(marker_key, False)
+        return bool(value is True)
+
+    async def set_provider_has_key(self, provider: str, has_key: bool) -> None:
+        """设置 provider API Key 存在标记。"""
+        normalized_provider = str(provider or "").strip()
+        if not normalized_provider:
+            return
+        marker_key = self._provider_has_key_config_key(normalized_provider)
+        await self.set_app_config(marker_key, bool(has_key))
+
+    async def list_providers_with_key_marker(self) -> list[str]:
+        """列出所有 has_key=true 的 provider。"""
+        provider_list: list[str] = []
+        try:
+            prefix_entries = await self.config_storage.get_by_prefix(self._API_KEY_MARKER_PREFIX)
+            for key, value in prefix_entries.items():
+                if value is not True:
+                    continue
+                provider = self._provider_from_marker_key(str(key))
+                if provider:
+                    provider_list.append(provider)
+        except Exception as exc:
+            logger.warning(f"读取 provider key 标记失败: {exc}")
+        return sorted(set(provider_list))
+
+    async def get_marked_api_key(self, provider: str) -> Optional[str]:
+        """
+        仅当 has_key 标记为 true 时读取 keyring，并在缺失时执行自愈回写。
+        """
+        normalized_provider = str(provider or "").strip()
+        if not normalized_provider:
+            return None
+        has_key = await self.get_provider_has_key(normalized_provider)
+        if not has_key:
+            return None
+        value = await self.get_api_key(normalized_provider)
+        if value:
+            return value
+        await self.set_provider_has_key(normalized_provider, False)
+        self._invalidate_api_key_cache(normalized_provider)
+        logger.info(f"检测到 Key 标记漂移，已自愈回写 has_key=false: {normalized_provider}")
+        return None
     
     # --- 用户管理 ---
     

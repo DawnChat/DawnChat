@@ -63,12 +63,18 @@ pub fn spawn_python_backend(
         .parent()
         .map(|path| path.to_string_lossy().to_string())
         .unwrap_or_else(|| sidecar_dir.display().to_string());
+    let dawnchat_run_mode = if cfg!(debug_assertions) {
+        "development"
+    } else {
+        "release"
+    };
 
     command
         .arg(main_script)
         .env("PYTHONHOME", &python_home)
         .env("PYTHONPATH", &pythonpath)
         .env("PYTHONDONTWRITEBYTECODE", "1")
+        .env("DAWNCHAT_RUN_MODE", dawnchat_run_mode)
         .env("DAWNCHAT_PARENT_PID", std::process::id().to_string())
         .env("DAWNCHAT_API_HOST", api_host)
         .env("DAWNCHAT_API_PORT", api_port.to_string())

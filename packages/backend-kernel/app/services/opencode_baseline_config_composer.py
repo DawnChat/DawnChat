@@ -27,7 +27,7 @@ class OpenCodeBaselineConfigComposer:
 
     async def _get_provider_api_key(self, provider_id: str, aliases: tuple[str, ...] = ()) -> Optional[str]:
         for candidate in (provider_id, *aliases):
-            api_key = await storage_manager.get_api_key(candidate)
+            api_key = await storage_manager.get_marked_api_key(candidate)
             if isinstance(api_key, str) and api_key.strip():
                 return api_key.strip()
         return None
@@ -86,9 +86,15 @@ class OpenCodeBaselineConfigComposer:
         default_model: Optional[str] = None
         available_models: set[str] = set()
         configured_providers: set[str] = set()
+        marked_provider_ids = set(await storage_manager.list_providers_with_key_marker())
+        marker_candidate_count = 0
 
         for provider_id, provider in SUPPORTED_PROVIDERS.items():
             aliases: tuple[str, ...] = ("google",) if provider_id == "gemini" else ()
+            candidates = (provider_id, *aliases)
+            if not any(candidate in marked_provider_ids for candidate in candidates):
+                continue
+            marker_candidate_count += 1
             api_key = await self._get_provider_api_key(provider_id, aliases)
             if not api_key:
                 continue
@@ -242,6 +248,12 @@ class OpenCodeBaselineConfigComposer:
             effective_plugin_id,
             plugin_id != effective_plugin_id,
             ["dawnchat_plugin_backend", "dawnchat_plugin_python"],
+        )
+        logger.info(
+            "OpenCode provider config built: markers=%s marker_candidates=%s configured=%s",
+            len(marked_provider_ids),
+            marker_candidate_count,
+            len(configured_providers),
         )
         return BaselineComposeResult(
             config=baseline,

@@ -139,11 +139,8 @@ def create_secure_storage(namespace: str = "DawnChat") -> BaseSecureStorage:
     Returns:
         安全存储实例
     """
-    # 优先尝试使用 keyring
+    # 优先尝试使用 keyring（惰性可用性校验，避免启动阶段触发系统权限弹窗）
     try:
-        import keyring
-        # 测试 keyring 是否可用
-        keyring.get_password("_dawnchat_test_", "_test_")
         storage: BaseSecureStorage = KeyringSecureStorage(namespace=namespace)
         logger.info("使用 Keyring 安全存储")
         return storage
