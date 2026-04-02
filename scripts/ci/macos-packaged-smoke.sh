@@ -98,14 +98,19 @@ if [[ -z "$APP_MOUNT_POINT" ]]; then
 fi
 print_info "Mounted DMG: $APP_MOUNT_POINT"
 
-APP_BUNDLE_PATH="$(ls "$APP_MOUNT_POINT"/*.app 2>/dev/null | sed -n '1p')"
-if [[ -z "$APP_BUNDLE_PATH" ]]; then
+shopt -s nullglob
+app_candidates=("$APP_MOUNT_POINT"/*.app)
+shopt -u nullglob
+print_info "Detected app candidates: ${app_candidates[*]:-(none)}"
+if [[ ${#app_candidates[@]} -eq 0 ]]; then
     fail_with_logs "DMG 中未找到 .app 产物"
 fi
+APP_BUNDLE_PATH="${app_candidates[0]}"
+print_info "Selected app bundle: $APP_BUNDLE_PATH"
 
 APP_WORK_DIR="$(mktemp -d)"
 APP_LOCAL_PATH="$APP_WORK_DIR/$(basename "$APP_BUNDLE_PATH")"
-cp -R "$APP_BUNDLE_PATH" "$APP_LOCAL_PATH"
+ditto "$APP_BUNDLE_PATH" "$APP_LOCAL_PATH"
 print_info "Copied app bundle: $APP_LOCAL_PATH"
 
 APP_EXECUTABLE_NAME="$(ls "$APP_LOCAL_PATH/Contents/MacOS" 2>/dev/null | sed -n '1p')"
