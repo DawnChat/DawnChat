@@ -638,17 +638,13 @@ install_python_deps() {
     local release_requirements_path="$BACKEND_DIR/requirements-release.txt"
     local install_requirements_path="requirements.txt"
 
-    # 检查 pyproject.toml 是否比 poetry.lock 新
+    # 检查 lock 文件是否存在（不使用 mtime，避免 CI checkout 时间戳误报）
     local pyproject_path="$BACKEND_DIR/pyproject.toml"
     local lock_path="$BACKEND_DIR/poetry.lock"
-    
-    if [[ -f "$pyproject_path" && -f "$lock_path" ]]; then
-        if [[ "$pyproject_path" -nt "$lock_path" ]]; then
-            print_error "检测到 pyproject.toml 已更新，但 poetry.lock 未更新"
-            print_error "为保证可复现构建，build.sh 不会自动执行 poetry lock"
-            print_error "请先手动运行: cd $BACKEND_DIR && poetry lock"
-            exit 1
-        fi
+
+    if [[ ! -f "$pyproject_path" || ! -f "$lock_path" ]]; then
+        print_error "缺少 pyproject.toml 或 poetry.lock，无法执行可复现依赖安装"
+        exit 1
     fi
 
     # 检查 poetry export 是否可用
