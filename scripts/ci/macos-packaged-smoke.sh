@@ -149,12 +149,12 @@ PORT="$BACKEND_PORT" \
 "$PYTHON_BIN" "$MAIN_SCRIPT" >"$BACKEND_LOG_PATH" 2>&1 &
 BACKEND_PID="$!"
 
-if ! wait_for_http_ok "http://$BACKEND_HOST:$BACKEND_PORT/frontend/health" "$SMOKE_TIMEOUT_SECONDS"; then
+if ! wait_for_http_ok "http://$BACKEND_HOST:$BACKEND_PORT/api/frontend/health" "$SMOKE_TIMEOUT_SECONDS"; then
     fail_with_logs "backend health 检查失败"
 fi
 print_info "Backend health passed"
 
-if ! wait_for_http_ok "http://$BACKEND_HOST:$BACKEND_PORT/opencode/health" "$SMOKE_TIMEOUT_SECONDS"; then
+if ! wait_for_http_ok "http://$BACKEND_HOST:$BACKEND_PORT/api/opencode/health" "$SMOKE_TIMEOUT_SECONDS"; then
     fail_with_logs "opencode health 检查失败"
 fi
 print_info "OpenCode health passed"
