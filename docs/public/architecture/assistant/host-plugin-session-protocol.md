@@ -225,6 +225,50 @@ For interactive or recoverable flows, the recommended external calling pattern i
    - `since_seq=continuation_hint.event_cursor_seq`
 6. use `dawnchat.ui.session.status` for explicit snapshot reads, not as the only waiting mechanism
 
+Example follow-up after resume:
+
+```json
+{
+  "tool": "dawnchat.ui.session.wait",
+  "arguments": {
+    "session_id": "sess_runtime",
+    "wait_for": "runtime_event",
+    "event_types": ["assistant.guide.confirm.responded"],
+    "match": {
+      "confirm_id": "confirm-delete"
+    },
+    "since_seq": 7,
+    "timeout_ms": 30000
+  }
+}
+```
+
+And the corresponding recovery hint shape:
+
+```json
+{
+  "continuation_hint": {
+    "last_completed_step_index": 2,
+    "event_cursor_seq": 7,
+    "pending_wait": {
+      "action_type": "flow.wait",
+      "session_id": "sess_runtime",
+      "step_id": "step-confirm",
+      "event_types": ["assistant.guide.confirm.responded"],
+      "match": {
+        "confirm_id": "confirm-delete"
+      }
+    }
+  }
+}
+```
+
+The important rule is:
+
+- `continuation_hint` tells the caller where to resume observation.
+- `session.wait` remains the passive waiting surface.
+- workspace state and checkpoint snapshots remain the durable source of truth after recovery.
+
 This keeps the contract narrow:
 
 - `status` remains the snapshot tool,

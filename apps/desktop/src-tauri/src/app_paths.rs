@@ -56,6 +56,10 @@ pub fn python_log_path() -> io::Result<PathBuf> {
     Ok(ensure_user_logs_dir()?.join("DawnChat_Python.log"))
 }
 
+pub fn frontend_log_path() -> io::Result<PathBuf> {
+    Ok(ensure_user_logs_dir()?.join("DawnChat_Frontend.log"))
+}
+
 pub fn crash_log_path() -> io::Result<PathBuf> {
     Ok(ensure_user_logs_dir()?.join("DawnChat_crash.log"))
 }

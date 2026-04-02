@@ -112,7 +112,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::get_backend_url,
             commands::consume_pending_auth_callback,
-            commands::set_native_theme
+            commands::set_native_theme,
+            commands::append_frontend_log
         ])
         .setup(|app| {
             info!("🚀 DawnChat 应用启动");

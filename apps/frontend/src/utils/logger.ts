@@ -33,6 +33,7 @@ class Logger {
   private flushTimer: number | null = null
   private flushInFlight = false
   private backoffMs = 500
+  private hasReportedLocalWriteFailure = false
 
   private createSessionId(): string {
     const randomUUID = (globalThis.crypto as any)?.randomUUID
@@ -51,13 +52,50 @@ class Logger {
     
     if (data !== undefined) {
       if (typeof data === 'object') {
-        logLine += '\n' + JSON.stringify(data, null, 2)
+        logLine += '\n' + this.stringifyData(data)
       } else {
         logLine += ' ' + String(data)
       }
     }
     
     return logLine
+  }
+
+  private stringifyData(data: any): string {
+    try {
+      return JSON.stringify(data, null, 2)
+    } catch {
+      return String(data)
+    }
+  }
+
+  private isTauriRuntime(): boolean {
+    return '__TAURI_INTERNALS__' in window
+  }
+
+  private buildMeta(): FrontendLogMeta {
+    return {
+      runtime: this.isTauriRuntime() ? 'tauri' : 'web',
+      page: typeof window.location?.pathname === 'string' ? window.location.pathname : undefined,
+      session_id: this.sessionId,
+      client: '@dawnchat/frontend'
+    }
+  }
+
+  private writeToLocalFile(logLine: string) {
+    const invoke = (window as any).__TAURI_INTERNALS__?.invoke
+    if (typeof invoke !== 'function') {
+      return
+    }
+
+    void invoke('append_frontend_log', { line: logLine }).catch((error: unknown) => {
+      if (this.hasReportedLocalWriteFailure) {
+        return
+      }
+      this.hasReportedLocalWriteFailure = true
+      console.error('[Logger] Failed to write frontend log to local file')
+      console.error(error)
+    })
   }
 
   private enqueueToBackend(entry: FrontendLogEntry) {
@@ -156,17 +194,14 @@ class Logger {
         if (data) console.log(data)
     }
 
+    this.writeToLocalFile(logLine)
+
     this.enqueueToBackend({
       level: level as FrontendLogLevel,
       message,
       data,
       timestamp: new Date().toISOString(),
-      meta: {
-        runtime: '__TAURI_INTERNALS__' in window ? 'tauri' : 'web',
-        page: typeof window.location?.pathname === 'string' ? window.location.pathname : undefined,
-        session_id: this.sessionId,
-        client: '@dawnchat/frontend'
-      }
+      meta: this.buildMeta()
     })
   }
 

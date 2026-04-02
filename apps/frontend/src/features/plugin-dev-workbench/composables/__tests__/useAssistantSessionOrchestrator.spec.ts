@@ -879,6 +879,123 @@ describe('useAssistantSessionOrchestrator', () => {
     })
   })
 
+  it('uses continuation_hint.event_cursor_seq for confirm wait follow-up', async () => {
+    let resolveStep: ((value: Record<string, unknown>) => void) | null = null
+    const continuationHint = {
+      event_cursor_seq: 7,
+      pending_wait: {
+        action_type: 'flow.wait',
+        session_id: 'sess-runtime',
+        event_types: ['assistant.guide.confirm.responded'],
+        match: {
+          confirm_id: 'confirm-delete',
+        },
+      },
+    }
+    const executePluginCapability = vi.fn(async (invoke) => {
+      if (invoke.functionName === 'assistant.session_step_execute') {
+        return await new Promise<Record<string, unknown>>((resolve) => {
+          resolveStep = resolve
+        })
+      }
+      if (invoke.functionName === 'assistant.runtime.event.peek') {
+        return {
+          ok: true,
+          data: {
+            latest_seq: 8,
+            events: [
+              {
+                seq: 8,
+                type: 'assistant.guide.confirm.responded',
+                session_id: 'sess-runtime',
+                payload: {
+                  confirm_id: 'confirm-delete',
+                  confirmed: true,
+                  response: 'confirmed',
+                },
+              },
+            ],
+          },
+        }
+      }
+      return {
+        ok: false,
+        error_code: 'unsupported',
+        message: 'unsupported',
+      }
+    })
+    const orchestrator = useAssistantSessionOrchestrator({
+      pluginId: computed(() => 'com.demo.plugin'),
+    })
+    const startResult = await orchestrator.handleCapabilityInvokeRequest(
+      createContext(
+        'assistant.session.start',
+        {
+          steps: [
+            {
+              action: {
+                type: 'guide.card.show',
+                payload: {
+                  card_type: 'confirm',
+                },
+              },
+            },
+          ],
+        },
+        executePluginCapability
+      )
+    )
+    const sessionId = String(
+      ((startResult as Record<string, unknown>).data as Record<string, unknown>).session_id || ''
+    )
+    const waitResult = await orchestrator.handleCapabilityInvokeRequest(
+      createContext(
+        'assistant.session.wait',
+        {
+          session_id: sessionId,
+          wait_for: 'runtime_event',
+          event_types: continuationHint.pending_wait.event_types,
+          match: continuationHint.pending_wait.match,
+          since_seq: continuationHint.event_cursor_seq,
+        },
+        executePluginCapability
+      )
+    )
+    expect(waitResult).toEqual({
+      ok: true,
+      data: expect.objectContaining({
+        session_id: sessionId,
+        wait_for: 'runtime_event',
+        status: 'matched',
+        latest_seq: 8,
+        matched_event: expect.objectContaining({
+          type: 'assistant.guide.confirm.responded',
+          payload: expect.objectContaining({
+            confirm_id: 'confirm-delete',
+            confirmed: true,
+          }),
+        }),
+      }),
+    })
+    expect(executePluginCapability).toHaveBeenCalledWith(
+      expect.objectContaining({
+        functionName: 'assistant.runtime.event.peek',
+        payload: expect.objectContaining({
+          session_id: sessionId,
+          since_seq: continuationHint.event_cursor_seq,
+          event_types: ['assistant.guide.confirm.responded'],
+          match: {
+            confirm_id: 'confirm-delete',
+          },
+        }),
+      })
+    )
+    resolvePendingStep(resolveStep, {
+      ok: true,
+      data: { status: 'applied' },
+    })
+  })
+
   it('returns timed_out when runtime events do not arrive before timeout', async () => {
     vi.useFakeTimers()
     let resolveStep: ((value: Record<string, unknown>) => void) | null = null
