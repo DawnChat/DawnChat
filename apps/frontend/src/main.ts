@@ -52,9 +52,15 @@ const startApp = async () => {
   const app = createApp(App)
   const pinia = createPinia()
   app.config.errorHandler = (error, instance, info) => {
+    const componentType = (instance as any)?.$?.type
+    const componentName =
+      componentType && typeof componentType === 'object'
+        ? String(componentType.name ?? 'anonymous_component')
+        : undefined
+
     logger.error('vue_runtime_error', {
       info,
-      component: instance?.type ? String((instance.type as any).name ?? 'anonymous_component') : undefined,
+      component: componentName,
       error: serializeUnknownError(error)
     })
   }
