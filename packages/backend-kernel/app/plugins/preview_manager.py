@@ -35,6 +35,9 @@ from .preview import PreviewSession, PreviewStrategyRegistry
 
 logger = get_logger("plugin_preview_manager")
 
+FRONTEND_PROBE_TIMEOUT_SECONDS = 8.0
+FRONTEND_PROBE_INTERVAL_SECONDS = 0.25
+
 
 class _SourceChangeHandler(FileSystemEventHandler):
     def __init__(self, queue: asyncio.Queue[str], loop: asyncio.AbstractEventLoop):
@@ -124,6 +127,8 @@ class PluginPreviewManager:
                 plugin.preview.error_message = None
                 plugin.preview.frontend_mode = "dev"
                 plugin.preview.deps_ready = True
+                plugin.preview.frontend_reachable = None
+                plugin.preview.frontend_last_probe_at = None
                 plugin.preview.install_status = "idle"
                 plugin.preview.install_error_message = None
                 return True
@@ -190,6 +195,8 @@ class PluginPreviewManager:
         plugin.preview.error_message = None
         plugin.preview.frontend_mode = "dev"
         plugin.preview.deps_ready = True
+        plugin.preview.frontend_reachable = None
+        plugin.preview.frontend_last_probe_at = None
         plugin.preview.install_status = "idle"
         plugin.preview.install_error_message = None
         plugin.preview.python_sidecar_port = None
@@ -203,11 +210,58 @@ class PluginPreviewManager:
         plugin.preview.log_session_id = session.log_session_id
         plugin.preview.frontend_mode = session.frontend_mode
         plugin.preview.deps_ready = session.deps_ready
+        plugin.preview.frontend_reachable = session.frontend_reachable
+        plugin.preview.frontend_last_probe_at = session.frontend_last_probe_at
         plugin.preview.install_status = session.install_status
         plugin.preview.install_error_message = session.install_error_message
         plugin.preview.python_sidecar_port = session.python_sidecar_port
         plugin.preview.python_sidecar_state = session.python_sidecar_state
         plugin.preview.python_sidecar_error_message = session.python_sidecar_error_message
+
+    @staticmethod
+    def _probe_target_host(bind_host: str) -> str:
+        host = str(bind_host or "").strip()
+        if host in {"", "0.0.0.0", "::"}:
+            return "127.0.0.1"
+        return host
+
+    async def _probe_frontend_reachable(self, host: str, port: int, timeout_seconds: float = 0.8) -> bool:
+        try:
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(host, port),
+                timeout=max(0.1, timeout_seconds),
+            )
+            writer.close()
+            await writer.wait_closed()
+            del reader
+            return True
+        except Exception:
+            return False
+
+    async def _wait_frontend_reachable(
+        self,
+        *,
+        bind_host: str,
+        port: int,
+        timeout_seconds: float = FRONTEND_PROBE_TIMEOUT_SECONDS,
+        interval_seconds: float = FRONTEND_PROBE_INTERVAL_SECONDS,
+    ) -> bool:
+        target_host = self._probe_target_host(bind_host)
+        deadline = asyncio.get_running_loop().time() + max(0.2, timeout_seconds)
+        while asyncio.get_running_loop().time() < deadline:
+            if await self._probe_frontend_reachable(target_host, port):
+                return True
+            await asyncio.sleep(max(0.05, interval_seconds))
+        return False
+
+    @staticmethod
+    def _touch_frontend_probe_state(
+        session: PreviewSession,
+        *,
+        reachable: bool | None,
+    ) -> None:
+        session.frontend_reachable = reachable
+        session.frontend_last_probe_at = datetime.utcnow().isoformat(timespec="seconds") + "Z"
 
     async def resolve_python_executable(self, plugin: PluginInfo) -> Path:
         plugin_path = resolve_plugin_source_root(plugin.manifest)
@@ -453,7 +507,8 @@ class PluginPreviewManager:
             stderr=asyncio.subprocess.PIPE,
         )
         session.bun_process = process
-        session.frontend_mode = "dev"
+        session.frontend_mode = "dist"
+        self._touch_frontend_probe_state(session, reachable=False)
         self._attach_process_log_tasks(plugin.manifest.id, session, process, label="bun-preview")
         await asyncio.sleep(1.0)
         if process.returncode is not None and process.returncode != 0:
@@ -461,6 +516,18 @@ class PluginPreviewManager:
                 f"Preview Bun failed to start (code={process.returncode}). "
                 f"{self._build_log_tail_hint(plugin.manifest.id)}"
             )
+        if not session.frontend_port:
+            raise RuntimeError("Preview frontend port missing")
+        reachable = await self._wait_frontend_reachable(
+            bind_host=frontend_bind_host,
+            port=session.frontend_port,
+        )
+        self._touch_frontend_probe_state(session, reachable=reachable)
+        if not reachable:
+            raise RuntimeError(
+                f"Preview frontend not reachable on {self._probe_target_host(frontend_bind_host)}:{session.frontend_port}"
+            )
+        session.frontend_mode = "dev"
 
     def are_preview_frontend_deps_ready(self, plugin: PluginInfo) -> bool:
         web_src = resolve_plugin_frontend_dir(plugin.manifest)
@@ -482,6 +549,7 @@ class PluginPreviewManager:
             return
         session.install_status = "running"
         session.install_error_message = None
+        self._touch_frontend_probe_state(session, reachable=False)
         self._sync_install_state_to_plugin(plugin, session)
         logger.info(
             "Scheduling preview frontend install for %s (frontend_mode=%s, deps_ready=%s)",
@@ -500,6 +568,7 @@ class PluginPreviewManager:
                 return True
             session.install_status = "running"
             session.install_error_message = None
+            self._touch_frontend_probe_state(session, reachable=False)
             self._sync_install_state_to_plugin(plugin, session)
             self.schedule_preview_frontend_install(plugin, session)
             return True
@@ -528,6 +597,7 @@ class PluginPreviewManager:
                     session.deps_ready = True
                     session.install_status = "success"
                     session.install_error_message = None
+                    self._touch_frontend_probe_state(session, reachable=True)
                     strategy = self._strategy_registry.get(plugin.manifest.app_type)
                     plugin.preview.url = strategy.build_url(Config.PLUGIN_PREVIEW_BIND_HOST, session)
                     self._apply_preview_runtime_fields(plugin, session)
@@ -553,6 +623,7 @@ class PluginPreviewManager:
                     )
                     session.frontend_mode = "dist"
                     session.deps_ready = False
+                    self._touch_frontend_probe_state(session, reachable=False)
                     async with self._lock:
                         current = self._sessions.get(plugin.manifest.id)
                         if current is not session or session.stop_event.is_set():
@@ -573,6 +644,7 @@ class PluginPreviewManager:
                 session.install_error_message = user_message
                 session.frontend_mode = "dist"
                 session.deps_ready = False
+                self._touch_frontend_probe_state(session, reachable=False)
                 async with self._lock:
                     current = self._sessions.get(plugin.manifest.id)
                     if current is not session:

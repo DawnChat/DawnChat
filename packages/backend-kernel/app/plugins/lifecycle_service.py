@@ -405,7 +405,13 @@ class PluginLifecycleService:
         while time.monotonic() < deadline:
             status = manager.get_plugin_preview_status(plugin_id) or {}
             state = str(status.get("state") or "")
-            if state == "running" and status.get("url"):
+            frontend_mode = str(status.get("frontend_mode") or "")
+            frontend_reachable = status.get("frontend_reachable")
+            if (
+                state == "running"
+                and status.get("url")
+                and not (frontend_mode == "dev" and frontend_reachable is False)
+            ):
                 return status
             if state == "error":
                 raise RuntimeError(str(status.get("error_message") or "Preview start failed"))

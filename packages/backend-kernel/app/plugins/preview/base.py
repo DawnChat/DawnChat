@@ -38,6 +38,8 @@ class PreviewSession:
     stop_event: asyncio.Event = field(default_factory=asyncio.Event)
     frontend_mode: str = "dev"  # dev | dist
     deps_ready: bool = True
+    frontend_reachable: Optional[bool] = None
+    frontend_last_probe_at: Optional[str] = None
     install_status: str = "idle"  # idle | running | success | failed
     install_error_message: Optional[str] = None
     install_task: Optional[asyncio.Task[None]] = None

@@ -3,11 +3,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from app.plugins.paths import resolve_plugin_source_root
+from app.utils.logger import get_logger
 
 from .base import PreviewSession, PreviewStrategy
 
 if TYPE_CHECKING:
     from app.plugins.preview_manager import PluginPreviewManager
+
+logger = get_logger("plugin_preview_desktop_strategy")
 
 
 class DesktopPreviewStrategy(PreviewStrategy):
@@ -55,7 +58,16 @@ class DesktopPreviewStrategy(PreviewStrategy):
     async def start(self, manager: PluginPreviewManager, plugin, session: PreviewSession) -> None:
         await manager.start_backend_process(plugin, session)
         if session.deps_ready:
-            await manager.start_bun_process(plugin, session)
+            try:
+                await manager.start_bun_process(plugin, session)
+            except Exception as exc:
+                # Fall back to backend(dist) preview and let async install flow retry dev startup.
+                logger.warning("Desktop preview frontend probe failed, fallback to dist: plugin=%s err=%s", plugin.manifest.id, exc)
+                session.deps_ready = False
+                session.frontend_mode = "dist"
+                session.install_status = "running"
+                session.install_error_message = "前端服务尚未就绪，正在自动重试。"
+                manager.schedule_preview_frontend_install(plugin, session)
         else:
             manager.schedule_preview_frontend_install(plugin, session)
         await manager.start_watcher(plugin, session)

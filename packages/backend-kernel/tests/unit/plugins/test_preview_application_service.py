@@ -54,6 +54,8 @@ def _build_plugin(*, state: PluginState = PluginState.STOPPED):
             error_message="",
             frontend_mode="dev",
             deps_ready=True,
+            frontend_reachable=True,
+            frontend_last_probe_at="2026-04-03T06:54:27Z",
             install_status="ready",
             install_error_message="",
             python_sidecar_port=6101,
@@ -132,6 +134,8 @@ def test_get_plugin_preview_status_includes_workbench_layout() -> None:
     assert payload is not None
     assert payload["workbench_layout"] == "agent_preview"
     assert payload["has_iwp_requirements"] is True
+    assert payload["frontend_reachable"] is True
+    assert payload["frontend_last_probe_at"] == "2026-04-03T06:54:27Z"
 
 
 def test_get_plugin_runtime_info_includes_python_sidecar_status(monkeypatch: pytest.MonkeyPatch) -> None:

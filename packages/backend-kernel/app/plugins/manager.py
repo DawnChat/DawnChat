@@ -25,6 +25,7 @@ from app.config import Config
 from app.utils.logger import get_logger
 
 from .application.iwp_workspace_application_service import PluginIwpWorkspaceApplicationService
+from .application.plugin_agent_attachment_application_service import PluginAgentAttachmentApplicationService
 from .application.preview_application_service import PluginPreviewApplicationService
 from .application.runtime_application_service import PluginRuntimeApplicationService
 from .application.template_application_service import PluginTemplateApplicationService
@@ -79,6 +80,11 @@ class PluginManager:
         )
         self._iwp_workspace_service = PluginIwpWorkspaceApplicationService(
             get_plugin_path=self.get_plugin_path,
+        )
+        self._agent_attachment_service = PluginAgentAttachmentApplicationService(
+            get_plugin_path=self.get_plugin_path,
+            uploads_dir_name=Config.PLUGIN_USER_UPLOADS_DIR_NAME,
+            max_bytes=Config.PLUGIN_USER_UPLOAD_MAX_BYTES,
         )
         self._preview_service = PluginPreviewApplicationService(
             self._registry,
@@ -690,6 +696,9 @@ class PluginManager:
 
     async def get_iwp_build_task(self, task_id: str) -> dict[str, Any] | None:
         return await self._iwp_workspace_service.get_build_task(task_id)
+
+    async def save_agent_attachment(self, plugin_id: str, file: Any) -> dict[str, Any]:
+        return await self._agent_attachment_service.save_upload(plugin_id, file)
 
     def get_plugin_detail_metadata(self, plugin_id: str) -> dict[str, Any]:
         """Read key metadata from manifest.json and pyproject.toml for UI detail dialog."""

@@ -62,6 +62,8 @@ class PluginPreviewApplicationService:
             "error_message": plugin.preview.error_message,
             "frontend_mode": plugin.preview.frontend_mode,
             "deps_ready": plugin.preview.deps_ready,
+            "frontend_reachable": plugin.preview.frontend_reachable,
+            "frontend_last_probe_at": plugin.preview.frontend_last_probe_at,
             "install_status": plugin.preview.install_status,
             "install_error_message": plugin.preview.install_error_message,
             "python_sidecar_port": plugin.preview.python_sidecar_port,

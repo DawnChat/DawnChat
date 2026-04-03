@@ -6,7 +6,7 @@ Provides REST API endpoints for plugin management.
 
 from typing import Any, Literal, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from app.plugins import get_plugin_manager
@@ -771,6 +771,29 @@ async def ingest_plugin_logs(plugin_id: str, request: PluginLogIngestRequest):
         session_id=str(request.session_id or ""),
     )
     return {"status": "success", "received": received}
+
+
+@router.post("/{plugin_id}/agent-attachments")
+async def upload_agent_attachment(plugin_id: str, file: UploadFile = File(...)):
+    manager = await _get_initialized_manager()
+    plugin = manager.get_plugin_snapshot(plugin_id)
+    if not plugin:
+        raise HTTPException(status_code=404, detail=f"Plugin not found: {plugin_id}")
+    try:
+        payload = await manager.save_agent_attachment(plugin_id, file)
+    except FileNotFoundError as err:
+        raise HTTPException(status_code=404, detail=str(err)) from err
+    except ValueError as err:
+        message = str(err)
+        if "max size" in message:
+            raise HTTPException(status_code=413, detail=message) from err
+        raise HTTPException(status_code=400, detail=message) from err
+    except RuntimeError as err:
+        raise HTTPException(status_code=400, detail=str(err)) from err
+    return {
+        "status": "success",
+        **payload,
+    }
 
 
 @router.delete("/{plugin_id}")

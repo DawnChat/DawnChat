@@ -45,6 +45,7 @@ async def test_compose_builds_baseline_with_resolved_instructions(monkeypatch) -
 
     monkeypatch.setattr(composer_module.Config, "OPENCODE_INCLUDE_WORKSPACE_RULES", True)
     monkeypatch.setattr(composer_module.Config, "MCP_PROXY_TIMEOUT_READ_SECONDS", 12.0)
+    monkeypatch.setattr(composer_module.Config, "OPENCODE_UI_BRIDGE_MCP_TIMEOUT_READ_SECONDS", 310.0)
 
     composer = OpenCodeBaselineConfigComposer(_InstructionResolverStub())
     result = await composer.compose(host="127.0.0.1", port=4096, workspace=Path("/tmp/demo"))
@@ -56,7 +57,7 @@ async def test_compose_builds_baseline_with_resolved_instructions(monkeypatch) -
     assert "models" not in result.config["provider"]["openai"]
     assert "dawnchat_ui_bridge" in result.config["mcp"]
     assert "dawnchat_iwp" in result.config["mcp"]
-    assert result.config["mcp"]["dawnchat_ui_bridge"]["timeout"] == 12000
+    assert result.config["mcp"]["dawnchat_ui_bridge"]["timeout"] == 310000
     assert result.config["server"]["hostname"] == "127.0.0.1"
     assert result.config["server"]["port"] == 4096
 
@@ -121,6 +122,7 @@ async def test_compose_injects_plugin_backend_mcp_for_plugin_workspace(monkeypat
     monkeypatch.setattr(composer_module.Config, "OPENCODE_INCLUDE_WORKSPACE_RULES", True)
     monkeypatch.setattr(composer_module.Config, "API_PORT", 7777)
     monkeypatch.setattr(composer_module.Config, "MCP_PROXY_TIMEOUT_READ_SECONDS", 12.0)
+    monkeypatch.setattr(composer_module.Config, "OPENCODE_UI_BRIDGE_MCP_TIMEOUT_READ_SECONDS", 310.0)
 
     composer = OpenCodeBaselineConfigComposer(_InstructionResolverStub())
     result = await composer.compose(

@@ -29,6 +29,66 @@ class _BridgeStub:
         )
 
 
+class _CapabilitiesCatalogBridgeStub(_BridgeStub):
+    async def dispatch(self, plugin_id: str, op: BridgeOperation, payload: dict) -> BridgeDispatchResult:
+        self.last_op = op
+        self.last_plugin_id = plugin_id
+        self.last_payload = payload
+        if op == BridgeOperation.CAPABILITY_INVOKE and payload.get("function") == "assistant.view.list":
+            return BridgeDispatchResult(
+                request_id="req_catalog",
+                op=op,
+                result={
+                    "ok": True,
+                    "data": {
+                        "active_view_id": "tictactoe.main",
+                        "views": [
+                            {
+                                "view_id": "word.main",
+                                "title": "Word Workspace",
+                                "resource_type": "word",
+                                "state_mode": "stateful",
+                                "description": "Best for single-resource reading.",
+                                "is_active": False,
+                                "recommended_flow": [
+                                    "Use view.open(word.main) to bind the target word resource."
+                                ],
+                            },
+                            {
+                                "view_id": "tictactoe.main",
+                                "title": "TicTacToe Arena",
+                                "resource_type": "tictactoe.game",
+                                "state_mode": "stateful",
+                                "description": "Best for validating realtime board interaction.",
+                                "is_active": True,
+                                "recommended_flow": [
+                                    "Use view.open(tictactoe.main) to open the round resource."
+                                ],
+                                "current_state_summary": {
+                                    "status": "playing",
+                                    "current_player": "X",
+                                    "move_count": 2,
+                                },
+                            },
+                        ],
+                        "functions": [
+                            {
+                                "name": "assistant.view.describe",
+                                "description": "Inspect one specific view contract or the current active view state.",
+                                "input_schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "view_id": {"type": "string"},
+                                    },
+                                },
+                            }
+                        ],
+                    },
+                },
+            )
+        return await super().dispatch(plugin_id=plugin_id, op=op, payload=payload)
+
+
 @dataclass
 class _ArtifactResult:
     data: dict
@@ -134,6 +194,68 @@ async def test_runtime_refresh_dispatches_with_canonical_plugin_id(monkeypatch: 
 
 
 @pytest.mark.asyncio
+async def test_capabilities_list_returns_view_catalog_from_view_list(monkeypatch: pytest.MonkeyPatch) -> None:
+    bridge = _CapabilitiesCatalogBridgeStub()
+    service = UiToolService(bridge_service=bridge, artifact_store=_ArtifactStoreStub())
+    monkeypatch.setattr(resolver_module, "get_plugin_manager", lambda: _ManagerStub())
+
+    result = await service.execute(
+        "dawnchat.ui.capabilities.list",
+        {
+            "plugin_id": "com.demo.plugin",
+        },
+    )
+
+    assert result["ok"] is True
+    assert bridge.last_op == BridgeOperation.CAPABILITY_INVOKE
+    assert bridge.last_payload["function"] == "assistant.view.list"
+    assert result["data"] == {
+        "views": [
+            {
+                "view_id": "word.main",
+                "title": "Word Workspace",
+                "resource_type": "word",
+                "state_mode": "stateful",
+                "description": "Best for single-resource reading.",
+                "is_active": False,
+                "recommended_flow": [
+                    "Use view.open(word.main) to bind the target word resource."
+                ],
+            },
+            {
+                "view_id": "tictactoe.main",
+                "title": "TicTacToe Arena",
+                "resource_type": "tictactoe.game",
+                "state_mode": "stateful",
+                "description": "Best for validating realtime board interaction.",
+                "is_active": True,
+                "recommended_flow": [
+                    "Use view.open(tictactoe.main) to open the round resource."
+                ],
+                "current_state_summary": {
+                    "status": "playing",
+                    "current_player": "X",
+                    "move_count": 2,
+                },
+            },
+        ],
+        "functions": [
+            {
+                "name": "assistant.view.describe",
+                "description": "Inspect one specific view contract or the current active view state.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "view_id": {"type": "string"},
+                    },
+                },
+            }
+        ],
+        "active_view_id": "tictactoe.main",
+    }
+
+
+@pytest.mark.asyncio
 async def test_session_start_dispatches_as_capability_invoke(monkeypatch: pytest.MonkeyPatch) -> None:
     bridge = _BridgeStub()
     service = UiToolService(bridge_service=bridge, artifact_store=_ArtifactStoreStub())
@@ -209,33 +331,51 @@ async def test_session_stop_dispatches_as_capability_invoke(monkeypatch: pytest.
 
 
 @pytest.mark.asyncio
-async def test_session_wait_dispatches_as_capability_invoke(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_event_wait_dispatches_as_capability_invoke(monkeypatch: pytest.MonkeyPatch) -> None:
     bridge = _BridgeStub()
     service = UiToolService(bridge_service=bridge, artifact_store=_ArtifactStoreStub())
     monkeypatch.setattr(resolver_module, "get_plugin_manager", lambda: _ManagerStub())
 
     result = await service.execute(
-        "dawnchat.ui.session.wait",
+        "dawnchat.ui.event.wait",
         {
             "plugin_id": "com.demo.plugin",
-            "session_id": "sess_1",
-            "wait_for": "runtime_event",
             "event_types": ["assistant.guide.quiz.submitted"],
             "match": {"quiz_id": "quiz-1"},
-            "since_seq": 3,
             "timeout_ms": 15000,
         },
     )
 
     assert result["ok"] is True
     assert bridge.last_op == BridgeOperation.CAPABILITY_INVOKE
-    assert bridge.last_payload["function"] == "assistant.session.wait"
+    assert bridge.last_payload["function"] == "assistant.event.wait"
     assert bridge.last_payload["payload"] == {
-        "session_id": "sess_1",
-        "wait_for": "runtime_event",
         "event_types": ["assistant.guide.quiz.submitted"],
         "match": {"quiz_id": "quiz-1"},
-        "since_seq": 3,
+        "timeout_ms": 15000.0,
+    }
+
+
+@pytest.mark.asyncio
+async def test_session_wait_for_end_dispatches_as_capability_invoke(monkeypatch: pytest.MonkeyPatch) -> None:
+    bridge = _BridgeStub()
+    service = UiToolService(bridge_service=bridge, artifact_store=_ArtifactStoreStub())
+    monkeypatch.setattr(resolver_module, "get_plugin_manager", lambda: _ManagerStub())
+
+    result = await service.execute(
+        "dawnchat.ui.session.wait_for_end",
+        {
+            "plugin_id": "com.demo.plugin",
+            "session_id": "sess_1",
+            "timeout_ms": 15000,
+        },
+    )
+
+    assert result["ok"] is True
+    assert bridge.last_op == BridgeOperation.CAPABILITY_INVOKE
+    assert bridge.last_payload["function"] == "assistant.session.wait_for_end"
+    assert bridge.last_payload["payload"] == {
+        "session_id": "sess_1",
         "timeout_ms": 15000.0,
     }
 
@@ -284,6 +424,7 @@ async def test_session_start_normalizes_action_payload_and_timeout(monkeypatch: 
 
 
 @pytest.mark.asyncio
+@pytest.mark.asyncio
 async def test_session_status_requires_session_id(monkeypatch: pytest.MonkeyPatch) -> None:
     service = UiToolService(bridge_service=_BridgeStub(), artifact_store=_ArtifactStoreStub())
     monkeypatch.setattr(resolver_module, "get_plugin_manager", lambda: _ManagerStub())
@@ -301,31 +442,48 @@ async def test_session_status_requires_session_id(monkeypatch: pytest.MonkeyPatc
 
 
 @pytest.mark.asyncio
-async def test_session_wait_requires_event_types_for_runtime_event(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_event_wait_requires_event_types(monkeypatch: pytest.MonkeyPatch) -> None:
     service = UiToolService(bridge_service=_BridgeStub(), artifact_store=_ArtifactStoreStub())
     monkeypatch.setattr(resolver_module, "get_plugin_manager", lambda: _ManagerStub())
 
     with pytest.raises(PluginUIBridgeError) as exc:
         await service.execute(
-            "dawnchat.ui.session.wait",
+            "dawnchat.ui.event.wait",
             {
                 "plugin_id": "com.demo.plugin",
-                "session_id": "sess_1",
-                "wait_for": "runtime_event",
+                "event_types": [],
             },
         )
     assert exc.value.code == "invalid_arguments"
-    assert exc.value.message == "event_types is required when wait_for=runtime_event"
+    assert exc.value.message == "event_types must be a non-empty array"
 
 
 @pytest.mark.asyncio
-async def test_session_wait_requires_session_id(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_event_wait_requires_object_match(monkeypatch: pytest.MonkeyPatch) -> None:
     service = UiToolService(bridge_service=_BridgeStub(), artifact_store=_ArtifactStoreStub())
     monkeypatch.setattr(resolver_module, "get_plugin_manager", lambda: _ManagerStub())
 
     with pytest.raises(PluginUIBridgeError) as exc:
         await service.execute(
-            "dawnchat.ui.session.wait",
+            "dawnchat.ui.event.wait",
+            {
+                "plugin_id": "com.demo.plugin",
+                "event_types": ["assistant.guide.quiz.submitted"],
+                "match": "invalid",
+            },
+        )
+    assert exc.value.code == "invalid_arguments"
+    assert exc.value.message == "match must be an object"
+
+
+@pytest.mark.asyncio
+async def test_session_wait_for_end_requires_session_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    service = UiToolService(bridge_service=_BridgeStub(), artifact_store=_ArtifactStoreStub())
+    monkeypatch.setattr(resolver_module, "get_plugin_manager", lambda: _ManagerStub())
+
+    with pytest.raises(PluginUIBridgeError) as exc:
+        await service.execute(
+            "dawnchat.ui.session.wait_for_end",
             {
                 "plugin_id": "com.demo.plugin",
                 "session_id": "",

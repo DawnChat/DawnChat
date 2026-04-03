@@ -72,6 +72,7 @@ class OpenCodeBaselineConfigComposer:
         startup_context: Dict[str, Any] | None = None,
     ) -> BaselineComposeResult:
         mcp_timeout_ms = max(1, int(Config.MCP_PROXY_TIMEOUT_READ_SECONDS * 1000))
+        ui_bridge_mcp_timeout_ms = max(1, int(Config.OPENCODE_UI_BRIDGE_MCP_TIMEOUT_READ_SECONDS * 1000))
         policy = instruction_policy or {}
         include_shared_rules = bool(policy.get("include_shared_rules", True))
         include_workspace_rules = bool(
@@ -193,7 +194,7 @@ class OpenCodeBaselineConfigComposer:
                     "url": f"http://127.0.0.1:{Config.API_PORT}/api/opencode/mcp/ui",
                     "enabled": True,
                     "oauth": False,
-                    "timeout": mcp_timeout_ms,
+                    "timeout": max(mcp_timeout_ms, ui_bridge_mcp_timeout_ms),
                     "headers": {"X-DawnChat-MCP": "ui-bridge"},
                 },
                 "dawnchat_iwp": {

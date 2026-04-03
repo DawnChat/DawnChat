@@ -55,6 +55,93 @@ def test_resolve_python_sidecar_entry_path_returns_none_when_disabled() -> None:
     assert PluginPreviewManager.resolve_python_sidecar_entry_path(plugin, source_root) is None
 
 
+def test_probe_target_host_maps_wildcard_to_loopback() -> None:
+    assert PluginPreviewManager._probe_target_host("0.0.0.0") == "127.0.0.1"
+    assert PluginPreviewManager._probe_target_host("127.0.0.1") == "127.0.0.1"
+
+
+@pytest.mark.asyncio
+async def test_wait_frontend_reachable_succeeds_after_retry(monkeypatch: pytest.MonkeyPatch) -> None:
+    manager = PluginPreviewManager(SimpleNamespace())
+    attempts = {"count": 0}
+
+    async def _fake_probe(_host: str, _port: int, timeout_seconds: float = 0.8) -> bool:
+        attempts["count"] += 1
+        del timeout_seconds
+        return attempts["count"] >= 2
+
+    monkeypatch.setattr(manager, "_probe_frontend_reachable", _fake_probe)
+
+    ready = await manager._wait_frontend_reachable(
+        bind_host="127.0.0.1",
+        port=17961,
+        timeout_seconds=0.6,
+        interval_seconds=0.05,
+    )
+
+    assert ready is True
+    assert attempts["count"] >= 2
+
+
+@pytest.mark.asyncio
+async def test_wait_frontend_reachable_times_out(monkeypatch: pytest.MonkeyPatch) -> None:
+    manager = PluginPreviewManager(SimpleNamespace())
+
+    async def _fake_probe(_host: str, _port: int, timeout_seconds: float = 0.8) -> bool:
+        del timeout_seconds
+        return False
+
+    monkeypatch.setattr(manager, "_probe_frontend_reachable", _fake_probe)
+
+    ready = await manager._wait_frontend_reachable(
+        bind_host="127.0.0.1",
+        port=17961,
+        timeout_seconds=0.2,
+        interval_seconds=0.05,
+    )
+
+    assert ready is False
+
+
+def test_apply_preview_runtime_fields_syncs_frontend_probe_state() -> None:
+    plugin = SimpleNamespace(
+        preview=SimpleNamespace(
+            backend_port=None,
+            frontend_port=None,
+            log_session_id=None,
+            frontend_mode="dist",
+            deps_ready=False,
+            frontend_reachable=None,
+            frontend_last_probe_at=None,
+            install_status="idle",
+            install_error_message=None,
+            python_sidecar_port=None,
+            python_sidecar_state="stopped",
+            python_sidecar_error_message=None,
+        )
+    )
+    session = SimpleNamespace(
+        backend_port=17001,
+        frontend_port=17002,
+        log_session_id="s1",
+        frontend_mode="dev",
+        deps_ready=True,
+        frontend_reachable=True,
+        frontend_last_probe_at="2026-04-03T06:54:27Z",
+        install_status="success",
+        install_error_message=None,
+        python_sidecar_port=None,
+        python_sidecar_state="stopped",
+        python_sidecar_error_message=None,
+    )
+
+    PluginPreviewManager._apply_preview_runtime_fields(plugin, session)
+
+    assert plugin.preview.frontend_port == 17002
+    assert plugin.preview.frontend_reachable is True
+    assert plugin.preview.frontend_last_probe_at == "2026-04-03T06:54:27Z"
+
+
 @pytest.mark.asyncio
 async def test_start_backend_process_does_not_fail_when_sidecar_start_error(monkeypatch: pytest.MonkeyPatch) -> None:
     manager = PluginPreviewManager(SimpleNamespace())
@@ -80,3 +167,82 @@ async def test_start_backend_process_does_not_fail_when_sidecar_start_error(monk
 
     assert session.python_sidecar_state == "error"
     assert "sidecar boom" in str(session.python_sidecar_error_message or "")
+
+
+@pytest.mark.asyncio
+async def test_wait_frontend_reachable_succeeds_with_retry(monkeypatch: pytest.MonkeyPatch) -> None:
+    manager = PluginPreviewManager(SimpleNamespace())
+    results = iter([False, True])
+
+    async def _probe(_host: str, _port: int, timeout_seconds: float = 0.8) -> bool:
+        del timeout_seconds
+        return next(results)
+
+    monkeypatch.setattr(manager, "_probe_frontend_reachable", _probe)
+
+    ready = await manager._wait_frontend_reachable(
+        bind_host="127.0.0.1",
+        port=17961,
+        timeout_seconds=1.0,
+        interval_seconds=0.01,
+    )
+
+    assert ready is True
+
+
+@pytest.mark.asyncio
+async def test_wait_frontend_reachable_timeout_returns_false(monkeypatch: pytest.MonkeyPatch) -> None:
+    manager = PluginPreviewManager(SimpleNamespace())
+
+    async def _probe(_host: str, _port: int, timeout_seconds: float = 0.8) -> bool:
+        del timeout_seconds
+        return False
+
+    monkeypatch.setattr(manager, "_probe_frontend_reachable", _probe)
+
+    ready = await manager._wait_frontend_reachable(
+        bind_host="127.0.0.1",
+        port=17961,
+        timeout_seconds=0.05,
+        interval_seconds=0.01,
+    )
+
+    assert ready is False
+
+
+def test_apply_preview_runtime_fields_syncs_frontend_probe_state() -> None:
+    session = SimpleNamespace(
+        backend_port=6001,
+        frontend_port=5173,
+        log_session_id="s1",
+        frontend_mode="dev",
+        deps_ready=True,
+        frontend_reachable=False,
+        frontend_last_probe_at="2026-04-03T06:54:27Z",
+        install_status="running",
+        install_error_message="pending",
+        python_sidecar_port=None,
+        python_sidecar_state="stopped",
+        python_sidecar_error_message=None,
+    )
+    plugin = SimpleNamespace(
+        preview=SimpleNamespace(
+            backend_port=None,
+            frontend_port=None,
+            log_session_id=None,
+            frontend_mode="dist",
+            deps_ready=False,
+            frontend_reachable=None,
+            frontend_last_probe_at=None,
+            install_status="idle",
+            install_error_message=None,
+            python_sidecar_port=None,
+            python_sidecar_state="stopped",
+            python_sidecar_error_message=None,
+        )
+    )
+
+    PluginPreviewManager._apply_preview_runtime_fields(plugin, session)
+
+    assert plugin.preview.frontend_reachable is False
+    assert plugin.preview.frontend_last_probe_at == "2026-04-03T06:54:27Z"

@@ -171,6 +171,8 @@ class PluginPreviewRuntimeInfo:
     error_message: Optional[str] = None
     frontend_mode: str = "dev"  # dev | dist
     deps_ready: bool = True
+    frontend_reachable: Optional[bool] = None
+    frontend_last_probe_at: Optional[str] = None
     install_status: str = "idle"  # idle | running | success | failed
     install_error_message: Optional[str] = None
     python_sidecar_port: Optional[int] = None
@@ -230,6 +232,8 @@ class PluginInfo:
                 "error_message": self.preview.error_message,
                 "frontend_mode": self.preview.frontend_mode,
                 "deps_ready": self.preview.deps_ready,
+                "frontend_reachable": self.preview.frontend_reachable,
+                "frontend_last_probe_at": self.preview.frontend_last_probe_at,
                 "install_status": self.preview.install_status,
                 "install_error_message": self.preview.install_error_message,
                 "python_sidecar_port": self.preview.python_sidecar_port,

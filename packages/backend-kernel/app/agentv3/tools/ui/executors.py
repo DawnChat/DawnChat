@@ -50,6 +50,10 @@ async def scroll_executor(arguments: Dict[str, Any], context: Dict[str, Any]) ->
     return await _execute_ui_tool("dawnchat.ui.scroll", arguments, context)
 
 
-async def session_wait_executor(arguments: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
-    return await _execute_ui_tool("dawnchat.ui.session.wait", arguments, context)
+async def event_wait_executor(arguments: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    return await _execute_ui_tool("dawnchat.ui.event.wait", arguments, context)
+
+
+async def session_wait_for_end_executor(arguments: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    return await _execute_ui_tool("dawnchat.ui.session.wait_for_end", arguments, context)
 
