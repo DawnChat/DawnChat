@@ -67,6 +67,8 @@ start_backend() {
     print_info "Python 日志文件: $python_log_path"
     
     if [[ "$python_cmd" == "poetry run python" ]]; then
+        print_info "后端依赖同步策略: Poetry（声明驱动）"
+        ensure_poetry_runtime_deps
         cd "$BACKEND_DIR"
         print_info "工作目录: $BACKEND_DIR"
         print_info "启动命令: poetry run uvicorn app.main:app --host 0.0.0.0 --port $BACKEND_PORT --reload"
@@ -103,6 +105,7 @@ start_backend() {
             print_success "使用 PBS Python: $python_cmd"
         fi
 
+        print_info "后端依赖同步策略: PBS（声明驱动）"
         ensure_pbs_python_deps
         
         export PYTHONPATH="$BACKEND_DIR:${PYTHONPATH:-}"

@@ -613,6 +613,41 @@ download_pbs_python() {
     print_success "PBS Python 已安装"
 }
 
+poetry_supports_lock_check() {
+    local help_text
+    help_text="$(poetry check --help 2>/dev/null || true)"
+    [[ "$help_text" == *"--lock"* ]]
+}
+
+poetry_supports_lock_subcommand_check() {
+    local help_text
+    help_text="$(poetry lock --help 2>/dev/null || true)"
+    [[ "$help_text" == *"--check"* ]]
+}
+
+ensure_poetry_lock_consistent_or_exit() {
+    local project_dir="$1"
+    local hint_cmd="cd $project_dir && poetry lock"
+    cd "$project_dir"
+    if poetry_supports_lock_check; then
+        if poetry check --lock >/dev/null 2>&1; then
+            return 0
+        fi
+        print_error "检测到 pyproject.toml 与 poetry.lock 不一致"
+        print_error "请先运行: $hint_cmd"
+        exit 1
+    fi
+    if poetry_supports_lock_subcommand_check; then
+        if poetry lock --check >/dev/null 2>&1; then
+            return 0
+        fi
+        print_error "检测到 pyproject.toml 与 poetry.lock 不一致"
+        print_error "请先运行: $hint_cmd"
+        exit 1
+    fi
+    print_warning "当前 Poetry 不支持 lock 一致性子命令，跳过一致性命令校验"
+}
+
 # ============ 安装 Python 依赖 ============
 install_python_deps() {
     print_step "安装 Python 依赖"
@@ -646,6 +681,9 @@ install_python_deps() {
         print_error "缺少 pyproject.toml 或 poetry.lock，无法执行可复现依赖安装"
         exit 1
     fi
+
+    ensure_poetry_lock_consistent_or_exit "$BACKEND_DIR"
+    cd "$BACKEND_DIR"
 
     # 检查 poetry export 是否可用
     if ! poetry export --help &> /dev/null; then

@@ -57,7 +57,11 @@ run_backend_pytest() {
         exit 1
     fi
 
-    if [[ "$python_cmd" != "poetry run python" ]]; then
+    if [[ "$python_cmd" == "poetry run python" ]]; then
+        print_info "后端测试依赖同步策略: Poetry（--with dev）"
+        ensure_poetry_runtime_deps --with-dev
+    else
+        print_info "后端测试依赖同步策略: PBS（--with-dev）"
         ensure_pbs_python_deps --with-dev
     fi
 

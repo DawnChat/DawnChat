@@ -89,6 +89,10 @@ parse_dev_args() {
                 CLEAN_INSTALL=true
                 shift
                 ;;
+            --strict-deps)
+                STRICT_DEPS=true
+                shift
+                ;;
             --sync)
                 SYNC_ONLY=true
                 shift

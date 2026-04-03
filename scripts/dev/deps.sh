@@ -131,6 +131,88 @@ ensure_pbs_python_usable() {
     return 1
 }
 
+get_sha256() {
+    local file_path="$1"
+    if command -v shasum &> /dev/null; then
+        shasum -a 256 "$file_path" | cut -d ' ' -f 1
+        return 0
+    fi
+    if command -v sha256sum &> /dev/null; then
+        sha256sum "$file_path" | cut -d ' ' -f 1
+        return 0
+    fi
+    python3 -c "import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" "$file_path"
+}
+
+poetry_supports_lock_check() {
+    local help_text
+    help_text="$(poetry check --help 2>/dev/null || true)"
+    [[ "$help_text" == *"--lock"* ]]
+}
+
+poetry_supports_lock_subcommand_check() {
+    local help_text
+    help_text="$(poetry lock --help 2>/dev/null || true)"
+    [[ "$help_text" == *"--check"* ]]
+}
+
+ensure_poetry_lock_consistent() {
+    local project_dir="$1"
+    local hint_cmd="cd $project_dir && poetry lock"
+    cd "$project_dir"
+    if poetry_supports_lock_check; then
+        if poetry check --lock >/dev/null 2>&1; then
+            return 0
+        fi
+        print_error "检测到 pyproject.toml 与 poetry.lock 不一致"
+        print_error "请先运行: $hint_cmd"
+        return 1
+    fi
+    if poetry_supports_lock_subcommand_check; then
+        if poetry lock --check >/dev/null 2>&1; then
+            return 0
+        fi
+        print_error "检测到 pyproject.toml 与 poetry.lock 不一致"
+        print_error "请先运行: $hint_cmd"
+        return 1
+    fi
+    print_warning "当前 Poetry 不支持 lock 一致性子命令，跳过一致性命令校验"
+    return 0
+}
+
+compose_backend_deps_fingerprint() {
+    local lock_hash="$1"
+    local profile="$2"
+    local mlx_flag="$3"
+    local mlx_vlm_flag="$4"
+    printf "%s|%s|mlx=%s|mlx_vlm=%s" "$lock_hash" "$profile" "$mlx_flag" "$mlx_vlm_flag"
+}
+
+decide_backend_deps_action() {
+    local fingerprint="$1"
+    local prev_fingerprint="$2"
+    local profile="$3"
+
+    DEPS_ACTION="skip"
+    DEPS_REASON="依赖指纹未变更（profile=$profile）"
+    if [[ "$CLEAN_INSTALL" == true ]]; then
+        DEPS_ACTION="install"
+        DEPS_REASON="--clean"
+        return 0
+    fi
+    if [[ "$STRICT_DEPS" == true ]]; then
+        DEPS_ACTION="install"
+        DEPS_REASON="--strict-deps"
+        return 0
+    fi
+    if [[ -z "$prev_fingerprint" || "$prev_fingerprint" != "$fingerprint" ]]; then
+        DEPS_ACTION="install"
+        DEPS_REASON="后端依赖指纹变更（profile=$profile）"
+        return 0
+    fi
+    return 0
+}
+
 ensure_pbs_python_deps() {
     local with_dev=false
     if [[ "$1" == "--with-dev" ]]; then
@@ -155,19 +237,6 @@ ensure_pbs_python_deps() {
         return 0
     fi
 
-    get_sha256() {
-        local file_path="$1"
-        if command -v shasum &> /dev/null; then
-            shasum -a 256 "$file_path" | cut -d ' ' -f 1
-            return 0
-        fi
-        if command -v sha256sum &> /dev/null; then
-            sha256sum "$file_path" | cut -d ' ' -f 1
-            return 0
-        fi
-        python3 -c "import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" "$file_path"
-    }
-
     local mirror_args=()
     if [[ -n "$PYPI_MIRROR" ]]; then
         mirror_args+=("--index-url" "$PYPI_MIRROR")
@@ -178,122 +247,53 @@ ensure_pbs_python_deps() {
     local stamp_file="$SIDECAR_DIR/python/.dawnchat-poetry-lock.sha256"
     local fallback_stamp_dir="$PROJECT_ROOT/.dawnchat-cache"
     local fallback_stamp_file="$fallback_stamp_dir/.dawnchat-poetry-lock.sha256"
+    local profile="runtime"
     if [[ "$with_dev" == true ]]; then
         stamp_file="$SIDECAR_DIR/python/.dawnchat-poetry-lock.dev.sha256"
         fallback_stamp_file="$fallback_stamp_dir/.dawnchat-poetry-lock.dev.sha256"
+        profile="dev"
     fi
-    local lock_hash=""
-    if [[ -f "$lock_path" ]]; then
-        lock_hash="$(get_sha256 "$lock_path" 2>/dev/null || true)"
-    fi
-    local prev_hash=""
-    if [[ -f "$stamp_file" ]]; then
-        prev_hash="$(cat "$stamp_file" 2>/dev/null || true)"
-    elif [[ -f "$fallback_stamp_file" ]]; then
-        prev_hash="$(cat "$fallback_stamp_file" 2>/dev/null || true)"
-    fi
-
-    if [[ "$CLEAN_INSTALL" != true && -n "$lock_hash" && -n "$prev_hash" && "$prev_hash" == "$lock_hash" && -f "$pbs_rg" ]]; then
-        return 0
-    fi
-
-    local needs_install=false
-    local force_reinstall_deps=false
-    local needs_otel_repair=false
-    local needs_lock_update=false
-    
-    if [[ "$CLEAN_INSTALL" == true ]]; then
-        if [[ -f "$pyproject_path" && ! -f "$lock_path" ]]; then
-            print_warning "poetry.lock 不存在，需要生成"
-            needs_lock_update=true
-        fi
-    fi
-    
-    if [[ -f "$pyproject_path" && ! -f "$lock_path" && "$CLEAN_INSTALL" != true ]]; then
-        print_warning "poetry.lock 不存在，需要生成"
-        needs_lock_update=true
-    fi
-    
-    if [[ "$CLEAN_INSTALL" == true ]]; then
-        print_info "检测到 --clean，重新安装 PBS Python 依赖..."
-        needs_install=true
-    else
-        if [[ "$needs_lock_update" == true ]]; then
-            cd "$BACKEND_DIR"
-            if poetry lock; then
-                print_success "poetry.lock 更新成功"
-                lock_hash="$(get_sha256 "$lock_path" 2>/dev/null || true)"
-                needs_install=true
-            else
-                print_error "poetry lock 失败，请手动运行: cd $BACKEND_DIR && poetry lock"
-                exit 1
-            fi
-            cd "$PROJECT_ROOT"
-        fi
-        
-        if [[ -n "$lock_hash" ]]; then
-            if [[ -z "$prev_hash" || "$prev_hash" != "$lock_hash" ]]; then
-                needs_install=true
-            fi
-        fi
-
-        if ! "$pbs_python" -c "from transformers import Qwen2TokenizerFast" >/dev/null 2>&1; then
-            needs_install=true
-        fi
-
-        if [[ ! -f "$pbs_rg" ]]; then
-            needs_install=true
-        fi
-
-        if ! "$pbs_python" -c "import inspect; from huggingface_hub import hf_hub_download; import sys; sys.exit(0 if 'tqdm_class' in inspect.signature(hf_hub_download).parameters else 1)" >/dev/null 2>&1; then
-            needs_install=true
-        fi
-
-        if ! "$pbs_python" -c "import importlib.util, sys; sys.exit(0 if (importlib.util.find_spec('websockets') or importlib.util.find_spec('wsproto')) else 1)" >/dev/null 2>&1; then
-            needs_install=true
-        fi
-
-        if ! "$pbs_python" -c "import opentelemetry.context" >/dev/null 2>&1; then
-            print_warning "检测到 opentelemetry 运行时异常，强制重装 PBS 依赖修复..."
-            needs_install=true
-            force_reinstall_deps=true
-            needs_otel_repair=true
-        fi
-        
-        if [[ "$with_dev" == true ]]; then
-            if ! "$pbs_python" -c "import pytest" >/dev/null 2>&1; then
-                needs_install=true
-            fi
-        fi
-
-        if [[ "$WITH_MLX" == true ]]; then
-            if ! "$pbs_python" -c "import mlx_lm" >/dev/null 2>&1; then
-                needs_install=true
-            fi
-            if [[ "$(echo "$MLX_WITH_VLM" | tr '[:upper:]' '[:lower:]')" == "true" ]]; then
-                if ! "$pbs_python" -c "import mlx_vlm" >/dev/null 2>&1; then
-                    needs_install=true
-                fi
-            fi
-        fi
-
-        if [[ "$needs_install" != true ]]; then
-            return 0
-        fi
-
-        print_warning "PBS Python 依赖需要更新，开始安装..."
+    if [[ ! -f "$pyproject_path" || ! -f "$lock_path" ]]; then
+        print_error "缺少 pyproject.toml 或 poetry.lock，无法执行后端依赖同步"
+        print_error "请检查 $BACKEND_DIR 目录并补齐 lock 文件"
+        exit 1
     fi
 
     if ! command -v poetry &> /dev/null; then
-        print_warning "未找到 poetry，无法导出 requirements.txt，跳过 PBS 依赖安装"
+        print_error "未找到 poetry，无法执行依赖导出"
+        print_error "请先安装 Poetry，再运行 dev 脚本"
+        exit 1
+    fi
+
+    if ! ensure_poetry_lock_consistent "$BACKEND_DIR"; then
+        exit 1
+    fi
+    cd "$PROJECT_ROOT"
+
+    local lock_hash
+    lock_hash="$(get_sha256 "$lock_path" 2>/dev/null || true)"
+    local fingerprint
+    fingerprint="$(compose_backend_deps_fingerprint "$lock_hash" "$profile" "$WITH_MLX" "$MLX_WITH_VLM")"
+
+    local prev_fingerprint=""
+    if [[ -f "$stamp_file" ]]; then
+        prev_fingerprint="$(cat "$stamp_file" 2>/dev/null || true)"
+    elif [[ -f "$fallback_stamp_file" ]]; then
+        prev_fingerprint="$(cat "$fallback_stamp_file" 2>/dev/null || true)"
+    fi
+    decide_backend_deps_action "$fingerprint" "$prev_fingerprint" "$profile"
+    if [[ "$DEPS_ACTION" != "install" ]]; then
+        print_info "跳过 PBS Python 依赖安装（$DEPS_REASON）"
         return 0
     fi
+    print_info "安装 PBS Python 依赖（$DEPS_REASON）..."
 
     cd "$BACKEND_DIR"
 
     if ! poetry export --help &> /dev/null; then
-        print_warning "poetry export 命令不可用，尝试安装 poetry-plugin-export..."
-        poetry self add poetry-plugin-export >/dev/null 2>&1 || true
+        print_error "poetry export 命令不可用，请先安装 poetry-plugin-export"
+        print_error "请运行: poetry self add poetry-plugin-export"
+        exit 1
     fi
 
     print_info "导出 requirements.txt..."
@@ -305,9 +305,7 @@ ensure_pbs_python_deps() {
 
     if [[ -f "$PROJECT_ROOT/scripts/ensure_pbs_deps.py" ]]; then
         print_info "同步 PBS 依赖版本..."
-        if ! python3 "$PROJECT_ROOT/scripts/ensure_pbs_deps.py" "$BACKEND_DIR/poetry.lock" "requirements.txt" >/dev/null; then
-            print_warning "同步 PBS 依赖版本失败，继续使用 poetry export 结果"
-        fi
+        python3 "$PROJECT_ROOT/scripts/ensure_pbs_deps.py" "$BACKEND_DIR/poetry.lock" "requirements.txt" >/dev/null
     fi
 
     local mlx_specs=()
@@ -325,50 +323,8 @@ ensure_pbs_python_deps() {
     print_info "升级 pip..."
     "$pbs_pip" install --upgrade pip --quiet "${mirror_args[@]}"
 
-    if [[ "$needs_otel_repair" == true ]]; then
-        print_info "尝试修复 opentelemetry 元数据..."
-        if "$pbs_pip" install --upgrade --force-reinstall --no-cache-dir --quiet \
-            opentelemetry-api opentelemetry-sdk "${mirror_args[@]}" \
-            && "$pbs_python" -c "import opentelemetry.context" >/dev/null 2>&1; then
-            print_success "opentelemetry 修复成功，重新检查其余依赖"
-            needs_install=false
-            force_reinstall_deps=false
-            if ! "$pbs_python" -c "from transformers import Qwen2TokenizerFast" >/dev/null 2>&1; then
-                needs_install=true
-            fi
-            if [[ ! -f "$pbs_rg" ]]; then
-                needs_install=true
-            fi
-            if ! "$pbs_python" -c "import inspect; from huggingface_hub import hf_hub_download; import sys; sys.exit(0 if 'tqdm_class' in inspect.signature(hf_hub_download).parameters else 1)" >/dev/null 2>&1; then
-                needs_install=true
-            fi
-            if ! "$pbs_python" -c "import importlib.util, sys; sys.exit(0 if (importlib.util.find_spec('websockets') or importlib.util.find_spec('wsproto')) else 1)" >/dev/null 2>&1; then
-                needs_install=true
-            fi
-            if [[ "$with_dev" == true ]] && ! "$pbs_python" -c "import pytest" >/dev/null 2>&1; then
-                needs_install=true
-            fi
-            if [[ "$WITH_MLX" == true ]] && ! "$pbs_python" -c "import mlx_lm" >/dev/null 2>&1; then
-                needs_install=true
-            fi
-            if [[ "$WITH_MLX" == true && "$(echo "$MLX_WITH_VLM" | tr '[:upper:]' '[:lower:]')" == "true" ]] && ! "$pbs_python" -c "import mlx_vlm" >/dev/null 2>&1; then
-                needs_install=true
-            fi
-        else
-            print_warning "opentelemetry 最小修复失败，继续执行全量依赖重装"
-            needs_install=true
-            force_reinstall_deps=true
-        fi
-    fi
-
-    if [[ "$needs_install" != true ]]; then
-        cd "$PROJECT_ROOT"
-        print_success "PBS Python 依赖检查通过"
-        return 0
-    fi
-
     print_info "安装 Python 依赖（PBS）..."
-    if [[ "$CLEAN_INSTALL" == true || "$force_reinstall_deps" == true ]]; then
+    if [[ "$CLEAN_INSTALL" == true || "$STRICT_DEPS" == true ]]; then
         "$pbs_pip" uninstall -y opencv-python opencv-contrib-python >/dev/null 2>&1 || true
         "$pbs_pip" install --upgrade --force-reinstall -r requirements.txt --no-cache-dir --quiet "${mirror_args[@]}"
     else
@@ -384,32 +340,54 @@ ensure_pbs_python_deps() {
         fi
     fi
 
-    if ! "$pbs_python" -c "import importlib.util, sys; sys.exit(0 if (importlib.util.find_spec('websockets') or importlib.util.find_spec('wsproto')) else 1)" >/dev/null 2>&1; then
-        print_warning "PBS Python 未检测到 WebSocket 运行时，补装 websockets..."
-        "$pbs_pip" install --upgrade --no-cache-dir --quiet "websockets>=12.0,<16.0" "${mirror_args[@]}"
-    fi
-
-    if ! "$pbs_python" -c "import importlib.util, sys; sys.exit(0 if (importlib.util.find_spec('websockets') or importlib.util.find_spec('wsproto')) else 1)" >/dev/null 2>&1; then
-        print_error "缺少 WebSocket 运行时依赖（websockets/wsproto）"
-        print_error "请检查 Python 依赖安装日志"
-        exit 1
-    fi
-
-    if [[ -n "$lock_hash" ]]; then
-        if ! (mkdir -p "$(dirname "$stamp_file")" 2>/dev/null && echo "$lock_hash" > "$stamp_file" 2>/dev/null); then
+    if [[ -n "$fingerprint" ]]; then
+        if ! (mkdir -p "$(dirname "$stamp_file")" 2>/dev/null && echo "$fingerprint" > "$stamp_file" 2>/dev/null); then
             mkdir -p "$fallback_stamp_dir" 2>/dev/null || true
-            echo "$lock_hash" > "$fallback_stamp_file" 2>/dev/null || true
+            echo "$fingerprint" > "$fallback_stamp_file" 2>/dev/null || true
         fi
-    fi
-
-    if [[ ! -f "$pbs_rg" ]]; then
-        print_error "缺少 ripgrep 二进制: $pbs_rg"
-        print_error "请检查 pyproject.toml 中 ripgrep 依赖是否安装成功"
-        exit 1
     fi
 
     cd "$PROJECT_ROOT"
     print_success "PBS Python 依赖安装完成"
+}
+
+ensure_poetry_runtime_deps() {
+    local with_dev=false
+    if [[ "$1" == "--with-dev" ]]; then
+        with_dev=true
+        shift
+    fi
+
+    local pyproject_path="$BACKEND_DIR/pyproject.toml"
+    local lock_path="$BACKEND_DIR/poetry.lock"
+    if [[ ! -f "$pyproject_path" || ! -f "$lock_path" ]]; then
+        print_error "缺少 pyproject.toml 或 poetry.lock，无法执行 Poetry 依赖同步"
+        print_error "请检查 $BACKEND_DIR 目录并补齐 lock 文件"
+        exit 1
+    fi
+    if ! command -v poetry &> /dev/null; then
+        print_error "未找到 poetry，无法执行 Poetry 依赖同步"
+        exit 1
+    fi
+
+    if ! ensure_poetry_lock_consistent "$BACKEND_DIR"; then
+        exit 1
+    fi
+
+    cd "$BACKEND_DIR"
+    local install_args=("install" "--no-root" "--no-interaction")
+    if [[ "$with_dev" == true ]]; then
+        install_args+=("--with" "dev")
+    fi
+    install_args+=("--sync")
+    if [[ "$STRICT_DEPS" == true ]]; then
+        print_info "Poetry 严格依赖同步中（--strict-deps）..."
+    else
+        print_info "Poetry 依赖同步中（--sync）..."
+    fi
+    poetry "${install_args[@]}"
+    cd "$PROJECT_ROOT"
+    print_success "Poetry 依赖同步完成"
 }
 
 find_python() {

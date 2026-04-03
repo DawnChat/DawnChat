@@ -10,6 +10,7 @@
 #   --frontend-only      仅启动前端
 #   --backend-only       仅启动后端
 #   --clean              清理并重新安装依赖
+#   --strict-deps        严格模式：每次强制同步后端依赖
 #   --sync               仅同步代码（不启动服务）
 #   --no-sync            跳过同步（快速重启）
 #   --show-terminal      显示 Claude Code 终端窗口（开发模式）
@@ -45,6 +46,7 @@ set -e  # 遇到错误立即退出
 FRONTEND_ONLY=false
 BACKEND_ONLY=false
 CLEAN_INSTALL=false
+STRICT_DEPS=false
 VERBOSE=false
 SYNC_ONLY=false
 NO_SYNC=false
@@ -118,6 +120,7 @@ DawnChat 开发环境启动脚本
     --frontend-only      仅启动前端（Vue dev server）
     --backend-only       仅启动后端（Python PBS）
     --clean              清理并重新安装依赖
+    --strict-deps        严格模式：每次强制同步后端依赖（仅后端）
     --sync               仅同步代码（后端源码 + 插件 + SDK），不启动服务
     --no-sync            跳过同步步骤（快速重启已同步的代码）
     --show-terminal      显示 Claude Code 终端窗口（开发调试模式）
@@ -152,6 +155,7 @@ DawnChat 开发环境启动脚本
     $0 --frontend-only      # 仅启动前端
     $0 --backend-only       # 仅启动后端
     $0 --clean              # 清理后重启
+    $0 --strict-deps        # 每次强制同步后端依赖
     $0 --sync               # 仅同步代码（不启动服务）
     $0 --no-sync            # 跳过同步（快速重启）
     $0 --pytest             # 运行所有后端测试
@@ -212,6 +216,7 @@ main() {
 
     # 仅同步模式
     if [[ "$SYNC_ONLY" == true ]]; then
+        print_info "同步模式：仅执行代码同步，不执行后端依赖同步"
         sync_all
         exit 0
     fi
