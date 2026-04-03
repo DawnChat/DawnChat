@@ -82,6 +82,11 @@ class UiToolService:
                 },
                 elapsed_ms=elapsed_ms,
             )
+        if tool.op == BridgeOperation.CAPABILITIES_LIST:
+            started = perf_counter()
+            data = await self._build_capabilities_catalog(plugin_id)
+            elapsed_ms = int((perf_counter() - started) * 1000)
+            return self._build_local_response(op=tool.op, data=data, elapsed_ms=elapsed_ms)
         started = perf_counter()
         dispatch_result = await self._bridge.dispatch(plugin_id=plugin_id, op=tool.op, payload=payload)
         elapsed_ms = int((perf_counter() - started) * 1000)
@@ -117,8 +122,10 @@ class UiToolService:
             return cls._build_session_status_invoke_payload(arguments)
         if tool.capability_function == "assistant.session.stop":
             return cls._build_session_stop_invoke_payload(arguments)
-        if tool.capability_function == "assistant.session.wait":
-            return cls._build_session_wait_invoke_payload(arguments)
+        if tool.capability_function == "assistant.event.wait":
+            return cls._build_event_wait_invoke_payload(arguments)
+        if tool.capability_function == "assistant.session.wait_for_end":
+            return cls._build_session_wait_for_end_invoke_payload(arguments)
         return cls._validate_and_normalize_arguments(tool.op, arguments)
 
     @classmethod
@@ -223,22 +230,54 @@ class UiToolService:
         )
 
     @classmethod
-    def _build_session_wait_invoke_payload(cls, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    def _build_event_wait_invoke_payload(cls, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        raw_event_types = arguments.get("event_types")
+        if not isinstance(raw_event_types, list) or len(raw_event_types) == 0:
+            raise PluginUIBridgeError(
+                code="invalid_arguments",
+                message="event_types must be a non-empty array",
+            )
+        event_types = [str(item).strip() for item in raw_event_types if isinstance(item, str) and item.strip()]
+        if len(event_types) != len(raw_event_types):
+            raise PluginUIBridgeError(
+                code="invalid_arguments",
+                message="event_types must contain non-empty strings",
+            )
+        wait_payload: Dict[str, Any] = {
+            "event_types": event_types,
+        }
+        raw_match = arguments.get("match")
+        if raw_match is not None:
+            if not isinstance(raw_match, dict):
+                raise PluginUIBridgeError(code="invalid_arguments", message="match must be an object")
+            wait_payload["match"] = {str(key): value for key, value in raw_match.items()}
+        raw_timeout_ms = arguments.get("timeout_ms")
+        if raw_timeout_ms is not None:
+            timeout_ms = cls._normalize_non_negative_number(raw_timeout_ms)
+            if timeout_ms is None:
+                raise PluginUIBridgeError(
+                    code="invalid_arguments",
+                    message="timeout_ms must be a non-negative number",
+                )
+            wait_payload["timeout_ms"] = timeout_ms
+        return cls._validate_and_normalize_arguments(
+            BridgeOperation.CAPABILITY_INVOKE,
+            {
+                "plugin_id": arguments.get("plugin_id"),
+                "function": "assistant.event.wait",
+                "payload": wait_payload,
+                "options": arguments.get("options", {}),
+            },
+        )
+
+    @classmethod
+    def _build_session_wait_for_end_invoke_payload(cls, arguments: Dict[str, Any]) -> Dict[str, Any]:
         raw_session_id = arguments.get("session_id")
         session_id = str(raw_session_id or "").strip()
         if not session_id:
             raise PluginUIBridgeError(code="invalid_arguments", message="session_id is required")
-
-        wait_for = str(arguments.get("wait_for") or "session_terminal").strip().lower()
-        if wait_for not in {"session_terminal", "runtime_event"}:
-            raise PluginUIBridgeError(
-                code="invalid_arguments",
-                message="wait_for must be one of: session_terminal, runtime_event",
-            )
-
         wait_payload: Dict[str, Any] = {
             "session_id": session_id,
-            "wait_for": wait_for,
         }
 
         raw_timeout_ms = arguments.get("timeout_ms")
@@ -251,45 +290,11 @@ class UiToolService:
                 )
             wait_payload["timeout_ms"] = timeout_ms
 
-        raw_since_seq = arguments.get("since_seq")
-        if raw_since_seq is not None:
-            since_seq = cls._normalize_index(raw_since_seq)
-            if since_seq is None:
-                raise PluginUIBridgeError(
-                    code="invalid_arguments",
-                    message="since_seq must be a non-negative integer",
-                )
-            wait_payload["since_seq"] = since_seq
-
-        raw_event_types = arguments.get("event_types")
-        if raw_event_types is not None:
-            if not isinstance(raw_event_types, list):
-                raise PluginUIBridgeError(code="invalid_arguments", message="event_types must be an array")
-            event_types = [str(item).strip() for item in raw_event_types if str(item).strip()]
-            if len(event_types) != len(raw_event_types):
-                raise PluginUIBridgeError(
-                    code="invalid_arguments",
-                    message="event_types must contain non-empty strings",
-                )
-            wait_payload["event_types"] = event_types
-
-        raw_match = arguments.get("match")
-        if raw_match is not None:
-            if not isinstance(raw_match, dict):
-                raise PluginUIBridgeError(code="invalid_arguments", message="match must be an object")
-            wait_payload["match"] = {str(key): value for key, value in raw_match.items()}
-
-        if wait_for == "runtime_event" and not wait_payload.get("event_types"):
-            raise PluginUIBridgeError(
-                code="invalid_arguments",
-                message="event_types is required when wait_for=runtime_event",
-            )
-
         return cls._validate_and_normalize_arguments(
             BridgeOperation.CAPABILITY_INVOKE,
             {
                 "plugin_id": arguments.get("plugin_id"),
-                "function": "assistant.session.wait",
+                "function": "assistant.session.wait_for_end",
                 "payload": wait_payload,
                 "options": arguments.get("options", {}),
             },
@@ -449,7 +454,7 @@ class UiToolService:
             ),
             UiToolDefinition(
                 name="dawnchat.ui.capabilities.list",
-                description="List plugin-exposed UI capabilities and input schemas",
+                description="List assistant feature scenes and minimal top-level UI entrypoints",
                 op=BridgeOperation.CAPABILITIES_LIST,
                 input_schema={
                     "type": "object",
@@ -540,27 +545,36 @@ class UiToolService:
                 },
             ),
             UiToolDefinition(
-                name="dawnchat.ui.session.wait",
-                description="Wait for a host-managed assistant session terminal state or runtime event",
+                name="dawnchat.ui.event.wait",
+                description="Wait for runtime event(s) emitted from the plugin preview",
                 op=BridgeOperation.CAPABILITY_INVOKE,
-                capability_function="assistant.session.wait",
+                capability_function="assistant.event.wait",
                 input_schema={
                     "type": "object",
                     "properties": {
                         "plugin_id": {"type": "string"},
-                        "session_id": {"type": "string"},
-                        "wait_for": {
-                            "type": "string",
-                            "enum": ["session_terminal", "runtime_event"],
-                            "default": "session_terminal",
-                        },
                         "event_types": {
                             "type": "array",
                             "items": {"type": "string"},
                             "minItems": 1,
                         },
                         "match": {"type": "object"},
-                        "since_seq": {"type": "number", "minimum": 0},
+                        "timeout_ms": {"type": "number", "minimum": 0},
+                        "options": {"type": "object"},
+                    },
+                    "required": ["plugin_id", "event_types"],
+                },
+            ),
+            UiToolDefinition(
+                name="dawnchat.ui.session.wait_for_end",
+                description="Wait for a host-managed assistant session to reach terminal state",
+                op=BridgeOperation.CAPABILITY_INVOKE,
+                capability_function="assistant.session.wait_for_end",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "plugin_id": {"type": "string"},
+                        "session_id": {"type": "string"},
                         "timeout_ms": {"type": "number", "minimum": 0},
                         "options": {"type": "object"},
                     },
@@ -759,6 +773,31 @@ class UiToolService:
                 "elapsed_ms": elapsed_ms,
             },
         }
+
+    async def _build_capabilities_catalog(self, plugin_id: str) -> Dict[str, Any]:
+        list_payload = {
+            "function": "assistant.view.list",
+            "payload": {},
+            "options": {},
+        }
+        list_result = await self._bridge.dispatch(
+            plugin_id=plugin_id,
+            op=BridgeOperation.CAPABILITY_INVOKE,
+            payload=list_payload,
+        )
+        raw_result = list_result.result
+        if not isinstance(raw_result, dict) or raw_result.get("ok") is False:
+            raise PluginUIBridgeError(
+                code="capabilities_catalog_unavailable",
+                message="assistant.view.list did not return a usable capability catalog",
+            )
+        data = raw_result.get("data")
+        if not isinstance(data, dict):
+            raise PluginUIBridgeError(
+                code="capabilities_catalog_invalid",
+                message="assistant.view.list returned invalid data",
+            )
+        return data
 
     @staticmethod
     def _normalize_act_target(target: Any) -> Dict[str, Any] | None:

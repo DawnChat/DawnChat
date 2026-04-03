@@ -7,6 +7,7 @@ import uuid
 
 from fastapi import WebSocket
 
+from app.config import Config
 from app.utils.logger import get_logger
 
 from .connection_registry import BridgeConnectionRegistry
@@ -151,8 +152,9 @@ class PluginUIBridgeService:
         )
         async with connection.send_lock:
             await connection.websocket.send_json(envelope)
+        timeout_seconds = self._resolve_dispatch_timeout_seconds(op=op, payload=payload)
         try:
-            result = await asyncio.wait_for(future, timeout=15.0)
+            result = await asyncio.wait_for(future, timeout=timeout_seconds)
             if not isinstance(result, dict):
                 result = {
                     "ok": False,
@@ -168,6 +170,26 @@ class PluginUIBridgeService:
                 code="bridge_timeout",
                 message=f"plugin ui bridge timeout: {op.value}",
             ) from err
+
+    @staticmethod
+    def _resolve_dispatch_timeout_seconds(op: BridgeOperation, payload: Dict[str, Any]) -> float:
+        base_timeout_seconds = max(float(Config.PLUGIN_UI_BRIDGE_TIMEOUT_SECONDS), 1.0)
+        if op != BridgeOperation.CAPABILITY_INVOKE:
+            return base_timeout_seconds
+        function_name = str(payload.get("function") or "").strip()
+        if function_name not in {"assistant.event.wait", "assistant.session.wait_for_end"}:
+            return base_timeout_seconds
+        nested_payload = payload.get("payload")
+        wait_payload = nested_payload if isinstance(nested_payload, dict) else {}
+        raw_timeout_ms = wait_payload.get("timeout_ms")
+        requested_timeout_seconds: float | None = None
+        if isinstance(raw_timeout_ms, (int, float)) and not isinstance(raw_timeout_ms, bool):
+            requested_timeout_seconds = max(float(raw_timeout_ms) / 1000.0, 0.0)
+        buffer_seconds = max(float(Config.PLUGIN_UI_BRIDGE_SESSION_WAIT_TIMEOUT_BUFFER_SECONDS), 0.0)
+        session_wait_timeout_seconds = max(float(Config.PLUGIN_UI_BRIDGE_SESSION_WAIT_TIMEOUT_SECONDS), 1.0)
+        if requested_timeout_seconds is None:
+            return max(base_timeout_seconds, session_wait_timeout_seconds)
+        return max(base_timeout_seconds, session_wait_timeout_seconds, requested_timeout_seconds + buffer_seconds)
 
     @staticmethod
     def _safe_plugin_key(plugin_id: str) -> str:
