@@ -76,7 +76,8 @@ The public host-managed tools are:
 - `dawnchat.ui.session.start`
 - `dawnchat.ui.session.status`
 - `dawnchat.ui.session.stop`
-- `dawnchat.ui.session.wait`
+- `dawnchat.ui.event.wait`
+- `dawnchat.ui.session.wait_for_end`
 
 These tools are defined in [ui_tool_service.py](file:///Users/zhutao/Cursor/DawnChat/packages/backend-kernel/app/plugin_ui_bridge/ui_tool_service.py#L402-L466).
 
@@ -195,86 +196,81 @@ If it returns `ok: false` or throws, the host marks the session as failed.
 The current public observation path is `dawnchat.ui.session.status`.
 Callers poll for state snapshots instead of receiving a plugin-defined push stream from the core protocol.
 
-### 7.5 Host-managed wait surface
+### 7.5 Decoupled wait surfaces
 
-`dawnchat.ui.session.wait` provides a narrow wait-oriented control-plane surface without changing the host–plugin lifecycle boundary.
+The wait semantics are intentionally split into two separate tools:
 
-It currently supports:
+- `dawnchat.ui.event.wait` waits for runtime events only.
+- `dawnchat.ui.session.wait_for_end` waits for session terminal state only.
 
-- waiting for a host-managed session terminal state (`completed`, `failed`, `cancelled`),
-- waiting for plugin runtime events by `event_types`, `since_seq`, and optional payload `match`.
+`dawnchat.ui.event.wait` accepts:
 
-This allows external callers to reduce high-frequency status polling while still treating plugin runtime events as plugin-owned business semantics.
+- `event_types`
+- optional `match`
+- optional `timeout_ms`
+
+It is a pure realtime wait:
+
+- it does not require `session_id`,
+- it may match events emitted while some session is still running,
+- it only waits for events emitted after the wait is established,
+- refresh or iframe reload may drop an in-flight wait, and callers should simply start a new wait if still needed.
+
+`dawnchat.ui.session.wait_for_end` accepts:
+
+- `session_id`
+- optional `timeout_ms`
+
+It only observes host session lifecycle:
+
+- if the session is already terminal, it returns immediately,
+- if the session is still running, it resolves when the session becomes `completed`, `failed`, or `cancelled`,
+- it does not interpret runtime events.
 
 The host still does not interpret plugin business payloads:
 
-- the host owns the long wait lifecycle, timeout, and terminal wake-up,
-- the plugin owns runtime event meaning and workspace state updates,
-- durable truth still belongs to workspace state / checkpoint / artifacts rather than to the event stream itself.
+- the host owns session lifecycle and wait timeout management,
+- the plugin owns runtime event meaning and runtime snapshot updates,
+- durable truth still belongs to plugin-defined view-owned state or other plugin storage rather than to the event stream itself.
 
 ### 7.6 Recommended caller pattern
 
 For interactive or recoverable flows, the recommended external calling pattern is:
 
 1. start or continue a session with `dawnchat.ui.session.start`
-2. if the task needs passive waiting, call `dawnchat.ui.session.wait`
-3. if the runtime was interrupted, inspect `assistant.workspace.checkpoint.describe`
-4. after `assistant.workspace.resume`, read `continuation_hint`
-5. when `continuation_hint.pending_wait` exists, prefer a targeted follow-up wait using:
-   - `wait_for=runtime_event`
-   - `since_seq=continuation_hint.event_cursor_seq`
-6. use `dawnchat.ui.session.status` for explicit snapshot reads, not as the only waiting mechanism
+2. if the task needs a runtime signal, call `dawnchat.ui.event.wait`
+3. if the task needs session completion, call `dawnchat.ui.session.wait_for_end`
+4. use `dawnchat.ui.session.status` for explicit snapshot reads, not as the only waiting mechanism
+5. if the runtime was interrupted, treat the next step as a fresh control-plane decision rather than assuming a public plugin-side restore entrypoint
+6. when the runtime still exposes `continuation`-style hints through snapshot surfaces, use them only as planning hints rather than as a public wait API contract
 
-Example follow-up after resume:
+Important clarification:
+
+- callers should not invent their own event cursor or stream identity model
+- product page restore should not assume a public plugin-side restore entry path; stateful views should own their real restore behavior separately
+- if a wait was interrupted by refresh or reload, treat the next step as a fresh control-plane decision and start a new wait if still needed
+
+Example runtime-event wait:
 
 ```json
 {
-  "tool": "dawnchat.ui.session.wait",
+  "tool": "dawnchat.ui.event.wait",
   "arguments": {
-    "session_id": "sess_runtime",
-    "wait_for": "runtime_event",
     "event_types": ["assistant.guide.confirm.responded"],
     "match": {
       "confirm_id": "confirm-delete"
     },
-    "since_seq": 7,
     "timeout_ms": 30000
   }
 }
 ```
 
-And the corresponding recovery hint shape:
-
-```json
-{
-  "continuation_hint": {
-    "last_completed_step_index": 2,
-    "event_cursor_seq": 7,
-    "pending_wait": {
-      "action_type": "flow.wait",
-      "session_id": "sess_runtime",
-      "step_id": "step-confirm",
-      "event_types": ["assistant.guide.confirm.responded"],
-      "match": {
-        "confirm_id": "confirm-delete"
-      }
-    }
-  }
-}
-```
-
-The important rule is:
-
-- `continuation_hint` tells the caller where to resume observation.
-- `session.wait` remains the passive waiting surface.
-- workspace state and checkpoint snapshots remain the durable source of truth after recovery.
-
 This keeps the contract narrow:
 
 - `status` remains the snapshot tool,
 - `wait` becomes the passive waiting tool,
-- `checkpoint.describe` and `resume` remain recovery tools,
-- `continuation_hint` helps the caller decide the next session or wait boundary.
+- any recovery hint remains plugin-defined runtime metadata rather than a guaranteed public restore API,
+- `continuation_hint` helps the caller decide the next session or wait boundary when available.
 
 ---
 
@@ -283,8 +279,8 @@ This keeps the contract narrow:
 This protocol does not prescribe:
 
 - whether the caller is an agent, script, developer tool, or another runtime,
-- how a plugin interprets `guide.*`, `view.*`, `app.*`, or `flow.*`,
-- how a plugin structures its internal workspace state,
+- how a plugin interprets `guide.*`, `view.*`, `session.*`, or `flow.*`,
+- how a plugin structures its internal view state or runtime observation state,
 - whether a plugin uses narration, TTS, overlays, cards, or any other UI idiom,
 - which optional host services a plugin invokes.
 
@@ -315,5 +311,7 @@ The current reference implementation lives in these files:
 - Host bridge and iframe dispatch: [usePluginUiBridge.ts](file:///Users/zhutao/Cursor/DawnChat/apps/frontend/src/composables/usePluginUiBridge.ts#L117-L357)
 - Host session orchestration: [useAssistantSessionOrchestrator.ts](file:///Users/zhutao/Cursor/DawnChat/apps/frontend/src/features/plugin-dev-workbench/composables/useAssistantSessionOrchestrator.ts#L90-L397)
 - Plugin step execution and cancellation: [sessionStepExecutor.ts](file:///Users/zhutao/Cursor/DawnChat/dawnchat-plugins/official-plugins/desktop-ai-assistant/_ir/frontend/web-src/src/runtime/sessionStepExecutor.ts#L151-L344)
+- Plugin runtime event bus and recent-window persistence: [createAssistantEventBus.ts](file:///Users/zhutao/Cursor/DawnChat/dawnchat-plugins/official-plugins/desktop-ai-assistant/_ir/frontend/web-src/src/runtime/events/createAssistantEventBus.ts)
+- Plugin `flow.wait` execution: [flowRuntime.ts](file:///Users/zhutao/Cursor/DawnChat/dawnchat-plugins/official-plugins/desktop-ai-assistant/_ir/frontend/web-src/src/runtime/flowRuntime.ts)
 
 The official AI Assistant uses this protocol as a reference app, but the protocol itself is host–plugin infrastructure and should be understood independently from any one assistant behavior model.
