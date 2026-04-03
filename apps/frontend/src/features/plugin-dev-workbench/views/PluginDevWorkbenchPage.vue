@@ -96,6 +96,7 @@
         :tts-stream-status="ttsStreamStatus"
         :selected-tts-engine="selectedTtsEngine"
         :tts-engine-options="ttsEngineOptions"
+        :enable-file-attachments="workbenchLayoutVariant === 'agent_preview'"
         :file-tree-collapsed="fileTreeCollapsed"
         :files-loading="filesLoading"
         :file-list="fileList"
@@ -166,6 +167,7 @@
         :tts-stream-status="ttsStreamStatus"
         :selected-tts-engine="selectedTtsEngine"
         :tts-engine-options="ttsEngineOptions"
+        :enable-file-attachments="workbenchLayoutVariant === 'agent_preview'"
         @update-chat-input="setChatInput"
         @composer-selection-change="handleComposerSelectionChange"
         @update-markdown="updateContent"
@@ -187,6 +189,8 @@
       :preview-pane-key="previewPaneKey"
       :plugin-id="pluginId"
       :plugin-url="pluginUrl"
+      :preview-frontend-mode="previewFrontendMode"
+      :preview-frontend-reachable="previewFrontendReachable"
       :preview-log-session-id="previewLogSessionId"
       :preview-lifecycle-task="previewLifecycleTask"
       :preview-lifecycle-busy="previewLifecycleBusy"
@@ -200,8 +204,10 @@
       :tts-playback-state="ttsPlaybackState"
       :tts-stream-status="ttsStreamStatus"
       :on-capability-invoke-request="handleCapabilityInvokeRequest"
+      :on-assistant-runtime-event="handleAssistantRuntimeEvent"
       :on-host-invoke-request="handleHostInvokeRequest"
       @restart="handleRestartPreview"
+      @preview-recover-escalate="handlePreviewRecoverEscalation"
       @toggle-fullscreen="togglePreviewFullscreen"
       @retry-install="handleRetryInstall"
       @inspector-select="handleInspectorSelect"
@@ -291,6 +297,8 @@ const {
   isPreviewRenderable,
   previewPaneKey,
   pluginUrl,
+  previewFrontendMode,
+  previewFrontendReachable,
   previewLogSessionId,
   previewLifecycleTask,
   previewLifecycleBusy,
@@ -322,6 +330,7 @@ const {
   exitBusy,
   exitWarningMessage,
   handleRestartPreview,
+  handlePreviewRecoverEscalation,
   handleRetryInstall,
   handleInspectorSelect,
   handleContextPush,
@@ -395,6 +404,7 @@ const {
   submitAzureTtsDialog,
   stopTtsPlayback,
   handleCapabilityInvokeRequest,
+  handleAssistantRuntimeEvent,
   handleHostInvokeRequest,
 } = usePluginDevWorkbenchOrchestration()
 

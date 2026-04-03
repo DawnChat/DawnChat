@@ -19,6 +19,7 @@
       :show-agent-selector="showAgentSelector"
       :show-model-selector="showModelSelector"
       :show-composer="showComposer"
+      :enable-file-attachments="enableFileAttachments && showComposer"
       :show-tts-control="showTtsControl"
       :tts-enabled="ttsEnabled"
       :tts-playback-state="ttsPlaybackState"
@@ -56,6 +57,7 @@ withDefaults(defineProps<{
   showAgentSelector?: boolean
   showModelSelector?: boolean
   showComposer?: boolean
+  enableFileAttachments?: boolean
   showTtsControl?: boolean
   ttsEnabled?: boolean
   ttsPlaybackState?: TtsPlaybackState
@@ -69,6 +71,7 @@ withDefaults(defineProps<{
   showAgentSelector: true,
   showModelSelector: true,
   showComposer: true,
+  enableFileAttachments: false,
   showTtsControl: false,
   ttsEnabled: true,
   ttsPlaybackState: 'idle',

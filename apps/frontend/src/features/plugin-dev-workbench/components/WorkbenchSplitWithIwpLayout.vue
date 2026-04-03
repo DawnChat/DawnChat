@@ -56,6 +56,7 @@
     :tts-stream-status="ttsStreamStatus"
     :selected-tts-engine="selectedTtsEngine"
     :tts-engine-options="ttsEngineOptions"
+    :enable-file-attachments="enableFileAttachments"
     @update-chat-input="(value) => emit('updateChatInput', value)"
     @composer-selection-change="(payload) => emit('composerSelectionChange', payload)"
     @update-markdown="(value) => emit('updateMarkdown', value)"
@@ -136,6 +137,7 @@ defineProps<{
   ttsStreamStatus: 'idle' | 'connecting' | 'reconnecting' | 'streaming' | 'closed'
   selectedTtsEngine: string
   ttsEngineOptions: Array<{ id: string; label: string }>
+  enableFileAttachments: boolean
   fileTreeCollapsed: boolean
   filesLoading: boolean
   fileList: IwpMarkdownFileMeta[]

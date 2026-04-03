@@ -13,6 +13,11 @@ export interface CodingAgentPart {
   permissionID?: string
   state?: {
     status?: string
+    input?: Record<string, unknown>
+    output?: string
+    error?: string | Record<string, unknown>
+    raw?: string
+    rawArguments?: string
     [key: string]: unknown
   }
   [key: string]: unknown
@@ -111,7 +116,7 @@ export interface SessionQueryOptions {
 }
 
 export interface PromptPayload {
-  parts: Array<{ type: 'text'; text: string }>
+  parts: PromptPart[]
   agent: string
   plugin_id?: string
   project_id?: string
@@ -123,6 +128,20 @@ export interface PromptPayload {
     modelID: string
   }
 }
+
+export interface PromptTextPart {
+  type: 'text'
+  text: string
+}
+
+export interface PromptFilePart {
+  type: 'file'
+  mime: string
+  url: string
+  filename?: string
+}
+
+export type PromptPart = PromptTextPart | PromptFilePart
 
 export interface AgentOption {
   id: string

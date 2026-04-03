@@ -7,6 +7,7 @@ import {
   UI_AGENT_RESPONSE_TYPES
 } from '../services/plugin-ui-bridge/constants'
 import type {
+  AssistantRuntimeEventPayload,
   BridgeRequestMessage,
   ContextPushPayload,
   TtsSpeakAcceptedPayload,
@@ -45,6 +46,7 @@ interface UiBridgeOptions {
   onContextPush: (payload: ContextPushPayload) => void
   onTtsSpeakAccepted?: (payload: TtsSpeakAcceptedPayload) => void
   onTtsStopped?: (payload: TtsStoppedPayload) => void
+  onAssistantRuntimeEvent?: (payload: AssistantRuntimeEventPayload) => void
   onCapabilityInvokeRequest?: (
     context: CapabilityInvokeExecutionContext
   ) => Promise<Record<string, unknown> | null> | Record<string, unknown> | null
@@ -79,6 +81,20 @@ function isTtsStoppedPayload(payload: unknown): payload is TtsStoppedPayload {
   return true
 }
 
+function isAssistantRuntimeEventPayload(payload: unknown): payload is AssistantRuntimeEventPayload {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false
+  const data = payload as Record<string, unknown>
+  return (
+    typeof data.type === 'string' &&
+    typeof data.ts_ms === 'number' &&
+    Number.isFinite(data.ts_ms) &&
+    typeof data.source === 'string' &&
+    typeof data.payload === 'object' &&
+    data.payload !== null &&
+    !Array.isArray(data.payload)
+  )
+}
+
 const REQUEST_TYPE_MAP: Record<string, string> = {
   describe: IFRAME_UI_AGENT_MESSAGE.SNAPSHOT_REQUEST,
   query: IFRAME_UI_AGENT_MESSAGE.QUERY_REQUEST,
@@ -93,6 +109,18 @@ interface PendingRequest {
   timer: number
   source: 'bridge' | 'local'
   resolve?: (result: Record<string, unknown>) => void
+}
+
+function readEnvTimeoutMs(name: string, fallback: number): number {
+  const rawValue = import.meta.env[name]
+  if (rawValue === undefined) {
+    return fallback
+  }
+  const parsed = Number(rawValue)
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return fallback
+  }
+  return parsed
 }
 
 function toRecord(raw: unknown): Record<string, unknown> {
@@ -131,8 +159,15 @@ function parseHostInvoke(payload: unknown): HostInvokeRequest | null {
 export function usePluginUiBridge(options: UiBridgeOptions) {
   let bridge: PluginUiBridgeClient | null = null
   const pendingRequests = new Map<string, PendingRequest>()
-  const REQUEST_TIMEOUT_DEFAULT_MS = 20_000
-  const REQUEST_TIMEOUT_SESSION_INVOKE_MS = 120_000
+  const REQUEST_TIMEOUT_DEFAULT_MS = readEnvTimeoutMs('VITE_PLUGIN_UI_BRIDGE_REQUEST_TIMEOUT_MS', 20_000)
+  const REQUEST_TIMEOUT_SESSION_INVOKE_MS = readEnvTimeoutMs(
+    'VITE_PLUGIN_UI_BRIDGE_SESSION_INVOKE_TIMEOUT_MS',
+    120_000
+  )
+  const REQUEST_TIMEOUT_SESSION_WAIT_BUFFER_MS = readEnvTimeoutMs(
+    'VITE_PLUGIN_UI_BRIDGE_SESSION_WAIT_TIMEOUT_BUFFER_MS',
+    5_000
+  )
   let localRequestSeq = 0
 
   const resolveRequestTimeoutMs = (op: string, payload: Record<string, unknown>): number => {
@@ -140,16 +175,20 @@ export function usePluginUiBridge(options: UiBridgeOptions) {
       return REQUEST_TIMEOUT_DEFAULT_MS
     }
     const functionName = String(payload.function || '').trim()
-    if (functionName === 'assistant.session.wait') {
+    if (functionName === 'assistant.event.wait' || functionName === 'assistant.session.wait_for_end') {
       const waitPayload = toRecord(payload.payload)
       const requestedTimeoutMs = typeof waitPayload.timeout_ms === 'number' && Number.isFinite(waitPayload.timeout_ms)
         ? waitPayload.timeout_ms
         : REQUEST_TIMEOUT_SESSION_INVOKE_MS
-      return Math.max(REQUEST_TIMEOUT_SESSION_INVOKE_MS, requestedTimeoutMs + 5_000)
+      return Math.max(
+        REQUEST_TIMEOUT_SESSION_INVOKE_MS,
+        requestedTimeoutMs + REQUEST_TIMEOUT_SESSION_WAIT_BUFFER_MS
+      )
     }
     if (
       functionName.startsWith('assistant.session')
       || functionName.startsWith('assistant.session_')
+      || functionName === 'assistant.event.wait'
     ) {
       return REQUEST_TIMEOUT_SESSION_INVOKE_MS
     }
@@ -378,6 +417,16 @@ export function usePluginUiBridge(options: UiBridgeOptions) {
             },
           })
         })
+      return
+    }
+    if (type === IFRAME_UI_AGENT_MESSAGE.ASSISTANT_RUNTIME_EVENT) {
+      if (!isAssistantRuntimeEventPayload(event.data.payload)) {
+        logger.warn('[plugin_ui_bridge] ignore invalid assistant_runtime_event payload', {
+          pluginId: options.pluginId.value
+        })
+        return
+      }
+      options.onAssistantRuntimeEvent?.(event.data.payload)
     }
   }
 

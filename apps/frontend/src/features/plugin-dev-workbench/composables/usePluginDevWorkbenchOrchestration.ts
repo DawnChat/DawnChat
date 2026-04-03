@@ -31,7 +31,10 @@ import { isSystemTtsSupported, speakSystemTts, stopSystemTts } from '@/services/
 import { useSupabase } from '@/shared/composables/supabaseClient'
 import type { InspectorSelectPayload } from '@/types/inspector'
 import type { PluginWorkbenchLayout, PluginWorkbenchSurfaceMode } from '@/features/plugin/types'
-import type { TtsSpeakAcceptedPayload, TtsStoppedPayload } from '@/services/plugin-ui-bridge/messageProtocol'
+import type {
+  TtsSpeakAcceptedPayload,
+  TtsStoppedPayload
+} from '@/services/plugin-ui-bridge/messageProtocol'
 
 const WORKBENCH_TTS_ENABLED_KEY = 'plugin-dev-workbench.tts.enabled.v1'
 const WORKBENCH_TTS_ENGINE_KEY = 'plugin-dev-workbench.tts.engine.v1'
@@ -98,6 +101,7 @@ export const usePluginDevWorkbenchOrchestration = () => {
     startPreviewStatusPolling,
     stopPreviewStatusPolling,
     restartPreview,
+    handlePreviewRecoverEscalate,
     retryInstall,
     stopAndExit,
   } = usePreviewSessionGuard({
@@ -154,6 +158,16 @@ export const usePluginDevWorkbenchOrchestration = () => {
     if (!previewUrl) return ''
     const separator = previewUrl.includes('?') ? '&' : '?'
     return `${previewUrl}${separator}theme=${theme.value}&lang=${locale.value}`
+  })
+  const previewFrontendMode = computed<'dev' | 'dist'>(() => {
+    const raw = String(activeApp.value?.preview?.frontend_mode || 'dev')
+    return raw === 'dist' ? 'dist' : 'dev'
+  })
+  const previewFrontendReachable = computed<boolean | null>(() => {
+    const reachable = activeApp.value?.preview?.frontend_reachable
+    if (reachable === true) return true
+    if (reachable === false) return false
+    return null
   })
 
   const showPublishToast = (message: string, kind: 'success' | 'error') => {
@@ -305,7 +319,7 @@ export const usePluginDevWorkbenchOrchestration = () => {
     }
     return options
   })
-  const { handleCapabilityInvokeRequest } = useAssistantSessionOrchestrator({
+  const { handleCapabilityInvokeRequest, handleAssistantRuntimeEvent } = useAssistantSessionOrchestrator({
     pluginId,
   })
 
@@ -757,6 +771,10 @@ export const usePluginDevWorkbenchOrchestration = () => {
     await retryInstall()
   }
 
+  const handlePreviewRecoverEscalation = async (payload: { reason: string; retries: number }) => {
+    await handlePreviewRecoverEscalate(payload)
+  }
+
   const renameActiveApp = async (nextName: string): Promise<boolean> => {
     const id = pluginId.value
     if (!id || renamingApp.value) return false
@@ -893,6 +911,8 @@ export const usePluginDevWorkbenchOrchestration = () => {
     isPreviewRenderable,
     previewPaneKey,
     pluginUrl,
+    previewFrontendMode,
+    previewFrontendReachable,
     previewLogSessionId,
     previewLifecycleTask,
     previewLifecycleBusy,
@@ -924,6 +944,7 @@ export const usePluginDevWorkbenchOrchestration = () => {
     exitBusy,
     exitWarningMessage,
     handleRestartPreview,
+    handlePreviewRecoverEscalation,
     handleRetryInstall,
     handleInspectorSelect,
     handleContextPush,
@@ -1003,6 +1024,7 @@ export const usePluginDevWorkbenchOrchestration = () => {
     submitAzureTtsDialog,
     stopTtsPlayback,
     handleCapabilityInvokeRequest,
+    handleAssistantRuntimeEvent,
     handleHostInvokeRequest,
   }
 }

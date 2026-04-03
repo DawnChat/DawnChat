@@ -43,10 +43,11 @@ describe('runtimeOrchestrator', () => {
     const streamWatchdogs = ref({})
     const listMessages = vi.fn(options?.listMessages || (async () => []))
     const subscribeEvents = vi.fn(async () => vi.fn())
+    const promptAsync = vi.fn(async () => {})
     const adapter = {
       subscribeEvents,
       listMessages,
-      promptAsync: async () => {},
+      promptAsync,
       interruptSession: async () => true
     }
     const orchestrator = createRuntimeOrchestrator({
@@ -95,7 +96,10 @@ describe('runtimeOrchestrator', () => {
     return {
       orchestrator,
       sessionStateById,
-      workspaceTarget: boundWorkspaceTarget.value
+      workspaceTarget: boundWorkspaceTarget.value,
+      selectedEngine,
+      adapter,
+      promptAsync
     }
   }
 
@@ -434,5 +438,35 @@ describe('runtimeOrchestrator', () => {
 
     harness.orchestrator.dispose()
     harnessNoCompleted.orchestrator.dispose()
+  })
+
+  it('sendPromptParts 会透传图片 part 给 OpenCode', async () => {
+    const harness = createHarness()
+    await harness.orchestrator.ensureReadyWithWorkspace({ workspaceTarget: harness.workspaceTarget })
+    await harness.orchestrator.sendPromptParts(
+      [
+        { type: 'text', text: 'describe image' },
+        { type: 'file', mime: 'image/png', url: 'data:image/png;base64,AAAA', filename: 'shot.png' }
+      ],
+      { workspaceTarget: harness.workspaceTarget }
+    )
+    expect(harness.promptAsync).toHaveBeenCalledTimes(1)
+    const payload = harness.promptAsync.mock.calls[0]?.[1] as { parts?: Array<{ type: string }> }
+    expect(payload.parts?.some((item) => item.type === 'file')).toBe(true)
+    harness.orchestrator.dispose()
+  })
+
+  it('sendPromptParts 在 AgentV3 下拒绝图片 part', async () => {
+    const harness = createHarness()
+    harness.selectedEngine.value = 'agentv3'
+    await harness.orchestrator.ensureReadyWithWorkspace({ workspaceTarget: harness.workspaceTarget })
+    await expect(
+      harness.orchestrator.sendPromptParts(
+        [{ type: 'file', mime: 'image/png', url: 'data:image/png;base64,BBBB', filename: 'clip.png' }],
+        { workspaceTarget: harness.workspaceTarget }
+      )
+    ).rejects.toThrow('当前引擎暂不支持图片输入')
+    expect(harness.promptAsync).not.toHaveBeenCalled()
+    harness.orchestrator.dispose()
   })
 })

@@ -21,6 +21,8 @@ export interface PluginPreviewRuntime {
   error_message: string | null
   frontend_mode?: PluginPreviewFrontendMode
   deps_ready?: boolean
+  frontend_reachable?: boolean | null
+  frontend_last_probe_at?: string | null
   install_status?: PluginPreviewInstallStatus
   install_error_message?: string | null
   workbench_layout?: PluginWorkbenchLayout

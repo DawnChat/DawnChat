@@ -1,62 +1,78 @@
 <template>
   <div class="tool-wrap" :data-kind="displayModel.kind">
-    <button
-      v-if="isCollapsible"
-      class="tool-line tool-toggle"
-      type="button"
-      :aria-expanded="expanded ? 'true' : 'false'"
-      @click="expanded = !expanded"
-    >
-      <Wrench class="tool-icon" :size="13" />
-      <span class="tool-name">{{ displayModel.toolName }}</span>
-      <span v-if="displayModel.argsPreview" class="tool-args" :title="displayModel.argsText">{{ displayModel.argsPreview }}</span>
-      <span v-if="isWriteKind && displayModel.diffStat" class="tool-diff">{{ displayModel.diffStat }}</span>
-      <ChevronRight class="tool-chevron" :size="12" :class="{ open: expanded }" />
+    <div class="tool-anchor">
+      <div class="tool-line">
+      <button
+        v-if="isCollapsible"
+        class="tool-main tool-toggle"
+        type="button"
+        :aria-expanded="expanded ? 'true' : 'false'"
+        @click="expanded = !expanded"
+      >
+        <Wrench class="tool-icon" :size="13" />
+        <span class="tool-name">{{ displayModel.toolName }}</span>
+        <span v-if="displayModel.argsPreview" class="tool-args" :title="displayModel.argsText">{{ displayModel.argsPreview }}</span>
+        <span v-if="isWriteKind && displayModel.diffStat" class="tool-diff">{{ displayModel.diffStat }}</span>
+        <ChevronRight class="tool-chevron" :size="12" :class="{ open: expanded }" />
+      </button>
+      <div v-else class="tool-main">
+        <Wrench class="tool-icon" :size="13" />
+        <span class="tool-name">{{ displayModel.toolName }}</span>
+        <span v-if="displayModel.argsPreview" class="tool-args" :title="displayModel.argsText">{{ displayModel.argsPreview }}</span>
+        <span v-if="isWriteKind && displayModel.diffStat" class="tool-diff">{{ displayModel.diffStat }}</span>
+      </div>
+        <button
+        v-if="displayModel.hasInput"
+        ref="infoButtonRef"
+        class="tool-info-btn"
+        type="button"
+        aria-label="查看 tool 参数"
+        :aria-expanded="showInputPopover ? 'true' : 'false'"
+        @click.stop="showInputPopover = !showInputPopover"
+      >
+        <Info :size="12" />
+      </button>
       <span v-if="showStatus" class="tool-status" :data-status="status || 'pending'">
         {{ status || 'pending' }}
       </span>
-    </button>
-    <div v-else class="tool-line">
-      <Wrench class="tool-icon" :size="13" />
-      <span class="tool-name">{{ displayModel.toolName }}</span>
-      <span v-if="displayModel.argsPreview" class="tool-args" :title="displayModel.argsText">{{ displayModel.argsPreview }}</span>
-      <span v-if="isWriteKind && displayModel.diffStat" class="tool-diff">{{ displayModel.diffStat }}</span>
-      <span v-if="showStatus" class="tool-status" :data-status="status || 'pending'">
-        {{ status || 'pending' }}
-      </span>
+      </div>
     </div>
     <div v-if="showDetails" class="tool-details">
-      <template v-if="isWriteKind">
-        <PluginDevCodeBlock
-          :lines="displayModel.codeLines"
-          :language="displayModel.languageHint"
-          :preview-line-count="displayModel.previewLineCount || 4"
-          :collapsible="true"
-          :show-toggle="true"
-        />
-      </template>
-      <template v-else-if="isReadKind">
-        <PluginDevCodeBlock
-          :lines="readPreviewLines"
-          :language="displayModel.languageHint"
-          :preview-line-count="displayModel.previewLineCount || 6"
-          :collapsible="false"
-          :show-toggle="false"
-        />
-        <p v-if="readTrimmedLineCount > 0" class="tool-summary">{{ readTrimmedLineCount }} lines omitted</p>
+      <template v-if="isReadKind || isWriteKind">
+        <div class="tool-details-scroll">
+          <PluginDevCodeBlock
+            :lines="displayModel.codeLines"
+            :language="displayModel.languageHint"
+            :preview-line-count="displayModel.previewLineCount || 6"
+            :collapsible="false"
+            :show-toggle="false"
+          />
+        </div>
       </template>
       <template v-else>
         <pre v-if="displayModel.detailsText" class="tool-pre">{{ displayModel.detailsText }}</pre>
       </template>
     </div>
-
   </div>
+  <FloatingPopover
+    :visible="showInputPopover"
+    :anchor-el="infoButtonRef"
+    :width="520"
+    placement="auto"
+    panel-class="tool-input-popover"
+    :surface-mix="90"
+    @outside-click="showInputPopover = false"
+  >
+    <div class="tool-input-popover-title">Tool Input</div>
+    <pre class="tool-input-pre">{{ displayModel.fullInputText }}</pre>
+  </FloatingPopover>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { ChevronRight, Wrench } from 'lucide-vue-next'
+import { ChevronRight, Info, Wrench } from 'lucide-vue-next'
 import PluginDevCodeBlock from '@/features/coding-agent/components/plugin-dev-chat/PluginDevCodeBlock.vue'
+import FloatingPopover from '@/shared/ui/FloatingPopover.vue'
 
 const props = defineProps<{
   tool?: string
@@ -68,6 +84,12 @@ const props = defineProps<{
     toolName?: string
     argsText?: string
     argsPreview?: string
+    fullInputText?: string
+    fullOutputText?: string
+    fullErrorText?: string
+    hasInput?: boolean
+    hasOutput?: boolean
+    hasError?: boolean
     hasDetails?: boolean
     title: string
     summary: string
@@ -85,6 +107,9 @@ const props = defineProps<{
 }>()
 
 const expanded = ref(false)
+const showInputPopover = ref(false)
+const infoButtonRef = ref<HTMLButtonElement | null>(null)
+
 const isCollapsible = computed(() => {
   if (props.display?.renderMode !== 'collapsible') return false
   return Boolean(displayModel.value.hasDetails)
@@ -94,7 +119,12 @@ const displayModel = computed(() => {
   const args = String(props.display?.argsText || '').trim()
   const argsPreview = String(props.display?.argsPreview || args).trim()
   const summary = String(props.display?.summary || props.text || '').trim()
-  const details = String(props.display?.detailBody || props.display?.detailsText || props.display?.patchPreview || '').trim()
+  const hasError = Boolean(props.display?.hasError)
+  const details = String(
+    hasError
+      ? props.display?.fullErrorText || props.display?.detailBody || props.display?.detailsText || ''
+      : props.display?.detailBody || props.display?.detailsText || props.display?.fullOutputText || props.display?.patchPreview || ''
+  ).trim()
   const shellOutput = String(props.display?.outputTail || '').trim()
   const hasDetails = Boolean(props.display?.hasDetails || details || shellOutput)
   return {
@@ -102,6 +132,8 @@ const displayModel = computed(() => {
     toolName: name,
     argsText: args,
     argsPreview,
+    fullInputText: String(props.display?.fullInputText || '').trim(),
+    hasInput: Boolean(props.display?.hasInput),
     hasDetails,
     summary,
     detailsText: details || shellOutput,
@@ -114,17 +146,9 @@ const displayModel = computed(() => {
 })
 const isReadKind = computed(() => displayModel.value.kind === 'read')
 const isWriteKind = computed(() => displayModel.value.kind === 'write')
-const readPreviewLines = computed(() => {
-  if (!isReadKind.value) return []
-  return displayModel.value.codeLines.slice(0, 22)
-})
-const readTrimmedLineCount = computed(() => {
-  if (!isReadKind.value) return 0
-  return Math.max(0, displayModel.value.codeLines.length - readPreviewLines.value.length)
-})
 const showStatus = computed(() => {
-  const status = String(props.status || '').toLowerCase()
-  return status === 'error' || status === 'failed'
+  const currentStatus = String(props.status || '').toLowerCase()
+  return currentStatus === 'error' || currentStatus === 'failed'
 })
 const showDetails = computed(() => {
   if (isReadKind.value || isWriteKind.value) {
@@ -143,32 +167,48 @@ const showDetails = computed(() => {
 <style scoped>
 .tool-wrap {
   margin-top: 0.32rem;
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 0.28rem;
 }
 
+.tool-anchor {
+  position: relative;
+  width: fit-content;
+  max-width: min(100%, 760px);
+}
+
 .tool-line {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   width: fit-content;
   max-width: min(100%, 760px);
   min-width: 0;
-  gap: 0.34rem;
+  gap: 0.24rem;
   padding: 0.12rem 0.16rem;
   border-radius: 6px;
   color: var(--color-text-secondary);
   line-height: 1.25;
 }
 
-.tool-toggle {
+.tool-main {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: min(100%, 640px);
+  gap: 0.34rem;
+}
+
+.tool-main.tool-toggle {
   cursor: pointer;
   border: none;
   background: transparent;
+  padding: 0;
+  color: inherit;
 }
 
-.tool-toggle:hover,
 .tool-line:hover {
   background: color-mix(in srgb, var(--color-primary) 8%, transparent);
 }
@@ -211,7 +251,6 @@ const showDetails = computed(() => {
 
 .tool-status {
   flex: 0 0 auto;
-  margin-left: 0.25rem;
   font-size: 0.74rem;
   color: var(--color-primary);
   text-transform: lowercase;
@@ -234,17 +273,61 @@ const showDetails = computed(() => {
   color: var(--color-primary);
 }
 
+.tool-info-btn {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-border) 80%, transparent);
+  background: transparent;
+  color: var(--color-text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.tool-info-btn:hover {
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  color: var(--color-primary);
+}
+
+.tool-info-btn[aria-expanded='true'] {
+  background: color-mix(in srgb, var(--color-primary) 16%, transparent);
+  color: var(--color-primary);
+  border-color: color-mix(in srgb, var(--color-primary) 42%, var(--color-border));
+}
+
+.tool-input-popover {
+  max-width: min(520px, calc(100vw - 16px));
+  max-height: 320px;
+}
+
+.tool-input-popover-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+  color: var(--color-text-secondary);
+}
+
+.tool-input-pre {
+  margin: 0;
+  font-size: 0.73rem;
+  line-height: 1.42;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+}
+
 .tool-details {
   margin-left: 1.15rem;
   max-width: min(100%, 760px);
+  width: min(100%, 760px);
 }
 
-.tool-summary {
-  margin: 0;
-  font-size: 0.78rem;
-  color: var(--color-text-secondary);
-  white-space: pre-wrap;
-  word-break: break-word;
+.tool-details-scroll {
+  max-height: 280px;
+  overflow: auto;
+  border-radius: 8px;
 }
 
 .tool-pre {
@@ -256,11 +339,16 @@ const showDetails = computed(() => {
   color: var(--color-text-secondary);
   font-size: 0.74rem;
   line-height: 1.42;
-  max-height: 180px;
+  max-height: 280px;
   overflow: auto;
   white-space: pre-wrap;
   word-break: break-word;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
 }
 
+@media (max-width: 1200px) {
+  .tool-input-popover {
+    max-height: 280px;
+  }
+}
 </style>

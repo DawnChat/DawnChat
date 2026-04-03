@@ -2,7 +2,14 @@ import type {
   CapabilityInvokeExecutionContext,
   CapabilityInvokeRequest,
 } from '@/composables/usePluginUiBridge'
+import type { AssistantRuntimeEventPayload } from '@/services/plugin-ui-bridge/messageProtocol'
 import { logger } from '@/utils/logger'
+import { createAssistantRuntimeEventWaitRegistry } from '@/features/plugin-dev-workbench/composables/assistantRuntimeEventWaitRegistry'
+import {
+  toAssistantRuntimeEventResult,
+  toAssistantSessionRuntimeEvent
+} from '@/features/plugin-dev-workbench/composables/assistantRuntimeEventTypes'
+import { createAssistantSessionTerminalWaitRegistry } from '@/features/plugin-dev-workbench/composables/assistantSessionTerminalWaitRegistry'
 
 interface SessionStepAction {
   type: string
@@ -31,13 +38,15 @@ interface SessionState {
   lastErrorCode?: string
 }
 
-interface SessionWaitRequest {
+interface SessionWaitForEndRequest {
   sessionId: string
-  waitFor: 'session_terminal' | 'runtime_event'
   timeoutMs?: number
-  sinceSeq: number
+}
+
+interface EventWaitRequest {
   eventTypes: string[]
   match: Record<string, unknown>
+  timeoutMs?: number
 }
 
 interface UseAssistantSessionOrchestratorOptions {
@@ -103,14 +112,6 @@ function toNonNegativeNumber(value: unknown): number | undefined {
   return undefined
 }
 
-function toNonNegativeInteger(value: unknown): number | undefined {
-  const parsed = toNonNegativeNumber(value)
-  if (parsed === undefined) {
-    return undefined
-  }
-  return Math.floor(parsed)
-}
-
 function toStringArray(raw: unknown): string[] {
   if (!Array.isArray(raw)) {
     return []
@@ -121,20 +122,15 @@ function toStringArray(raw: unknown): string[] {
     .filter(Boolean)
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, ms)
-  })
-}
-
 export function useAssistantSessionOrchestrator(options: UseAssistantSessionOrchestratorOptions) {
   const configuredPluginId = String(options.pluginId.value || '').trim()
   const sessionById = new Map<string, SessionState>()
   const sessionExecutionById = new Map<string, Promise<void>>()
   const activeSessionByPlugin = new Map<string, string>()
-  const terminalWaitersBySession = new Map<string, Set<(state: SessionState) => void>>()
-  const DEFAULT_SESSION_WAIT_TIMEOUT_MS = 115_000
-  const EVENT_POLL_INTERVAL_MS = 250
+  const terminalWaitRegistry = createAssistantSessionTerminalWaitRegistry<SessionState>()
+  const runtimeEventWaitRegistry = createAssistantRuntimeEventWaitRegistry()
+  const DEFAULT_EVENT_WAIT_TIMEOUT_MS = 115_000
+  const DEFAULT_SESSION_WAIT_FOR_END_TIMEOUT_MS = 115_000
   let seq = 0
 
   const resolvePluginId = (context: CapabilityInvokeExecutionContext): string => {
@@ -146,30 +142,7 @@ export function useAssistantSessionOrchestrator(options: UseAssistantSessionOrch
   }
 
   const notifyTerminalWaiters = (state: SessionState): void => {
-    const waiters = terminalWaitersBySession.get(state.sessionId)
-    if (!waiters || waiters.size === 0) {
-      return
-    }
-    terminalWaitersBySession.delete(state.sessionId)
-    for (const waiter of waiters) {
-      waiter(state)
-    }
-  }
-
-  const addTerminalWaiter = (sessionId: string, waiter: (state: SessionState) => void): (() => void) => {
-    const waiters = terminalWaitersBySession.get(sessionId) || new Set<(state: SessionState) => void>()
-    waiters.add(waiter)
-    terminalWaitersBySession.set(sessionId, waiters)
-    return () => {
-      const currentWaiters = terminalWaitersBySession.get(sessionId)
-      if (!currentWaiters) {
-        return
-      }
-      currentWaiters.delete(waiter)
-      if (currentWaiters.size === 0) {
-        terminalWaitersBySession.delete(sessionId)
-      }
-    }
+    terminalWaitRegistry.notify(state)
   }
 
   const releaseActiveSessionLock = (state: SessionState): void => {
@@ -197,20 +170,55 @@ export function useAssistantSessionOrchestrator(options: UseAssistantSessionOrch
     notifyTerminalWaiters(state)
   }
 
-  const parseSessionWait = (raw: Record<string, unknown>): SessionWaitRequest | null => {
+  const parseSessionWaitForEnd = (raw: Record<string, unknown>): SessionWaitForEndRequest | null => {
     const sessionId = String(raw.session_id || '').trim()
     if (!sessionId) {
       return null
     }
     return {
       sessionId,
-      waitFor: String(raw.wait_for || 'session_terminal').trim() === 'runtime_event'
-        ? 'runtime_event'
-        : 'session_terminal',
       timeoutMs: toNonNegativeNumber(raw.timeout_ms),
-      sinceSeq: toNonNegativeInteger(raw.since_seq) ?? 0,
-      eventTypes: toStringArray(raw.event_types),
-      match: toRecord(raw.match),
+    }
+  }
+
+  const parseEventWait = (
+    raw: Record<string, unknown>
+  ): { request: EventWaitRequest | null; error?: string } => {
+    const rawEventTypes = raw.event_types
+    if (!Array.isArray(rawEventTypes) || rawEventTypes.length === 0) {
+      return {
+        request: null,
+        error: 'event_types must be a non-empty string array',
+      }
+    }
+    const eventTypes = toStringArray(rawEventTypes)
+    if (eventTypes.length !== rawEventTypes.length) {
+      return {
+        request: null,
+        error: 'event_types must be a non-empty string array',
+      }
+    }
+    const rawMatch = raw.match
+    if (rawMatch !== undefined && (!rawMatch || typeof rawMatch !== 'object' || Array.isArray(rawMatch))) {
+      return {
+        request: null,
+        error: 'match must be an object',
+      }
+    }
+    const rawTimeoutMs = raw.timeout_ms
+    const timeoutMs = toNonNegativeNumber(rawTimeoutMs)
+    if (rawTimeoutMs !== undefined && timeoutMs === undefined) {
+      return {
+        request: null,
+        error: 'timeout_ms must be a non-negative number',
+      }
+    }
+    return {
+      request: {
+        eventTypes,
+        match: toRecord(raw.match),
+        timeoutMs,
+      },
     }
   }
 
@@ -319,131 +327,120 @@ export function useAssistantSessionOrchestrator(options: UseAssistantSessionOrch
     sessionExecutionById.set(state.sessionId, execution)
   }
 
-  const waitForSessionTerminal = async (
+  const waitForRuntimeEvent = async (
+    pluginId: string,
+    request: EventWaitRequest,
+    timeoutMs: number
+  ): Promise<Record<string, unknown>> => {
+    logger.info('assistant_event_wait_started', {
+      pluginId,
+      waitFor: 'runtime_event',
+      eventTypes: request.eventTypes,
+      timeoutMs,
+    })
+    return await new Promise<Record<string, unknown>>((resolve) => {
+      const realtimeWait = runtimeEventWaitRegistry.startWait({
+        eventTypes: request.eventTypes,
+        match: request.match,
+        timeoutMs,
+      })
+      const cleanup = () => {
+        realtimeWait.cancel()
+      }
+      const settle = (result: Record<string, unknown>) => {
+        cleanup()
+        resolve(result)
+      }
+      void realtimeWait.promise
+        .then((matchedEvent) => {
+          settle({
+            ok: true,
+            data: {
+              wait_for: 'runtime_event',
+              status: 'matched',
+              matched_event: toAssistantRuntimeEventResult(matchedEvent),
+            },
+          })
+        })
+        .catch((error) => {
+          const message = error instanceof Error ? error.message : 'runtime_event_wait_failed'
+          if (message === 'wait_cancelled') {
+            return
+          }
+          logger.warn('assistant_event_wait_timed_out', {
+            pluginId,
+            timeoutMs,
+            eventTypes: request.eventTypes,
+          })
+          settle({
+            ok: true,
+            data: {
+              wait_for: 'runtime_event',
+              status: 'timed_out',
+            },
+          })
+        })
+    })
+  }
+
+  const waitForSessionEnd = async (
     state: SessionState,
     timeoutMs: number
   ): Promise<Record<string, unknown>> => {
-    if (state.status !== 'running') {
-      return {
-        ok: true,
-        data: {
-          session_id: state.sessionId,
-          wait_for: 'session_terminal',
-          status: 'terminal',
-          latest_seq: 0,
-          session_status: buildSessionStatus(state),
-        },
-      }
-    }
+    logger.info('assistant_session_wait_for_end_started', {
+      pluginId: state.pluginId,
+      sessionId: state.sessionId,
+      timeoutMs,
+    })
     return await new Promise<Record<string, unknown>>((resolve) => {
-      const clearWaiter = addTerminalWaiter(state.sessionId, (nextState) => {
-        window.clearTimeout(timer)
-        resolve({
-          ok: true,
-          data: {
-            session_id: nextState.sessionId,
-            wait_for: 'session_terminal',
-            status: 'terminal',
-            latest_seq: 0,
-            session_status: buildSessionStatus(nextState),
-          },
-        })
-      })
+      let settled = false
+      let clearTerminalWaiter = () => {}
       const timer = window.setTimeout(() => {
-        clearWaiter()
+        if (settled) {
+          return
+        }
+        settled = true
+        clearTerminalWaiter()
+        logger.warn('assistant_session_wait_for_end_timed_out', {
+          pluginId: state.pluginId,
+          sessionId: state.sessionId,
+          timeoutMs,
+        })
         resolve({
           ok: true,
           data: {
             session_id: state.sessionId,
-            wait_for: 'session_terminal',
+            wait_for: 'session_end',
             status: 'timed_out',
-            latest_seq: 0,
             session_status: buildSessionStatus(state),
           },
         })
       }, timeoutMs)
+
+      const settle = (nextState: SessionState) => {
+        if (settled) {
+          return
+        }
+        settled = true
+        window.clearTimeout(timer)
+        clearTerminalWaiter()
+        resolve({
+          ok: true,
+          data: {
+            session_id: nextState.sessionId,
+            wait_for: 'session_end',
+            status: 'terminal',
+            session_status: buildSessionStatus(nextState),
+          },
+        })
+      }
+
+      clearTerminalWaiter = terminalWaitRegistry.addWaiter(state.sessionId, settle)
     })
   }
 
-  const waitForRuntimeEvent = async (
-    context: CapabilityInvokeExecutionContext,
-    state: SessionState,
-    waitRequest: SessionWaitRequest,
-    timeoutMs: number
-  ): Promise<Record<string, unknown>> => {
-    let latestSeq = waitRequest.sinceSeq
-    const startedAt = Date.now()
-    while (true) {
-      if (state.status !== 'running') {
-        return {
-          ok: true,
-          data: {
-            session_id: state.sessionId,
-            wait_for: 'runtime_event',
-            status: 'terminal',
-            latest_seq: latestSeq,
-            session_status: buildSessionStatus(state),
-          },
-        }
-      }
-      const peekResult = await context.executePluginCapability({
-        functionName: 'assistant.runtime.event.peek',
-        payload: {
-          session_id: state.sessionId,
-          since_seq: latestSeq,
-          limit: 50,
-          event_types: waitRequest.eventTypes,
-          match: waitRequest.match,
-        },
-        options: context.invoke.options,
-      })
-      if (!peekResult.ok) {
-        return {
-          ok: false,
-          error_code: String(peekResult.error_code || 'runtime_event_wait_failed'),
-          message: String(peekResult.message || peekResult.error_code || 'runtime event wait failed'),
-        }
-      }
-      const peekData = toRecord(peekResult.data)
-      const nextLatestSeq = toNonNegativeInteger(peekData.latest_seq)
-      if (nextLatestSeq !== undefined) {
-        latestSeq = Math.max(latestSeq, nextLatestSeq)
-      }
-      const events = Array.isArray(peekData.events)
-        ? peekData.events.filter((event): event is Record<string, unknown> => Boolean(event) && typeof event === 'object')
-        : []
-      if (events.length > 0) {
-        const matchedEvent = events[0]
-        const matchedSeq = toNonNegativeInteger(matchedEvent.seq)
-        if (matchedSeq !== undefined) {
-          latestSeq = Math.max(latestSeq, matchedSeq)
-        }
-        return {
-          ok: true,
-          data: {
-            session_id: state.sessionId,
-            wait_for: 'runtime_event',
-            status: 'matched',
-            latest_seq: latestSeq,
-            matched_event: matchedEvent,
-            session_status: buildSessionStatus(state),
-          },
-        }
-      }
-      if (Date.now() - startedAt >= timeoutMs) {
-        return {
-          ok: true,
-          data: {
-            session_id: state.sessionId,
-            wait_for: 'runtime_event',
-            status: 'timed_out',
-            latest_seq: latestSeq,
-            session_status: buildSessionStatus(state),
-          },
-        }
-      }
-      await sleep(EVENT_POLL_INTERVAL_MS)
-    }
+  const handleAssistantRuntimeEvent = (event: AssistantRuntimeEventPayload): void => {
+    runtimeEventWaitRegistry.handleEvent(toAssistantSessionRuntimeEvent(event))
   }
 
   const handleSessionStart = async (context: CapabilityInvokeExecutionContext): Promise<Record<string, unknown>> => {
@@ -483,6 +480,13 @@ export function useAssistantSessionOrchestrator(options: UseAssistantSessionOrch
         }
       }
       steps.push(step)
+    }
+    if (payload.tail_wait !== undefined) {
+      return {
+        ok: false,
+        error_code: 'invalid_arguments',
+        message: 'tail_wait is no longer supported; use assistant.event.wait instead',
+      }
     }
     seq += 1
     const sessionId = `sess_${Date.now()}_${seq}`
@@ -595,9 +599,25 @@ export function useAssistantSessionOrchestrator(options: UseAssistantSessionOrch
     }
   }
 
-  const handleSessionWait = async (context: CapabilityInvokeExecutionContext): Promise<Record<string, unknown>> => {
+  const handleEventWait = async (context: CapabilityInvokeExecutionContext): Promise<Record<string, unknown>> => {
     const payload = toRecord(context.invoke.payload)
-    const waitRequest = parseSessionWait(payload)
+    const parsedEventWait = parseEventWait(payload)
+    if (parsedEventWait.error || !parsedEventWait.request) {
+      return {
+        ok: false,
+        error_code: 'invalid_arguments',
+        message: parsedEventWait.error || 'event_types must be a non-empty string array',
+      }
+    }
+    const timeoutMs = parsedEventWait.request.timeoutMs ?? DEFAULT_EVENT_WAIT_TIMEOUT_MS
+    return await waitForRuntimeEvent(resolvePluginId(context), parsedEventWait.request, timeoutMs)
+  }
+
+  const handleSessionWaitForEnd = async (
+    context: CapabilityInvokeExecutionContext
+  ): Promise<Record<string, unknown>> => {
+    const payload = toRecord(context.invoke.payload)
+    const waitRequest = parseSessionWaitForEnd(payload)
     if (!waitRequest) {
       return {
         ok: false,
@@ -613,18 +633,19 @@ export function useAssistantSessionOrchestrator(options: UseAssistantSessionOrch
         message: `session not found: ${waitRequest.sessionId}`,
       }
     }
-    if (waitRequest.waitFor === 'runtime_event' && waitRequest.eventTypes.length === 0) {
+    if (state.status !== 'running') {
       return {
-        ok: false,
-        error_code: 'invalid_arguments',
-        message: 'event_types is required when wait_for=runtime_event',
+        ok: true,
+        data: {
+          session_id: state.sessionId,
+          wait_for: 'session_end',
+          status: 'terminal',
+          session_status: buildSessionStatus(state),
+        },
       }
     }
-    const timeoutMs = waitRequest.timeoutMs ?? DEFAULT_SESSION_WAIT_TIMEOUT_MS
-    if (waitRequest.waitFor === 'session_terminal') {
-      return await waitForSessionTerminal(state, timeoutMs)
-    }
-    return await waitForRuntimeEvent(context, state, waitRequest, timeoutMs)
+    const timeoutMs = waitRequest.timeoutMs ?? DEFAULT_SESSION_WAIT_FOR_END_TIMEOUT_MS
+    return await waitForSessionEnd(state, timeoutMs)
   }
 
   const handleCapabilityInvokeRequest = async (
@@ -639,13 +660,24 @@ export function useAssistantSessionOrchestrator(options: UseAssistantSessionOrch
     if (context.invoke.functionName === 'assistant.session.stop') {
       return handleSessionStop(context)
     }
+    if (context.invoke.functionName === 'assistant.event.wait') {
+      return await handleEventWait(context)
+    }
+    if (context.invoke.functionName === 'assistant.session.wait_for_end') {
+      return await handleSessionWaitForEnd(context)
+    }
     if (context.invoke.functionName === 'assistant.session.wait') {
-      return await handleSessionWait(context)
+      return {
+        ok: false,
+        error_code: 'capability_removed',
+        message: 'assistant.session.wait has been removed; use assistant.event.wait or assistant.session.wait_for_end',
+      }
     }
     return null
   }
 
   return {
     handleCapabilityInvokeRequest,
+    handleAssistantRuntimeEvent,
   }
 }

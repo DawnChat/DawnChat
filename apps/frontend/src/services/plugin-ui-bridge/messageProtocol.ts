@@ -24,6 +24,15 @@ export interface BridgeEventMessage {
   payload: Record<string, unknown>
 }
 
+export interface AssistantRuntimeEventPayload {
+  type: string
+  ts_ms: number
+  source: string
+  session_id?: string
+  step_id?: string
+  payload: Record<string, unknown>
+}
+
 export interface BridgeResultOutbound {
   type: typeof BRIDGE_MESSAGE_TYPE.RESULT
   requestId: string

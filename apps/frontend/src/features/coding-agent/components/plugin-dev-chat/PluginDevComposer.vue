@@ -1,6 +1,24 @@
 <template>
   <div class="composer">
+    <PluginDevComposerImageTags
+      :images="pendingImages"
+      @preview="(payload) => emit('preview-image', payload)"
+      @remove="(index) => emit('remove-image', index)"
+    />
+    <PluginDevComposerFileTags
+      :files="pendingFiles"
+      :tags-aria-label="fileTagsAriaLabel"
+      :remove-label-prefix="fileTagRemovePrefix"
+      @remove="(index) => emit('remove-file', index)"
+    />
     <div class="input-wrapper">
+      <input
+        ref="fileInputRef"
+        class="file-input"
+        type="file"
+        multiple
+        @change="handleFileChange"
+      />
       <div
         ref="editableRef"
         class="composer-input"
@@ -56,6 +74,17 @@
               @update:model-value="handleModelChange"
             />
           </div>
+          <button
+            v-if="enableFileAttachment"
+            class="attachment-btn"
+            type="button"
+            :disabled="blocked || isUploadingAttachments"
+            :title="filePickerLabel || 'Attach files'"
+            :aria-label="filePickerLabel || 'Attach files'"
+            @click="openFilePicker"
+          >
+            {{ filePickerLabel || 'Attach files' }}
+          </button>
         </div>
         <button
           class="send-btn"
@@ -83,6 +112,11 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { ArrowUp, CircleOff, LoaderCircle, Square } from 'lucide-vue-next'
 import { parseContextTokens } from '@/services/plugin-ui-bridge/contextToken'
 import PluginDevInlineSelect, { type PluginDevInlineSelectOption } from '@/features/coding-agent/components/plugin-dev-chat/PluginDevInlineSelect.vue'
+import PluginDevComposerFileTags, {
+  type ComposerPendingFileTag
+} from '@/features/coding-agent/components/plugin-dev-chat/PluginDevComposerFileTags.vue'
+import PluginDevComposerImageTags from '@/features/coding-agent/components/plugin-dev-chat/PluginDevComposerImageTags.vue'
+import type { PromptFilePart } from '@/services/coding-agent/engineAdapter'
 
 interface ModelOption {
   id: string
@@ -122,13 +156,27 @@ const props = withDefaults(defineProps<{
   showEngineSelector?: boolean
   showAgentSelector?: boolean
   showModelSelector?: boolean
+  pendingImages?: PromptFilePart[]
+  pendingFiles?: ComposerPendingFileTag[]
+  enableFileAttachment?: boolean
+  isUploadingAttachments?: boolean
+  filePickerLabel?: string
+  fileTagsAriaLabel?: string
+  fileTagRemovePrefix?: string
 }>(), {
   showEngineSelector: true,
   showAgentSelector: true,
   showModelSelector: true,
   canInterrupt: false,
   isRunning: false,
-  isInterrupting: false
+  isInterrupting: false,
+  pendingImages: () => [],
+  pendingFiles: () => [],
+  enableFileAttachment: false,
+  isUploadingAttachments: false,
+  filePickerLabel: '',
+  fileTagsAriaLabel: 'Attached files',
+  fileTagRemovePrefix: 'Remove'
 })
 
 const emit = defineEmits<{
@@ -137,10 +185,16 @@ const emit = defineEmits<{
   'select-agent': [value: string]
   'select-model': [value: string]
   'selection-change': [payload: { start: number; end: number; focused: boolean }]
+  'paste-image': [parts: PromptFilePart[]]
+  'preview-image': [payload: { index: number; anchorEl: HTMLElement | null }]
+  'remove-image': [index: number]
+  'pick-files': [files: File[]]
+  'remove-file': [index: number]
   send: []
   interrupt: []
 }>()
 const editableRef = ref<HTMLDivElement | null>(null)
+const fileInputRef = ref<HTMLInputElement | null>(null)
 const isComposing = ref(false)
 const actionMode = computed<'send' | 'interrupt' | 'disabled'>(() => {
   if (props.canInterrupt) return 'interrupt'
@@ -440,7 +494,59 @@ const handleCompositionEnd = () => {
   emitSelectionChange()
 }
 
+const toDataUrl = async (file: File): Promise<string> => {
+  return await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      resolve(String(reader.result || ''))
+    }
+    reader.onerror = () => {
+      reject(reader.error || new Error('读取剪贴板图片失败'))
+    }
+    reader.readAsDataURL(file)
+  })
+}
+
+const extractClipboardImages = async (event: ClipboardEvent): Promise<PromptFilePart[]> => {
+  const items = Array.from(event.clipboardData?.items || [])
+  const imageFilesFromItems = items
+    .filter((item) => item.kind === 'file' && String(item.type || '').toLowerCase().startsWith('image/'))
+    .map((item) => item.getAsFile())
+    .filter((file): file is File => Boolean(file))
+  const imageFilesFromList = Array.from(event.clipboardData?.files || []).filter((file) =>
+    String(file.type || '').toLowerCase().startsWith('image/')
+  )
+  const imageFiles = imageFilesFromItems.length > 0 ? imageFilesFromItems : imageFilesFromList
+  if (imageFiles.length === 0) return []
+  return await Promise.all(
+    imageFiles.map(async (file, index) => {
+      const mime = String(file.type || 'application/octet-stream').trim() || 'application/octet-stream'
+      const name = String(file.name || '').trim() || `pasted-image-${Date.now()}-${index + 1}.png`
+      return {
+        type: 'file' as const,
+        mime,
+        filename: name,
+        url: await toDataUrl(file)
+      }
+    })
+  )
+}
+
 const handlePaste = async (event: ClipboardEvent) => {
+  const hasImageInClipboard = Array.from(event.clipboardData?.items || []).some((item) => {
+    return item.kind === 'file' && String(item.type || '').toLowerCase().startsWith('image/')
+  }) || Array.from(event.clipboardData?.files || []).some((file) => {
+    return String(file.type || '').toLowerCase().startsWith('image/')
+  })
+  if (hasImageInClipboard) {
+    // 必须先拦截默认粘贴，避免浏览器先把图片节点插入 contenteditable。
+    event.preventDefault()
+  }
+  const imageParts = await extractClipboardImages(event)
+  if (imageParts.length > 0) {
+    emit('paste-image', imageParts)
+    return
+  }
   event.preventDefault()
   const text = String(event.clipboardData?.getData('text/plain') || '').replace(/\r\n?/g, '\n')
   if (!text) return
@@ -503,6 +609,22 @@ const handleModelChange = (value: string) => {
   emit('select-model', value)
 }
 
+const openFilePicker = () => {
+  if (props.blocked || props.isUploadingAttachments) return
+  fileInputRef.value?.click()
+}
+
+const handleFileChange = (event: Event) => {
+  const input = event.target as HTMLInputElement | null
+  const files = Array.from(input?.files || [])
+  if (files.length > 0) {
+    emit('pick-files', files)
+  }
+  if (input) {
+    input.value = ''
+  }
+}
+
 watch(
   () => props.modelValue,
   () => {
@@ -529,6 +651,10 @@ onMounted(() => {
   border-radius: 10px;
   padding: 0.72rem 0.8rem 0.56rem 0.8rem;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.file-input {
+  display: none;
 }
 
 .input-wrapper:focus-within {
@@ -715,6 +841,29 @@ onMounted(() => {
   width: auto;
   min-width: 0;
   max-width: 100%;
+}
+
+.attachment-btn {
+  height: 26px;
+  padding: 0 0.65rem;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--color-border) 84%, transparent);
+  background: color-mix(in srgb, var(--color-surface-2) 86%, transparent);
+  color: var(--color-text-secondary);
+  font-size: 0.76rem;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.attachment-btn:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--color-primary) 36%, var(--color-border));
+  color: var(--color-text);
+}
+
+.attachment-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .engine-select :deep(.inline-select-label) {

@@ -188,4 +188,51 @@ describe('PluginPreviewPane', () => {
     expect(wrapper.find('.preview-pane').classes()).toContain('compact-surface')
     expect(wrapper.find('.toolbar-reveal-hotzone').exists()).toBe(true)
   })
+
+  it('多次自动软重试失败后会上抛恢复事件', async () => {
+    const wrapper = mount(PluginPreviewPane, {
+      props: {
+        pluginId: 'com.dawnchat.preview-log',
+        pluginUrl: 'http://127.0.0.1:17961/',
+        previewFrontendMode: 'dev',
+        previewFrontendReachable: false,
+      }
+    })
+
+    await vi.advanceTimersByTimeAsync(70_000)
+
+    const emitted = wrapper.emitted('recoverEscalate') || []
+    expect(emitted.length).toBeGreaterThan(0)
+    expect(logger.warn).toHaveBeenCalledWith(
+      'plugin_preview_soft_recovery_escalate',
+      expect.objectContaining({
+        pluginId: 'com.dawnchat.preview-log',
+      })
+    )
+  })
+
+  it('dist 安装阶段的 inspector 状态检查失败不会触发软重试', async () => {
+    vi.mocked(window.fetch).mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    const wrapper = mount(PluginPreviewPane, {
+      props: {
+        pluginId: 'com.dawnchat.preview-log',
+        pluginUrl: 'http://127.0.0.1:17961/',
+        previewFrontendMode: 'dist',
+        installStatus: 'running',
+      }
+    })
+
+    await wrapper.find('iframe').trigger('load')
+    await vi.advanceTimersByTimeAsync(5_000)
+
+    expect(wrapper.emitted('recoverEscalate')).toBeFalsy()
+    expect(logger.warn).toHaveBeenCalledWith(
+      'plugin_inspector_status_check_failed',
+      expect.any(Object)
+    )
+    expect(logger.warn).not.toHaveBeenCalledWith(
+      'plugin_preview_soft_recovery_retry',
+      expect.any(Object)
+    )
+  })
 })

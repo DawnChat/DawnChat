@@ -89,6 +89,7 @@ import { buildBackendUrl } from '@/utils/backendUrl'
 import { logger } from '@/utils/logger'
 import type { InspectorSelectPayload } from '@/types/inspector'
 import type {
+  AssistantRuntimeEventPayload,
   ContextPushPayload,
   TtsSpeakAcceptedPayload,
   TtsStoppedPayload
@@ -122,6 +123,8 @@ interface PluginRuntimeLogEntry {
 const props = withDefaults(defineProps<{
   pluginId: string
   pluginUrl: string
+  previewFrontendMode?: 'dev' | 'dist'
+  previewFrontendReachable?: boolean | null
   logSessionId?: string
   lifecycleTask?: LifecycleTask | null
   lifecycleBusy?: boolean
@@ -129,6 +132,7 @@ const props = withDefaults(defineProps<{
   installErrorMessage?: string | null
   showStopButton?: boolean
   isCompactSurface?: boolean
+  onAssistantRuntimeEvent?: (payload: AssistantRuntimeEventPayload) => void
   onCapabilityInvokeRequest?: (
     context: CapabilityInvokeExecutionContext
   ) => Promise<Record<string, unknown> | null> | Record<string, unknown> | null
@@ -149,6 +153,7 @@ const emit = defineEmits<{
   contextPush: [payload: ContextPushPayload]
   ttsSpeakAccepted: [payload: TtsSpeakAcceptedPayload]
   ttsStopped: [payload: TtsStoppedPayload]
+  recoverEscalate: [payload: { reason: string; retries: number }]
 }>()
 
 const { t } = useI18n()
@@ -162,6 +167,7 @@ const isOnline = ref(typeof navigator === 'undefined' ? true : navigator.onLine)
 const iframeLoading = ref(true)
 const iframeLoadTimedOut = ref(false)
 let iframeLoadTimer: ReturnType<typeof setTimeout> | null = null
+let softReloadTimer: ReturnType<typeof setTimeout> | null = null
 let logFlushTimer: ReturnType<typeof setTimeout> | null = null
 const pendingPluginLogs = ref<PluginRuntimeLogEntry[]>([])
 const isLifecycleBusy = computed(() => Boolean(props.lifecycleBusy))
@@ -177,6 +183,9 @@ const installFailedText = computed(() => {
 const showInstallOverlay = computed(() => {
   return installStatus.value === 'running' || installStatus.value === 'failed'
 })
+const maxSoftReloadRetries = 3
+const softReloadBackoffMs = [800, 1600, 3000]
+const softReloadRetries = ref(0)
 const installOverlayText = computed(() => {
   return installStatus.value === 'failed' ? installFailedText.value : installLoadingText.value
 })
@@ -256,6 +265,48 @@ const reloadIframe = () => {
   iframeKey.value += 1
 }
 
+const clearSoftReloadTimer = () => {
+  if (softReloadTimer) {
+    clearTimeout(softReloadTimer)
+    softReloadTimer = null
+  }
+}
+
+const scheduleSoftReload = (reason: string) => {
+  if (isLifecycleBusy.value || !props.pluginUrl) return
+  if (reason === 'inspector_status_check_failed') {
+    // Dist/installing 阶段 inspector endpoint 不稳定，避免引发无意义闪烁重载。
+    if (props.previewFrontendMode !== 'dev') return
+    if (installStatus.value === 'running') return
+    if (props.previewFrontendReachable === false) return
+  }
+  if (softReloadTimer) return
+  if (softReloadRetries.value >= maxSoftReloadRetries) {
+    logger.warn('plugin_preview_soft_recovery_escalate', {
+      pluginId: props.pluginId,
+      reason,
+      retries: softReloadRetries.value,
+      frontendMode: props.previewFrontendMode || 'unknown',
+      frontendReachable: props.previewFrontendReachable ?? null,
+    })
+    emit('recoverEscalate', { reason, retries: softReloadRetries.value })
+    return
+  }
+  const delay = softReloadBackoffMs[Math.min(softReloadRetries.value, softReloadBackoffMs.length - 1)] || 3000
+  const nextRetries = softReloadRetries.value + 1
+  softReloadTimer = setTimeout(() => {
+    softReloadTimer = null
+    softReloadRetries.value = nextRetries
+    logger.warn('plugin_preview_soft_recovery_retry', {
+      pluginId: props.pluginId,
+      reason,
+      retries: softReloadRetries.value,
+      delayMs: delay,
+    })
+    reloadIframe()
+  }, delay)
+}
+
 const clearIframeTimer = () => {
   if (iframeLoadTimer) {
     clearTimeout(iframeLoadTimer)
@@ -269,6 +320,7 @@ const setIframeLoadingGuard = () => {
   iframeLoadTimedOut.value = false
   iframeLoadTimer = setTimeout(() => {
     iframeLoadTimedOut.value = true
+    scheduleSoftReload('iframe_load_timeout')
   }, 15000)
 }
 
@@ -391,6 +443,7 @@ const handleIframeLoad = () => {
   clearIframeTimer()
   iframeLoading.value = false
   iframeLoadTimedOut.value = false
+  clearSoftReloadTimer()
   inspectorReady.value = false
   inspectorAvailable.value = true
   postInspectorCommand('DAWNCHAT_INSPECTOR_PING')
@@ -402,8 +455,15 @@ const checkInspectorAvailability = async () => {
   try {
     const statusUrl = new URL('/__dawnchat/inspector-status', props.pluginUrl).toString()
     const response = await fetch(statusUrl)
-    if (!response.ok) return
+    if (!response.ok) {
+      if (response.status === 404) {
+        return
+      }
+      throw new Error(`status=${response.status}`)
+    }
     const payload = (await response.json()) as { enabled?: boolean; reason?: string }
+    // inspector health check 成功，清空前次恢复计数。
+    softReloadRetries.value = 0
     if (payload.enabled === false) {
       inspectorAvailable.value = false
       inspectorEnabled.value = false
@@ -412,6 +472,7 @@ const checkInspectorAvailability = async () => {
     }
   } catch (err) {
     logger.warn('plugin_inspector_status_check_failed', { error: String(err) })
+    scheduleSoftReload('inspector_status_check_failed')
   }
 }
 
@@ -422,6 +483,7 @@ usePluginUiBridge({
   onContextPush: (payload) => emit('contextPush', payload),
   onTtsSpeakAccepted: (payload) => emit('ttsSpeakAccepted', payload),
   onTtsStopped: (payload) => emit('ttsStopped', payload),
+  onAssistantRuntimeEvent: props.onAssistantRuntimeEvent,
   onCapabilityInvokeRequest: props.onCapabilityInvokeRequest,
   onHostInvokeRequest: props.onHostInvokeRequest,
 })
@@ -435,6 +497,8 @@ const { notifyIframeLoaded } = usePluginHostStyleBridge({
 watch(
   () => props.pluginUrl,
   () => {
+    clearSoftReloadTimer()
+    softReloadRetries.value = 0
     if (props.pluginUrl) {
       setIframeLoadingGuard()
     } else {
@@ -448,6 +512,15 @@ watch(
   }
 )
 
+watch(
+  () => [props.previewFrontendMode, props.previewFrontendReachable] as const,
+  ([mode, reachable]) => {
+    if (mode === 'dev' && reachable === false) {
+      scheduleSoftReload('frontend_unreachable')
+    }
+  },
+)
+
 onMounted(() => {
   if (props.pluginUrl) {
     setIframeLoadingGuard()
@@ -459,6 +532,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   clearIframeTimer()
+  clearSoftReloadTimer()
   if (logFlushTimer) {
     clearTimeout(logFlushTimer)
     logFlushTimer = null

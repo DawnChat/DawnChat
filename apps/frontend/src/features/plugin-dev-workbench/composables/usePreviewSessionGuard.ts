@@ -18,6 +18,11 @@ export const usePreviewSessionGuard = (
   const previewReady = ref(false)
   const previewLoadingText = ref('')
   const previewPaneKey = ref(0)
+  const recoveryInFlight = ref(false)
+  const forceRecoveryPolling = ref(false)
+  const devObserveUntilMs = ref(0)
+  const restartCooldownUntilMs = ref(0)
+  let lastFrontendMode = ''
   let previewStatusPoller: ReturnType<typeof setInterval> | null = null
 
   const previewLifecycleTask = computed(() => {
@@ -55,8 +60,12 @@ export const usePreviewSessionGuard = (
   const shouldPollPreviewStatus = computed(() => {
     const app = facade.activeApp.value
     if (!app || app.id !== options.pluginId.value) return false
+    const now = Date.now()
     return String(app.preview?.frontend_mode || 'dev') === 'dist'
       || previewInstallStatus.value === 'running'
+      || forceRecoveryPolling.value
+      || recoveryInFlight.value
+      || devObserveUntilMs.value > now
   })
 
   const stopPreviewStatusPolling = () => {
@@ -70,6 +79,16 @@ export const usePreviewSessionGuard = (
     const id = options.pluginId.value
     if (!id) return
     await facade.refreshPreviewStatus(id)
+    const app = facade.activeApp.value
+    if (!app || app.id !== id) return
+    const currentFrontendMode = String(app.preview?.frontend_mode || 'dev')
+    if (lastFrontendMode && lastFrontendMode !== currentFrontendMode && currentFrontendMode === 'dev') {
+      devObserveUntilMs.value = Date.now() + 15_000
+    }
+    lastFrontendMode = currentFrontendMode
+    if (currentFrontendMode === 'dev' && app.preview?.frontend_reachable === false) {
+      forceRecoveryPolling.value = true
+    }
   }
 
   const startPreviewStatusPolling = () => {
@@ -98,6 +117,8 @@ export const usePreviewSessionGuard = (
       return
     }
     previewReady.value = false
+    forceRecoveryPolling.value = false
+    lastFrontendMode = ''
     previewLoadingText.value = '正在准备开发预览...'
     await facade.loadApps()
     const app = facade.installedApps.value.find((item) => item.id === id)
@@ -135,6 +156,7 @@ export const usePreviewSessionGuard = (
   const restartPreview = async (appId: string) => {
     previewLoadingText.value = '正在重启预览服务...'
     previewReady.value = false
+    forceRecoveryPolling.value = true
     try {
       await facade.runLifecycleOperation({
         operationType: 'restart_dev_session',
@@ -150,9 +172,41 @@ export const usePreviewSessionGuard = (
       }
       previewPaneKey.value += 1
       previewReady.value = true
+      forceRecoveryPolling.value = false
+      devObserveUntilMs.value = Date.now() + 15_000
     } catch (err) {
       logger.error('预览重启失败', { pluginId: appId, err })
       await ensurePreviewRunning()
+    }
+  }
+
+  const handlePreviewRecoverEscalate = async (payload: { reason: string; retries: number }) => {
+    const id = options.pluginId.value
+    if (!id) return
+    if (recoveryInFlight.value) return
+    const now = Date.now()
+    if (restartCooldownUntilMs.value > now) {
+      forceRecoveryPolling.value = true
+      logger.warn('plugin_preview_recover_skip_cooldown', {
+        pluginId: id,
+        reason: payload.reason,
+        retries: payload.retries,
+        cooldownMsLeft: restartCooldownUntilMs.value - now,
+      })
+      return
+    }
+    recoveryInFlight.value = true
+    forceRecoveryPolling.value = true
+    try {
+      logger.warn('plugin_preview_recover_restart', {
+        pluginId: id,
+        reason: payload.reason,
+        retries: payload.retries,
+      })
+      await restartPreview(id)
+      restartCooldownUntilMs.value = Date.now() + 20_000
+    } finally {
+      recoveryInFlight.value = false
     }
   }
 
@@ -188,6 +242,7 @@ export const usePreviewSessionGuard = (
     startPreviewStatusPolling,
     stopPreviewStatusPolling,
     restartPreview,
+    handlePreviewRecoverEscalate,
     retryInstall,
     stopAndExit,
   }

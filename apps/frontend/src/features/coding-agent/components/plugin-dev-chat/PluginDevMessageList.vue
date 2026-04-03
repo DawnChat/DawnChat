@@ -104,6 +104,12 @@ interface RenderItem {
     toolName?: string
     argsText?: string
     argsPreview?: string
+    fullInputText?: string
+    fullOutputText?: string
+    fullErrorText?: string
+    hasInput?: boolean
+    hasOutput?: boolean
+    hasError?: boolean
     hasDetails?: boolean
     title: string
     summary: string

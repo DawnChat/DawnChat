@@ -26,6 +26,7 @@ import { createChatProjectionService } from '@/features/coding-agent/store/chatP
 import { createEngineConfigBridge } from '@/features/coding-agent/store/engineConfigBridge'
 import { createRuntimeOrchestrator } from '@/features/coding-agent/store/runtimeOrchestrator'
 import { createPermissionStateService } from '@/features/coding-agent/store/permissionStateService'
+import type { PromptPart } from '@/services/coding-agent/engineAdapter'
 
 interface EngineOption {
   id: EngineId
@@ -379,6 +380,10 @@ export const useCodingAgentStore = defineStore('codingAgent', () => {
   const ensureReady = runtimeOrchestrator.ensureReady
   const ensureReadyWithWorkspace = runtimeOrchestrator.ensureReadyWithWorkspace
   const reconcileMessages = runtimeOrchestrator.reconcileMessages
+  const sendPromptParts = runtimeOrchestrator.sendPromptParts as (
+    parts: PromptPart[],
+    options?: WorkspaceResolveOptions
+  ) => Promise<void>
   const sendText = runtimeOrchestrator.sendText as (text: string, options?: WorkspaceResolveOptions) => Promise<void>
   const interruptActiveRun = async () => runtimeOrchestrator?.interruptSession(activeSessionId.value)
   const dispose = runtimeOrchestrator.dispose
@@ -398,6 +403,18 @@ export const useCodingAgentStore = defineStore('codingAgent', () => {
       await switchSession(targetSessionID)
     }
     await sendText(text, options)
+  }
+
+  async function sendPartsToSession(sessionID: string, parts: PromptPart[], options?: WorkspaceResolveOptions): Promise<void> {
+    const targetSessionID = String(sessionID || '').trim()
+    if (!targetSessionID) {
+      throw new Error('session id is required')
+    }
+    await ensureReadyWithWorkspace(options)
+    if (activeSessionId.value !== targetSessionID) {
+      await switchSession(targetSessionID)
+    }
+    await sendPromptParts(parts, options)
   }
 
   function getSessionStateSnapshot(sessionID: string): BuildSessionStateSnapshot | null {
@@ -477,7 +494,9 @@ export const useCodingAgentStore = defineStore('codingAgent', () => {
     renameSession,
     deleteSession,
     sendText,
+    sendPromptParts,
     sendTextToSession,
+    sendPartsToSession,
     getSessionStateSnapshot,
     interruptActiveRun,
     replyPermission,

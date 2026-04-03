@@ -200,6 +200,55 @@ describe('usePluginUiBridge', () => {
     })
   })
 
+  it('keeps assistant.event.wait alive until requested timeout plus buffer', async () => {
+    const TestComp = defineComponent({
+      setup() {
+        const frameRef = ref({
+          contentWindow: {
+            postMessage: vi.fn()
+          }
+        } as unknown as HTMLIFrameElement)
+        usePluginUiBridge({
+          pluginId: ref('plugin.demo') as any,
+          iframeRef: frameRef,
+          expectedOrigin: ref('http://plugin.local') as any,
+          onContextPush: vi.fn()
+        })
+        return () => null
+      }
+    })
+    mount(TestComp)
+
+    const client = bridgeClientMockState.instances[0]
+    client.handlers.onRequest({
+      type: 'bridge.request',
+      requestId: 'req_event_wait_timeout',
+      pluginId: 'plugin.demo',
+      op: 'capability_invoke',
+      payload: {
+        function: 'assistant.event.wait',
+        payload: {
+          event_types: ['assistant.guide.quiz.submitted'],
+          timeout_ms: 130_000
+        },
+        options: {}
+      }
+    })
+
+    vi.advanceTimersByTime(130_001)
+    expect(client.sentResults).toHaveLength(0)
+
+    vi.advanceTimersByTime(5_000)
+    expect(client.sentResults).toHaveLength(1)
+    expect(client.sentResults[0]).toEqual({
+      requestId: 'req_event_wait_timeout',
+      result: expect.objectContaining({
+        ok: false,
+        error_code: 'iframe_timeout'
+      })
+    })
+  })
+
   it('forwards scroll op to dedicated iframe message type', async () => {
     const postMessage = vi.fn()
     const TestComp = defineComponent({
@@ -513,5 +562,61 @@ describe('usePluginUiBridge', () => {
       }),
       'http://plugin.local'
     )
+  })
+
+  it('dispatches assistant runtime events from iframe to host callback', async () => {
+    const onAssistantRuntimeEvent = vi.fn()
+    const TestComp = defineComponent({
+      setup() {
+        const frameRef = ref({
+          contentWindow: {
+            postMessage: vi.fn()
+          }
+        } as unknown as HTMLIFrameElement)
+        usePluginUiBridge({
+          pluginId: ref('plugin.demo') as any,
+          iframeRef: frameRef,
+          expectedOrigin: ref('http://plugin.local') as any,
+          onContextPush: vi.fn(),
+          onAssistantRuntimeEvent
+        })
+        return () => null
+      }
+    })
+    mount(TestComp)
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        origin: 'http://plugin.local',
+        data: {
+          type: IFRAME_UI_AGENT_MESSAGE.ASSISTANT_RUNTIME_EVENT,
+          payload: {
+            type: 'assistant.game.tictactoe.cell_selected',
+            ts_ms: 123,
+            source: 'view',
+            payload: {
+              resource_id: 'tictactoe:neon-grid',
+              move_index: 12,
+              row: 2,
+              col: 2,
+              player: 'X'
+            }
+          }
+        }
+      })
+    )
+
+    expect(onAssistantRuntimeEvent).toHaveBeenCalledWith({
+      type: 'assistant.game.tictactoe.cell_selected',
+      ts_ms: 123,
+      source: 'view',
+      payload: {
+        resource_id: 'tictactoe:neon-grid',
+        move_index: 12,
+        row: 2,
+        col: 2,
+        player: 'X'
+      }
+    })
   })
 })

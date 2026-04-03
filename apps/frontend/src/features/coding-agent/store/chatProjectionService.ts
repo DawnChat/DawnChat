@@ -77,6 +77,21 @@ export function createChatProjectionService(input: {
           })
           continue
         }
+        if (partType === 'file') {
+          const mime = String((part as any)?.mime || (part as any)?.mediaType || '').toLowerCase()
+          const filename = String((part as any)?.filename || '').trim()
+          const label = mime.startsWith('image/') ? '图片附件' : '文件附件'
+          items.push({
+            id: partID,
+            type: 'text',
+            text: filename ? `[${label}] ${filename}` : `[${label}]`,
+            messageID,
+            callID: String((part as any)?.callID || (part as any)?.callId || ''),
+            raw: part,
+            isStreaming: false
+          })
+          continue
+        }
         if (partType === 'tool') {
           const toolDisplay = summarizeToolPart(part)
           items.push({

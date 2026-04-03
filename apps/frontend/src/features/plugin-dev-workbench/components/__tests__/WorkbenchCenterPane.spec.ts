@@ -56,6 +56,12 @@ const baseProps = {
   agentLogIdleLabel: 'idle',
   agentLogHeight: 188,
   isResizingAgentLog: false,
+  enableFileAttachments: false,
+  ttsEnabled: true,
+  ttsPlaybackState: 'idle' as const,
+  ttsStreamStatus: 'idle' as const,
+  selectedTtsEngine: 'system',
+  ttsEngineOptions: [],
 }
 
 describe('WorkbenchCenterPane', () => {

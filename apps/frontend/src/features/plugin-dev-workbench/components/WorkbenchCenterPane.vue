@@ -59,6 +59,7 @@
           :show-agent-selector="false"
           :show-model-selector="false"
           :show-composer="false"
+          :enable-file-attachments="enableFileAttachments"
           :show-tts-control="true"
           :tts-enabled="ttsEnabled"
           :tts-playback-state="ttsPlaybackState"
@@ -83,6 +84,7 @@
       :show-agent-selector="false"
       :show-model-selector="true"
       :show-composer="true"
+      :enable-file-attachments="enableFileAttachments"
       :show-tts-control="true"
       :tts-enabled="ttsEnabled"
       :tts-playback-state="ttsPlaybackState"
@@ -156,6 +158,7 @@ defineProps<{
   ttsStreamStatus: 'idle' | 'connecting' | 'reconnecting' | 'streaming' | 'closed'
   selectedTtsEngine: string
   ttsEngineOptions: Array<{ id: string; label: string }>
+  enableFileAttachments: boolean
 }>()
 
 const emit = defineEmits<{

@@ -123,4 +123,63 @@ describe('usePreviewSessionGuard', () => {
 
     expect(guard.shouldPollPreviewStatus.value).toBe(true)
   })
+
+  it('收到恢复上抛事件后会触发受控重启', async () => {
+    const facade = createFacade({
+      id: 'com.test.preview',
+      name: 'Preview App',
+      state: 'running',
+      preview: {
+        state: 'running',
+        url: 'http://127.0.0.1:5173',
+        frontend_mode: 'dev',
+        install_status: 'idle',
+      },
+    } as Plugin)
+
+    const guard = usePreviewSessionGuard(
+      {
+        pluginId: computed(() => 'com.test.preview'),
+        redirectToAppsInstalled: vi.fn(),
+      },
+      facade
+    )
+
+    await guard.handlePreviewRecoverEscalate({ reason: 'frontend_unreachable', retries: 3 })
+
+    expect(facade.runLifecycleOperation).toHaveBeenCalledWith({
+      operationType: 'restart_dev_session',
+      payload: { plugin_id: 'com.test.preview' },
+      navigationIntent: 'none',
+      uiMode: 'inline',
+      completionMessage: '重启完成，正在刷新预览...'
+    })
+  })
+
+  it('受控重启在冷却窗口内不会重复触发', async () => {
+    const facade = createFacade({
+      id: 'com.test.preview',
+      name: 'Preview App',
+      state: 'running',
+      preview: {
+        state: 'running',
+        url: 'http://127.0.0.1:5173',
+        frontend_mode: 'dev',
+        install_status: 'idle',
+      },
+    } as Plugin)
+
+    const guard = usePreviewSessionGuard(
+      {
+        pluginId: computed(() => 'com.test.preview'),
+        redirectToAppsInstalled: vi.fn(),
+      },
+      facade
+    )
+
+    await guard.handlePreviewRecoverEscalate({ reason: 'frontend_unreachable', retries: 3 })
+    await guard.handlePreviewRecoverEscalate({ reason: 'frontend_unreachable', retries: 3 })
+
+    expect(facade.runLifecycleOperation).toHaveBeenCalledTimes(1)
+  })
 })

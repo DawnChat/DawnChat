@@ -75,5 +75,48 @@ describe('chatProjectionService', () => {
 
     expect(svc.canSwitchPlanToBuild.value).toBe(true)
   })
+
+  it('tool error 场景映射完整 input 与 error 字段', () => {
+    const activeSessionId = ref('s3')
+    const state: SessionState = createEmptySessionState()
+    state.messagesById.m1 = {
+      id: 'm1',
+      role: 'assistant',
+      time: {
+        created: '2026-01-01T00:00:00.000Z'
+      }
+    }
+    state.partsByMessageId.m1 = {
+      t1: {
+        id: 't1',
+        type: 'tool',
+        messageID: 'm1',
+        tool: 'bash',
+        state: {
+          status: 'error',
+          input: {
+            command: 'ls -la'
+          },
+          error: 'permission denied',
+          output: 'this output should not override error'
+        }
+      }
+    } as any
+    state.partOrderByMessageId.m1 = { t1: 1 }
+
+    const sessionStateById = ref<Record<string, SessionState>>({ s3: state })
+    const selectedAgent = ref('build')
+    const svc = createChatProjectionService({
+      activeSessionId,
+      sessionStateById,
+      selectedAgent
+    })
+    const toolItem = svc.chatRows.value[0]?.items[0]
+    expect(toolItem?.type).toBe('tool')
+    expect(toolItem?.toolDisplay?.hasInput).toBe(true)
+    expect(toolItem?.toolDisplay?.hasError).toBe(true)
+    expect(toolItem?.toolDisplay?.fullErrorText).toContain('permission denied')
+    expect(toolItem?.toolDisplay?.detailsText).toContain('permission denied')
+  })
 })
 

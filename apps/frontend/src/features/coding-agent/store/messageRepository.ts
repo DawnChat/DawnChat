@@ -18,6 +18,29 @@ export function createMessageRepository(input: {
 }) {
   const { getOrCreateSessionState, messageSessionById, pendingLocalUserMessageIdsBySession } = input
 
+  function appendStringByFieldPath(target: Record<string, unknown>, field: string, delta: string) {
+    const segments = String(field || '')
+      .split('.')
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0)
+    if (segments.length === 0) return
+    let cursor: Record<string, unknown> = target
+    for (let idx = 0; idx < segments.length - 1; idx += 1) {
+      const key = segments[idx]
+      const nested = cursor[key]
+      if (!nested || typeof nested !== 'object') {
+        cursor[key] = {}
+      }
+      cursor = cursor[key] as Record<string, unknown>
+    }
+    const leaf = segments[segments.length - 1]
+    const previous = typeof cursor[leaf] === 'string' ? (cursor[leaf] as string) : ''
+    if (delta.length <= previous.length && previous.endsWith(delta)) {
+      return
+    }
+    cursor[leaf] = `${previous}${delta}`
+  }
+
   function upsertMessageInfo(sessionID: string, info: CodingAgentMessageInfo) {
     if (!sessionID || !info?.id) return
     const state = getOrCreateSessionState(sessionID)
@@ -80,11 +103,7 @@ export function createMessageRepository(input: {
     if (partType && !existing.type) {
       existing.type = partType
     }
-    const previous = typeof existing[field] === 'string' ? (existing[field] as string) : ''
-    if (delta.length <= previous.length && previous.endsWith(delta)) {
-      return
-    }
-    existing[field] = `${previous}${delta}`
+    appendStringByFieldPath(existing, field, delta)
   }
 
   function removePart(sessionID: string, messageID: string, partID: string) {

@@ -36,7 +36,7 @@ describe('DesktopTemplateQuickSelectModal', () => {
     expect(wrapper.emitted('confirm')?.at(-1)).toEqual(['com.dawnchat.desktop-ai-assistant'])
   })
 
-  it('每次重新打开会重置为 hello-world 默认选择', async () => {
+  it('每次重新打开默认选中 AI assistant 模板', async () => {
     const wrapper = mount(DesktopTemplateQuickSelectModal, {
       props: {
         visible: true,
@@ -49,6 +49,18 @@ describe('DesktopTemplateQuickSelectModal', () => {
     await wrapper.setProps({ visible: true })
     await wrapper.find('.btn-primary').trigger('click')
 
+    expect(wrapper.emitted('confirm')?.at(-1)).toEqual(['com.dawnchat.desktop-ai-assistant'])
+  })
+
+  it('存在记忆选择时优先使用记忆值', async () => {
+    const wrapper = mount(DesktopTemplateQuickSelectModal, {
+      props: {
+        visible: true,
+        selectedTemplateId: 'com.dawnchat.desktop-hello-world',
+      },
+    })
+
+    await wrapper.find('.btn-primary').trigger('click')
     expect(wrapper.emitted('confirm')?.at(-1)).toEqual(['com.dawnchat.desktop-hello-world'])
   })
 })

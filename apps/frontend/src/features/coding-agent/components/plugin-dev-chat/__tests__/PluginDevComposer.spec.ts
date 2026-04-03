@@ -219,6 +219,74 @@ describe('PluginDevComposer', () => {
     wrapper.unmount()
   })
 
+  it('粘贴图片时会触发 paste-image 事件', async () => {
+    const originalFileReader = globalThis.FileReader
+    class MockFileReader {
+      result: string | ArrayBuffer | null = null
+      error: DOMException | null = null
+      onload: ((this: FileReader, ev: ProgressEvent<FileReader>) => any) | null = null
+      onerror: ((this: FileReader, ev: ProgressEvent<FileReader>) => any) | null = null
+
+      readAsDataURL(_file: Blob) {
+        this.result = 'data:image/png;base64,AAAA'
+        this.onload?.call(this as unknown as FileReader, {} as ProgressEvent<FileReader>)
+      }
+    }
+    vi.stubGlobal('FileReader', MockFileReader as unknown as typeof FileReader)
+
+    const wrapper = mount(PluginDevComposer, {
+      attachTo: document.body,
+      props: {
+        modelValue: '',
+        placeholder: 'input',
+        selectedEngine: 'opencode',
+        selectedAgent: 'build',
+        selectedModelId: '',
+        engineOptions: [{ id: 'opencode', label: 'OpenCode' }],
+        availableAgents: [{ id: 'build', label: 'build' }],
+        availableModels: [],
+        canSend: true,
+        blocked: false,
+        blockedText: '',
+        runLabel: 'Run'
+      }
+    })
+
+    const fakeFile = new File(['x'], 'shot.png', { type: 'image/png' })
+    await wrapper.find('.composer-input').trigger('paste', {
+      clipboardData: {
+        items: [
+          {
+            kind: 'file',
+            type: 'image/png',
+            getAsFile: () => fakeFile
+          }
+        ],
+        files: [fakeFile],
+        getData: vi.fn(() => '')
+      }
+    })
+
+    await vi.waitFor(() => {
+      expect(wrapper.emitted('paste-image')?.length).toBe(1)
+    })
+    expect(wrapper.emitted('paste-image')?.[0]?.[0]).toEqual([
+      {
+        type: 'file',
+        mime: 'image/png',
+        filename: 'shot.png',
+        url: 'data:image/png;base64,AAAA'
+      }
+    ])
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+
+    wrapper.unmount()
+    vi.unstubAllGlobals()
+    if (originalFileReader) {
+      vi.stubGlobal('FileReader', originalFileReader)
+    }
+  })
+
   it('点击标签移除按钮会整块删除上下文 token', async () => {
     const token = encodeContextToken('App.vue(L18:C7)', 'const a = 1')
     const wrapper = mount(PluginDevComposer, {
@@ -241,6 +309,40 @@ describe('PluginDevComposer', () => {
     await wrapper.find('.chip-remove').trigger('click')
 
     expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual(['hello '])
+  })
+
+  it('选择文件会触发 pick-files 事件', async () => {
+    const wrapper = mount(PluginDevComposer, {
+      props: {
+        modelValue: '',
+        placeholder: 'input',
+        selectedEngine: 'opencode',
+        selectedAgent: 'build',
+        selectedModelId: '',
+        engineOptions: [{ id: 'opencode', label: 'OpenCode' }],
+        availableAgents: [{ id: 'build', label: 'build' }],
+        availableModels: [],
+        canSend: true,
+        blocked: false,
+        blockedText: '',
+        runLabel: 'Run',
+        enableFileAttachment: true
+      }
+    })
+
+    const input = wrapper.find('input[type="file"]')
+    const fileA = new File(['a'], 'a.txt', { type: 'text/plain' })
+    const fileB = new File(['b'], 'b.txt', { type: 'text/plain' })
+    Object.defineProperty(input.element, 'files', {
+      configurable: true,
+      value: [fileA, fileB]
+    })
+    await input.trigger('change')
+
+    const payload = wrapper.emitted('pick-files')?.[0]?.[0] as File[]
+    expect(payload).toHaveLength(2)
+    expect(payload[0]?.name).toBe('a.txt')
+    expect(payload[1]?.name).toBe('b.txt')
   })
 
   it('运行中展示可取消按钮并触发 interrupt 事件', async () => {

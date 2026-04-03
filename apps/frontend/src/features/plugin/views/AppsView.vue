@@ -100,7 +100,9 @@
 
     <DesktopTemplateQuickSelectModal
       :visible="desktopTemplateModalVisible"
+      :selected-template-id="desktopTemplateSelectionMemory"
       @close="desktopTemplateModalVisible = false"
+      @selection-change="desktopTemplateSelectionMemory = $event"
       @confirm="handleDesktopTemplateSelect"
     />
   </div>
@@ -169,6 +171,7 @@ const {
 })
 const showMoreApps = ref(buildHubFilter.value !== 'all')
 const desktopTemplateModalVisible = ref(false)
+const desktopTemplateSelectionMemory = ref<string | null>(null)
 
 const createCards = computed(() => [
   {
@@ -227,6 +230,7 @@ const handleCreateCardClick = (appType: CreateAppType) => {
 }
 
 const handleDesktopTemplateSelect = (templateId: string) => {
+  desktopTemplateSelectionMemory.value = templateId
   desktopTemplateModalVisible.value = false
   void handleQuickCreateDesktopByTemplate(templateId)
 }

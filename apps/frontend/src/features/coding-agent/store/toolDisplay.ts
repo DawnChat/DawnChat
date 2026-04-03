@@ -50,6 +50,16 @@ function oneLinePreview(text: string, max = 84): string {
   return `${compact.slice(0, max)}...`
 }
 
+function stringifyUnknown(value: unknown): string {
+  if (value == null) return ''
+  if (typeof value === 'string') return value
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return String(value)
+  }
+}
+
 function resolveToolRenderMode(input: {
   kind: ToolDisplayMeta['kind']
   hasDetails: boolean
@@ -57,7 +67,7 @@ function resolveToolRenderMode(input: {
 }): ToolDisplayMeta['renderMode'] {
   const kind = input.kind
   if (!input.hasDetails) return 'inline'
-  if (kind === 'bash' && input.status !== 'error') return 'inline'
+  if (kind === 'bash' && input.status !== 'error' && input.status !== 'failed') return 'inline'
   return 'collapsible'
 }
 
@@ -190,6 +200,7 @@ export function summarizeToolPart(part: CodingAgentPart): ToolDisplayMeta {
   const status = String(state.status || '').toLowerCase()
   const input = (state.input || parseToolRawArguments(String(state.rawArguments || state.raw || ''))) as Record<string, unknown>
   const outputText = String(state.output || '')
+  const errorText = stringifyUnknown(state.error || '')
   const rawArgsText = String(state.rawArguments || state.raw || '').trim()
   const command = String(input.command || input.cmd || '').trim()
   const path = extractPathWithRange(input)
@@ -213,11 +224,23 @@ export function summarizeToolPart(part: CodingAgentPart): ToolDisplayMeta {
   let previewLineCount = kind === 'write' ? 4 : 6
   let languageHint = 'plaintext'
 
+  const fullInputText = (() => {
+    const normalizedInput = stringifyUnknown(input).trim()
+    if (normalizedInput && normalizedInput !== '{}') return normalizedInput
+    return rawArgsText
+  })()
+  const fullOutputText = outputText
+  const fullErrorText = errorText
+  const hasInput = Boolean(fullInputText.trim())
+  const hasOutput = Boolean(fullOutputText.trim())
+  const hasError = Boolean(fullErrorText.trim()) || status === 'error' || status === 'failed'
+
   if (kind === 'read') {
     const readPath = path || String(input.filepath || input.file_path || '').trim()
     const readDisplayPath = toDisplayFilename(readPath)
     const contentBlock = extractReadContentBlock(outputText)
-    const cleanedLines = stripReadNoiseLines(contentBlock).map((line) => line.replace(/^\s*\d+:\s?/, ''))
+    const cleanedLinesRaw = stripReadNoiseLines(contentBlock).map((line) => line.replace(/^\s*\d+:\s?/, ''))
+    const cleanedLines = cleanedLinesRaw.some((line) => line.trim().length > 0) ? cleanedLinesRaw : []
     codeLines = cleanedLines
     detailsText = cleanedLines.join('\n').trim()
     summary = readDisplayPath ? `read ${readDisplayPath}` : 'read file'
@@ -228,7 +251,7 @@ export function summarizeToolPart(part: CodingAgentPart): ToolDisplayMeta {
     const patchCandidate = normalizePatchText(
       String(state.patch || state.diff || state.outputPatch || (state.input as any)?.patch || '')
     )
-    patchPreview = patchCandidate ? tailText(patchCandidate, 420) : ''
+    patchPreview = patchCandidate
     diffStat = extractDiffStat(patchCandidate)
     codeLines = patchCandidate
       ? patchCandidate.split('\n').map((line) => line.replace(/\r$/, ''))
@@ -243,27 +266,33 @@ export function summarizeToolPart(part: CodingAgentPart): ToolDisplayMeta {
     const subject = pattern || query || path || argsText
     summary = subject ? `${toolName} ${subject}` : toolName
     outputTail = tailText(outputText, 220)
-    detailsText = outputTail
+    detailsText = outputText
   } else if (lowerTool === 'glob') {
     const globPattern = String(input.pattern || '').trim()
     const globPath = toDisplayFilename(String(input.path || '').trim()) || String(input.path || '').trim()
     summary = `glob 匹配文件: ${globPattern || '(empty-pattern)'}${globPath ? ` in ${globPath}` : ''}`
-    detailsText = outputText ? tailText(outputText, 320) : ''
+    detailsText = outputText
   } else if (kind === 'bash') {
     summary = command ? `bash ${command}` : toolName
     outputTail = tailText(outputText, 280)
-    detailsText = outputTail
+    detailsText = outputText
   } else {
     summary = argsText ? `${toolName} ${argsText}` : toolName
     outputTail = tailText(outputText, 280)
-    detailsText = outputTail
+    detailsText = outputText
+  }
+
+  if (hasError) {
+    detailsText = fullErrorText || 'Tool call failed without error details.'
+  } else if (!detailsText && fullOutputText) {
+    detailsText = fullOutputText
   }
 
   if (detailsText && detailsText.trim() === summary.trim()) {
     detailsText = ''
   }
 
-  const hasDetails = Boolean(detailsText || outputTail || patchPreview || diffStat)
+  const hasDetails = Boolean(detailsText || fullOutputText || fullErrorText || patchPreview || diffStat || codeLines.length)
   const renderMode = resolveToolRenderMode({ kind, hasDetails, status })
   const argsPreview = oneLinePreview(argsText, 92)
   const hiddenLineCount = Math.max(0, codeLines.length - previewLineCount)
@@ -274,6 +303,12 @@ export function summarizeToolPart(part: CodingAgentPart): ToolDisplayMeta {
     toolName,
     argsText,
     argsPreview,
+    fullInputText,
+    fullOutputText,
+    fullErrorText,
+    hasInput,
+    hasOutput,
+    hasError,
     hasDetails,
     title: summary || toolName,
     summary,

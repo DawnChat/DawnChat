@@ -6,6 +6,8 @@
         :key="previewPaneKey"
         :plugin-id="pluginId"
         :plugin-url="pluginUrl"
+        :preview-frontend-mode="previewFrontendMode"
+        :preview-frontend-reachable="previewFrontendReachable"
         :log-session-id="previewLogSessionId"
         :lifecycle-task="previewLifecycleTask"
         :lifecycle-busy="previewLifecycleBusy"
@@ -14,6 +16,7 @@
         :show-stop-button="false"
         :is-compact-surface="showCompactShell"
         :on-capability-invoke-request="onCapabilityInvokeRequest"
+        :on-assistant-runtime-event="onAssistantRuntimeEvent"
         :on-host-invoke-request="onHostInvokeRequest"
         @restart="(appId) => emit('restart', appId)"
         @toggle-fullscreen="emit('toggleFullscreen')"
@@ -22,6 +25,7 @@
         @context-push="(payload) => emit('contextPush', payload)"
         @tts-speak-accepted="(payload) => emit('ttsSpeakAccepted', payload)"
         @tts-stopped="(payload) => emit('ttsStopped', payload)"
+        @recover-escalate="(payload) => emit('previewRecoverEscalate', payload)"
       />
       <div v-else class="loading">
         <span class="spinner"></span>
@@ -54,6 +58,7 @@ import type {
   HostInvokeExecutionContext
 } from '@/composables/usePluginUiBridge'
 import type {
+  AssistantRuntimeEventPayload,
   ContextPushPayload,
   TtsSpeakAcceptedPayload,
   TtsStoppedPayload
@@ -67,6 +72,8 @@ defineProps<{
   previewPaneKey: number
   pluginId: string
   pluginUrl: string
+  previewFrontendMode?: 'dev' | 'dist'
+  previewFrontendReachable?: boolean | null
   previewLogSessionId: string
   previewLifecycleTask: LifecycleTask | null
   previewLifecycleBusy: boolean
@@ -82,6 +89,7 @@ defineProps<{
   onCapabilityInvokeRequest?: (
     context: CapabilityInvokeExecutionContext
   ) => Promise<Record<string, unknown> | null> | Record<string, unknown> | null
+  onAssistantRuntimeEvent?: (payload: AssistantRuntimeEventPayload) => void
   onHostInvokeRequest?: (
     context: HostInvokeExecutionContext
   ) => Promise<Record<string, unknown>> | Record<string, unknown>
@@ -99,6 +107,7 @@ const emit = defineEmits<{
   composerSelectionChange: [payload: { start: number; end: number; focused: boolean }]
   toggleTtsEnabled: []
   stopTts: []
+  previewRecoverEscalate: [payload: { reason: string; retries: number }]
 }>()
 </script>
 

@@ -2,6 +2,13 @@ import { computed, ref } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 
+const uploadPluginAgentAttachmentMock = vi.fn(async (_pluginId: string, file: File) => ({
+  plugin_id: _pluginId,
+  filename: file.name,
+  stored_path: `user-uploads/${file.name}`,
+  size_bytes: file.size
+}))
+
 function createMockStore() {
   return {
     selectedEngine: ref('opencode'),
@@ -33,6 +40,7 @@ function createMockStore() {
     selectModel: vi.fn(),
     ensureReadyWithWorkspace: vi.fn(async () => {}),
     sendText: vi.fn(async () => {}),
+    sendPromptParts: vi.fn(async () => {}),
     interruptActiveRun: vi.fn(async () => true),
     replyPermission: vi.fn(async () => {}),
     replyQuestion: vi.fn(async () => {}),
@@ -88,6 +96,11 @@ vi.mock('@/services/plugin-ui-bridge/contextToken', () => ({
   expandContextTokens: (value: string) => value
 }))
 
+vi.mock('@/services/plugins/pluginAgentAttachmentApi', () => ({
+  uploadPluginAgentAttachment: (...args: unknown[]) =>
+    uploadPluginAgentAttachmentMock(...(args as [string, File]))
+}))
+
 vi.mock('@/features/coding-agent/components/plugin-dev-chat/PluginDevSessionTabs.vue', () => ({
   default: {
     name: 'PluginDevSessionTabs',
@@ -116,16 +129,35 @@ vi.mock('@/features/coding-agent/components/plugin-dev-chat/PluginDevComposer.vu
       'selectedEngineHealthStatus',
       'selectedEngineHealthTitle',
       'selectedAgent',
-      'selectedModelId'
+      'selectedModelId',
+      'pendingImages',
+      'pendingFiles',
+      'enableFileAttachment',
+      'isUploadingAttachments',
+      'filePickerLabel'
     ],
-    emits: ['select-engine', 'select-agent', 'select-model', 'send', 'interrupt', 'update:modelValue', 'selection-change'],
+    emits: ['select-engine', 'select-agent', 'select-model', 'send', 'interrupt', 'update:modelValue', 'selection-change', 'paste-image', 'pick-files', 'preview-image', 'remove-image', 'remove-file'],
     template: `
       <div class="composer-stub">
         <span class="engine-flag">{{ showEngineSelector }}</span>
         <span class="agent-flag">{{ showAgentSelector }}</span>
         <span class="model-flag">{{ showModelSelector }}</span>
         <span class="engine-health">{{ selectedEngineLabel }}|{{ selectedEngineHealthStatus }}</span>
+        <span class="pending-images">{{ pendingImages?.length || 0 }}</span>
         <button class="emit-engine" @click="$emit('select-engine', 'agentv3')" />
+      </div>
+    `
+  }
+}))
+
+vi.mock('@/shared/ui/FloatingPopover.vue', () => ({
+  default: {
+    name: 'FloatingPopover',
+    props: ['visible'],
+    emits: ['outside-click'],
+    template: `
+      <div v-if="visible" class="floating-popover-stub">
+        <slot />
       </div>
     `
   }
@@ -143,6 +175,7 @@ describe('CodingChatShell', () => {
     mockStore.selectedEngine.value = 'opencode'
     mockStore.selectedAgent.value = 'general'
     mockStore.selectedModelId.value = 'local/model-a'
+    uploadPluginAgentAttachmentMock.mockClear()
   })
 
   it('挂载时会按 workspace target 初始化运行时', async () => {
@@ -275,7 +308,7 @@ describe('CodingChatShell', () => {
     await flushPromises()
 
     expect(mockStore.interruptActiveRun).toHaveBeenCalledTimes(1)
-    expect(mockStore.sendText).not.toHaveBeenCalled()
+    expect(mockStore.sendPromptParts).not.toHaveBeenCalled()
   })
 
   it('存在 permission 卡片时不阻塞输入与发送', async () => {
@@ -307,6 +340,151 @@ describe('CodingChatShell', () => {
     const composer = wrapper.findComponent({ name: 'PluginDevComposer' })
     expect(composer.props('blocked')).toBe(false)
     expect(composer.props('canSend')).toBe(true)
+  })
+
+  it('接收图片粘贴后可直接发送 file part', async () => {
+    const wrapper = mount(CodingChatShell, {
+      props: {
+        modelValue: '',
+        pluginId: 'com.dawnchat.hello-world-vue',
+        emptyText: 'empty',
+        placeholder: 'placeholder',
+        streamingText: 'streaming',
+        blockedText: 'blocked',
+        runLabel: 'run',
+        newChatLabel: 'new'
+      }
+    })
+    await flushPromises()
+
+    const composer = wrapper.findComponent({ name: 'PluginDevComposer' })
+    composer.vm.$emit('paste-image', [
+      {
+        type: 'file',
+        mime: 'image/png',
+        filename: 'shot.png',
+        url: 'data:image/png;base64,AAAA'
+      }
+    ])
+    composer.vm.$emit('send')
+    await flushPromises()
+
+    expect(mockStore.sendPromptParts).toHaveBeenCalledWith(
+      [
+        {
+          type: 'file',
+          mime: 'image/png',
+          filename: 'shot.png',
+          url: 'data:image/png;base64,AAAA'
+        }
+      ],
+      {
+        workspaceTarget: null,
+        pluginId: 'com.dawnchat.hello-world-vue',
+        forceRestart: false
+      }
+    )
+    expect(composer.props('pendingImages')).toEqual([])
+  })
+
+  it('图片标签支持删除，并同步更新待发送附件列表', async () => {
+    const wrapper = mount(CodingChatShell, {
+      props: {
+        modelValue: '',
+        pluginId: 'com.dawnchat.hello-world-vue',
+        emptyText: 'empty',
+        placeholder: 'placeholder',
+        streamingText: 'streaming',
+        blockedText: 'blocked',
+        runLabel: 'run',
+        newChatLabel: 'new'
+      }
+    })
+    await flushPromises()
+
+    const composer = wrapper.findComponent({ name: 'PluginDevComposer' })
+    composer.vm.$emit('paste-image', [
+      {
+        type: 'file',
+        mime: 'image/png',
+        filename: 'shot.png',
+        url: 'data:image/png;base64,AAAA'
+      }
+    ])
+    await flushPromises()
+    expect(composer.props('pendingImages')).toHaveLength(1)
+
+    composer.vm.$emit('remove-image', 0)
+    await flushPromises()
+    expect(composer.props('pendingImages')).toEqual([])
+  })
+
+  it('点击图片标签预览会展示图片预览浮层', async () => {
+    const wrapper = mount(CodingChatShell, {
+      props: {
+        modelValue: '',
+        pluginId: 'com.dawnchat.hello-world-vue',
+        emptyText: 'empty',
+        placeholder: 'placeholder',
+        streamingText: 'streaming',
+        blockedText: 'blocked',
+        runLabel: 'run',
+        newChatLabel: 'new'
+      }
+    })
+    await flushPromises()
+
+    const composer = wrapper.findComponent({ name: 'PluginDevComposer' })
+    composer.vm.$emit('paste-image', [
+      {
+        type: 'file',
+        mime: 'image/png',
+        filename: 'shot.png',
+        url: 'data:image/png;base64,AAAA'
+      }
+    ])
+    await flushPromises()
+
+    composer.vm.$emit('preview-image', { index: 0, anchorEl: null })
+    await flushPromises()
+    expect(wrapper.find('.floating-popover-stub').exists()).toBe(true)
+  })
+
+  it('发送前会上传附件并把相对路径注入 text part', async () => {
+    const wrapper = mount(CodingChatShell, {
+      props: {
+        modelValue: '请帮我分析附件',
+        pluginId: 'com.dawnchat.hello-world-vue',
+        emptyText: 'empty',
+        placeholder: 'placeholder',
+        streamingText: 'streaming',
+        blockedText: 'blocked',
+        runLabel: 'run',
+        newChatLabel: 'new',
+        enableFileAttachments: true
+      }
+    })
+    await flushPromises()
+
+    const composer = wrapper.findComponent({ name: 'PluginDevComposer' })
+    composer.vm.$emit('pick-files', [new File(['abc'], 'report.md', { type: 'text/markdown' })])
+    composer.vm.$emit('send')
+    await flushPromises()
+
+    expect(uploadPluginAgentAttachmentMock).toHaveBeenCalledTimes(1)
+    expect(mockStore.sendPromptParts).toHaveBeenCalledWith(
+      [
+        {
+          type: 'text',
+          text: '请帮我分析附件\n\nAttached files:\n- user-uploads/report.md'
+        }
+      ],
+      {
+        workspaceTarget: null,
+        pluginId: 'com.dawnchat.hello-world-vue',
+        forceRestart: false
+      }
+    )
   })
 
   it('存在 question 卡片时仍阻塞输入与发送', async () => {

@@ -1,13 +1,13 @@
 import type { Ref } from 'vue'
 import { logger } from '@/utils/logger'
-import { type EngineId } from '@/services/coding-agent/adapterRegistry'
+import { ENGINE_OPENCODE, type EngineId } from '@/services/coding-agent/adapterRegistry'
 import {
   engineSupportsWorkspacePayload,
   engineUsesRuntimeMeta,
   engineUsesWorkspaceSystemPrompt,
   getControlPlanePrefix
 } from '@/services/coding-agent/engineCapabilities'
-import type { CodingAgentPart } from '@/services/coding-agent/engineAdapter'
+import type { CodingAgentPart, PromptPart } from '@/services/coding-agent/engineAdapter'
 import type { ModelOption, SessionMeta, SessionState, SessionTodoItem, WorkspaceResolveOptions, WorkspaceTarget } from '@/features/coding-agent/store/types'
 import { DEFAULT_SESSION_TITLE } from '@/features/coding-agent/store/sessionHelpers'
 import { normalizeSessionTodos } from '@/features/coding-agent/store/toolDisplay'
@@ -672,9 +672,57 @@ export function createRuntimeOrchestrator(input: {
     await ensureReadyPromise.value
   }
 
-  async function sendText(text: string, options?: WorkspaceResolveOptions) {
-    const content = text.trim()
-    if (!content) return
+  function summarizeLocalEchoFromParts(parts: PromptPart[]): string {
+    const text = parts
+      .filter((part): part is Extract<PromptPart, { type: 'text' }> => part.type === 'text')
+      .map((part) => String(part.text || ''))
+      .join('\n')
+      .trim()
+    const imageCount = parts.filter((part) => {
+      if (part.type !== 'file') return false
+      return String(part.mime || '').toLowerCase().startsWith('image/')
+    }).length
+    if (text && imageCount > 0) {
+      return `${text}\n[已附加 ${imageCount} 张图片]`
+    }
+    if (text) return text
+    if (imageCount > 0) {
+      return `[已发送 ${imageCount} 张图片]`
+    }
+    return ''
+  }
+
+  async function sendPromptParts(parts: PromptPart[], options?: WorkspaceResolveOptions) {
+    const normalizedParts = (Array.isArray(parts) ? parts : [])
+      .map((part) => {
+        if (!part || typeof part !== 'object') return null
+        if (part.type === 'text') {
+          const text = String(part.text || '').trim()
+          if (!text) return null
+          return { type: 'text', text } as const
+        }
+        if (part.type === 'file') {
+          const mime = String(part.mime || '').trim()
+          const url = String(part.url || '').trim()
+          const filename = String(part.filename || '').trim()
+          if (!mime || !url) return null
+          return {
+            type: 'file',
+            mime,
+            url,
+            ...(filename ? { filename } : {})
+          } as const
+        }
+        return null
+      })
+      .filter((part): part is PromptPart => Boolean(part))
+    if (normalizedParts.length === 0) return
+
+    const hasFileParts = normalizedParts.some((part) => part.type === 'file')
+    if (hasFileParts && selectedEngine.value !== ENGINE_OPENCODE) {
+      throw new Error('当前引擎暂不支持图片输入，请切换 OpenCode。')
+    }
+
     const workspaceTarget = resolveWorkspaceTarget(options)
     if (!workspaceTarget) {
       throw new Error('发送消息前必须绑定 workspace target')
@@ -700,8 +748,13 @@ export function createRuntimeOrchestrator(input: {
     const systemPrompt = engineUsesWorkspaceSystemPrompt(selectedEngine.value)
       ? buildWorkspaceSystemPrompt(workspaceTarget.displayName)
       : undefined
+    const primaryText = normalizedParts
+      .filter((part): part is Extract<PromptPart, { type: 'text' }> => part.type === 'text')
+      .map((part) => String(part.text || ''))
+      .find((value) => value.trim().length > 0)
+    const echoText = summarizeLocalEchoFromParts(normalizedParts)
     const payload = {
-      parts: [{ type: 'text' as const, text: content }],
+      parts: normalizedParts,
       agent: selectedAgent.value,
       ...(engineSupportsWorkspacePayload(selectedEngine.value) && workspaceTarget.pluginId
         ? { plugin_id: workspaceTarget.pluginId }
@@ -723,10 +776,14 @@ export function createRuntimeOrchestrator(input: {
     }
 
     try {
-      pushLocalUserEcho(targetSessionID, content)
+      if (echoText) {
+        pushLocalUserEcho(targetSessionID, echoText)
+      }
       await getActiveAdapter().promptAsync(targetSessionID, payload)
       updateSessionTouch(targetSessionID)
-      tryRenameDefaultSessionAfterSend(targetSessionID, content)
+      if (primaryText) {
+        tryRenameDefaultSessionAfterSend(targetSessionID, primaryText)
+      }
     } catch (err) {
       clearPendingLocalUserEchoes(targetSessionID)
       const message = err instanceof Error ? err.message : String(err)
@@ -737,6 +794,12 @@ export function createRuntimeOrchestrator(input: {
       state.runWaitReason = ''
       throw err
     }
+  }
+
+  async function sendText(text: string, options?: WorkspaceResolveOptions) {
+    const content = text.trim()
+    if (!content) return
+    await sendPromptParts([{ type: 'text', text: content }], options)
   }
 
   async function interruptSession(targetSessionID?: string): Promise<boolean> {
@@ -792,6 +855,7 @@ export function createRuntimeOrchestrator(input: {
     ensureReady,
     ensureReadyWithWorkspace,
     reconcileMessages,
+    sendPromptParts,
     sendText,
     interruptSession,
     dispose,
