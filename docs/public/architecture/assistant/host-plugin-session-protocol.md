@@ -244,6 +244,8 @@ For interactive or recoverable flows, the recommended external calling pattern i
 5. if the runtime was interrupted, treat the next step as a fresh control-plane decision rather than assuming a public plugin-side restore entrypoint
 6. when the runtime still exposes `continuation`-style hints through snapshot surfaces, use them only as planning hints rather than as a public wait API contract
 
+If the caller cares about both a user/runtime event and session completion, the observation windows should overlap instead of serializing `session.wait_for_end` before `event.wait`.
+
 Important clarification:
 
 - callers should not invent their own event cursor or stream identity model

@@ -44,6 +44,22 @@ class OpenCodeBaselineConfigComposer:
                 return [str(item) for item in enabled_models if str(item).strip()]
         return list(default_models)
 
+    async def _resolve_provider_base_url(
+        self,
+        provider_id: str,
+        aliases: tuple[str, ...],
+        provider: Dict[str, Any],
+    ) -> Optional[str]:
+        for candidate in (provider_id, *aliases):
+            base_url = await storage_manager.get_app_config(f"provider.{candidate}.base_url")
+            if isinstance(base_url, str) and base_url.strip():
+                return base_url.strip()
+        if provider.get("openai_compatible"):
+            default_base_url = provider.get("default_base_url")
+            if isinstance(default_base_url, str) and default_base_url.strip():
+                return default_base_url.strip()
+        return None
+
     @staticmethod
     def _resolve_preferred_model(preferred: str, available_models: set[str]) -> Optional[str]:
         preferred_key = preferred.replace(":", "/", 1)
@@ -100,14 +116,10 @@ class OpenCodeBaselineConfigComposer:
             if not api_key:
                 continue
             models = await self._get_enabled_models(provider_id, aliases, provider["models"])
-            if not models:
-                continue
             options: Dict[str, Any] = {"apiKey": api_key}
-            for candidate in (provider_id, *aliases):
-                base_url = await storage_manager.get_app_config(f"provider.{candidate}.base_url")
-                if isinstance(base_url, str) and base_url.strip():
-                    options["baseURL"] = base_url.strip()
-                    break
+            resolved_base_url = await self._resolve_provider_base_url(provider_id, aliases, provider)
+            if resolved_base_url:
+                options["baseURL"] = resolved_base_url
             provider_ids = [provider_id, "google"] if provider_id == "gemini" else [provider_id]
             for resolved_provider_id in provider_ids:
                 provider_cfg[resolved_provider_id] = {

@@ -3,11 +3,11 @@ from __future__ import annotations
 import pytest
 
 from app.services import plugin_backend_mcp_proxy_service as proxy_module
-from app.services.plugin_mcp_proxy_service import PluginMcpProxyError
 from app.services.plugin_backend_mcp_proxy_service import (
     PluginBackendMcpProxyError,
     PluginBackendMcpProxyService,
 )
+from app.services.plugin_mcp_proxy_service import PluginMcpProxyError
 
 
 class _ProxyStub:

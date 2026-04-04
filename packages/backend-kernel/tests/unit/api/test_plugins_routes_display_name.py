@@ -2,8 +2,8 @@ import importlib
 import sys
 import types
 
-import pytest
 from fastapi import HTTPException
+import pytest
 
 voice_stub = types.ModuleType("app.voice")
 voice_stub.get_tts_runtime_service = lambda: types.SimpleNamespace(get_plugin_runtime_state=lambda _plugin_id: {})

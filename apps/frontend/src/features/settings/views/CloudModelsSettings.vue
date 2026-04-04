@@ -48,29 +48,6 @@
             </div>
           </div>
 
-          <!-- 模型选择 -->
-          <div class="config-group">
-            <label class="config-label">{{ t.settings.cloudModels.enabledModels }}</label>
-            <div class="models-grid">
-              <label 
-                v-for="model in providerModels[provider.id]" 
-                :key="model"
-                class="model-checkbox"
-              >
-                <input 
-                  type="checkbox" 
-                  :checked="providerConfigs[provider.id].enabledModels.includes(model)"
-                  @change="toggleModel(provider.id, model)"
-                />
-                <span class="model-name">{{ model }}</span>
-              </label>
-            </div>
-            <div class="model-actions">
-              <button type="button" class="text-btn" @click="selectAllModels(provider.id)">{{ t.common.selectAll }}</button>
-              <button type="button" class="text-btn" @click="deselectAllModels(provider.id)">{{ t.common.deselectAll }}</button>
-            </div>
-          </div>
-
           <!-- 保存按钮 -->
           <div class="config-actions">
             <button 
@@ -102,12 +79,25 @@
         {{ t.settings.cloudModels.securityNote }}
       </span>
     </div>
+
+    <ConfirmDialog
+      v-model:visible="dialogVisible"
+      icon="🔐"
+      :title="dialogTitle"
+      :message="dialogMessage"
+      :confirm-text="dialogConfirmText"
+      :cancel-text="dialogCancelText"
+      @confirm="handleDialogConfirm"
+      @cancel="handleDialogCancel"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { useI18n } from '@/composables/useI18n'
+import { useCloudKeychainPrompt } from '@/composables/useCloudKeychainPrompt'
+import ConfirmDialog from '@/shared/ui/ConfirmDialog.vue'
 import { useLlmSelectionStore } from '@/stores/llmSelectionStore'
 import { logger } from '@/utils/logger'
 import { buildBackendUrl } from '@/utils/backendUrl'
@@ -137,7 +127,6 @@ interface Provider {
 
 interface ProviderConfig {
   apiKey: string
-  enabledModels: string[]
 }
 
 // 状态
@@ -146,7 +135,17 @@ const expandedProviders = ref<string[]>([])
 const showApiKey = reactive<Record<string, boolean>>({})
 const saving = reactive<Record<string, boolean>>({})
 const providerConfigs = reactive<Record<string, ProviderConfig>>({})
-const providerModels = reactive<Record<string, string[]>>({})
+const {
+  dialogVisible,
+  dialogTitle,
+  dialogMessage,
+  dialogConfirmText,
+  dialogCancelText,
+  shouldShowMacOsKeychainHint,
+  confirmMacOsKeychainHint,
+  handleDialogConfirm,
+  handleDialogCancel,
+} = useCloudKeychainPrompt()
 
 // 获取厂商图标
 const getProviderIconComponent = (providerId: string) => {
@@ -158,7 +157,8 @@ const getProviderIconComponent = (providerId: string) => {
     qwen: Cloud,
     moonshot: Moon,
     zhipu: Zap,
-    siliconflow: Globe
+    siliconflow: Globe,
+    openrouter: Globe
   }
   return icons[providerId] || Globe
 }
@@ -197,8 +197,7 @@ const loadProviders = async () => {
       for (const provider of providers.value) {
         if (!providerConfigs[provider.id]) {
           providerConfigs[provider.id] = {
-            apiKey: '',
-            enabledModels: []
+            apiKey: ''
           }
         }
       }
@@ -211,47 +210,22 @@ const loadProviders = async () => {
 // 加载单个厂商配置
 const loadProviderConfig = async (providerId: string) => {
   try {
-    // 加载厂商详情（获取可用模型列表）
+    // 加载厂商详情（用于确认配置状态）
     const detailRes = await fetch(buildBackendUrl(`/api/cloud/providers/${providerId}`))
     if (detailRes.ok) {
-      const detailData = await detailRes.json()
-      providerModels[providerId] = detailData.provider?.models || []
-    }
-
-    // 加载已启用的模型
-    const modelsRes = await fetch(buildBackendUrl(`/api/cloud/providers/${providerId}/models`))
-    if (modelsRes.ok) {
-      const modelsData = await modelsRes.json()
-      providerConfigs[providerId].enabledModels = modelsData.enabled_models || []
+      await detailRes.json()
     }
   } catch (e) {
     logger.error(`加载厂商配置失败: ${providerId}`, e)
   }
 }
 
-// 切换模型启用状态
-const toggleModel = (providerId: string, model: string) => {
-  const config = providerConfigs[providerId]
-  const index = config.enabledModels.indexOf(model)
-  if (index === -1) {
-    config.enabledModels.push(model)
-  } else {
-    config.enabledModels.splice(index, 1)
-  }
-}
-
-// 全选模型
-const selectAllModels = (providerId: string) => {
-  providerConfigs[providerId].enabledModels = [...providerModels[providerId]]
-}
-
-// 全不选
-const deselectAllModels = (providerId: string) => {
-  providerConfigs[providerId].enabledModels = []
-}
-
 // 保存厂商配置
 const saveProviderConfig = async (providerId: string) => {
+  if (shouldShowMacOsKeychainHint() && !(await confirmMacOsKeychainHint())) {
+    return
+  }
+
   saving[providerId] = true
   try {
     const config = providerConfigs[providerId]
@@ -269,18 +243,6 @@ const saveProviderConfig = async (providerId: string) => {
       if (!apiKeyRes.ok) {
         throw new Error(t.value.errors.saveApiKeyFailed)
       }
-    }
-
-    // 2. 保存启用的模型
-    const modelsRes = await fetch(buildBackendUrl(`/api/cloud/providers/${providerId}/models`), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        models: config.enabledModels
-      })
-    })
-    if (!modelsRes.ok) {
-      throw new Error(t.value.errors.saveModelConfigFailed)
     }
 
     // 清空 API Key 输入
@@ -314,8 +276,7 @@ const deleteProviderConfig = async (providerId: string) => {
     if (res.ok) {
       // 清空本地配置
       providerConfigs[providerId] = {
-        apiKey: '',
-        enabledModels: []
+        apiKey: ''
       }
       // 刷新厂商列表
       await loadProviders()
@@ -475,58 +436,6 @@ onMounted(() => {
 
 .toggle-visibility-btn:hover {
   background: var(--color-hover);
-}
-
-.models-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 0.75rem;
-}
-
-.model-checkbox {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 0.75rem;
-  background: var(--color-bg-secondary);
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.model-checkbox:hover {
-  border-color: var(--color-primary);
-}
-
-.model-checkbox input[type="checkbox"] {
-  width: 1rem;
-  height: 1rem;
-  cursor: pointer;
-}
-
-.model-name {
-  font-size: 0.85rem;
-  color: var(--color-text-primary);
-}
-
-.model-actions {
-  display: flex;
-  gap: 1rem;
-  margin-top: 0.25rem;
-}
-
-.text-btn {
-  background: none;
-  border: none;
-  color: var(--color-primary);
-  font-size: 0.85rem;
-  cursor: pointer;
-  padding: 0;
-}
-
-.text-btn:hover {
-  text-decoration: underline;
 }
 
 .config-actions {

@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.services import plugin_id_resolver as resolver_module
-from app.services import plugin_mcp_proxy_service as proxy_module
+from app.services import plugin_id_resolver as resolver_module, plugin_mcp_proxy_service as proxy_module
 from app.services.plugin_mcp_proxy_service import PluginMcpProxyError, PluginMcpProxyService
 
 

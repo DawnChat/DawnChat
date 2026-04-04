@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import json
 
-import pytest
 from fastapi import HTTPException
+import pytest
 
 from app.api import opencode_mcp_routes, plugins_routes
-from app.plugin_ui_bridge.ui_tool_service import UiToolService
 import app.plugin_ui_bridge.ui_tool_service as ui_tool_service_module
+from app.plugin_ui_bridge.ui_tool_service import UiToolService
 import app.services.plugin_id_resolver as plugin_id_resolver_module
 
 

@@ -10,7 +10,6 @@ import pytest
 from app.api import opencode_mcp_routes, opencode_plugin_python_mcp_routes, plugins_routes
 from app.plugins import get_plugin_manager
 
-
 pytestmark = [pytest.mark.integration, pytest.mark.slow]
 
 

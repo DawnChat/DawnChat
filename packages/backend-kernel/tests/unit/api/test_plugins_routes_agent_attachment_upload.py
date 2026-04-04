@@ -1,11 +1,11 @@
 import importlib
+from io import BytesIO
 import sys
 import types
-from io import BytesIO
 
-import pytest
 from fastapi import HTTPException, UploadFile
 from fastapi.dependencies import utils as fastapi_dep_utils
+import pytest
 
 fastapi_dep_utils.ensure_multipart_is_installed = lambda: None
 

@@ -7,8 +7,8 @@ import pytest
 from app.plugin_ui_bridge.errors import PluginUIBridgeError
 from app.plugin_ui_bridge.models import BridgeOperation
 from app.plugin_ui_bridge.service import BridgeDispatchResult
-from app.plugin_ui_bridge.ui_tool_service import UiToolService
 import app.plugin_ui_bridge.ui_tool_service as ui_tool_service_module
+from app.plugin_ui_bridge.ui_tool_service import UiToolService
 import app.services.plugin_id_resolver as resolver_module
 
 
@@ -50,8 +50,48 @@ class _CapabilitiesCatalogBridgeStub(_BridgeStub):
                                 "state_mode": "stateful",
                                 "description": "Best for single-resource reading.",
                                 "is_active": False,
+                                "capabilities": [
+                                    {
+                                        "capability_id": "append_etymology",
+                                        "mode": "write",
+                                        "title": "Append Etymology",
+                                        "input_schema": {
+                                            "type": "object",
+                                            "properties": {
+                                                "items": {
+                                                    "type": "array",
+                                                    "items": {"type": "string"},
+                                                }
+                                            },
+                                        },
+                                    }
+                                ],
+                                "capability_invoke_contract": {
+                                    "action_type": "view.capability.invoke",
+                                    "payload_example": {
+                                        "view_id": "word.main",
+                                        "capability_id": "<capability_id>",
+                                        "input": {},
+                                    },
+                                    "note": (
+                                        "Use capabilities[].capability_id as the identifier and place "
+                                        "business parameters inside payload.input."
+                                    ),
+                                },
+                                "view_open_contract": {
+                                    "function": "view.open",
+                                    "payload_example": {
+                                        "view_id": "word.main",
+                                        "resource": {},
+                                        "initial_anchor": "<anchor_id>",
+                                    },
+                                    "note": (
+                                        "Use this top-level capability to enter a scene and optionally bind "
+                                        "resource or initial anchor state."
+                                    ),
+                                },
                                 "recommended_flow": [
-                                    "Use view.open(word.main) to bind the target word resource."
+                                    "Use the top-level view.open capability with view_id=word.main to bind the target word resource."
                                 ],
                             },
                             {
@@ -61,8 +101,45 @@ class _CapabilitiesCatalogBridgeStub(_BridgeStub):
                                 "state_mode": "stateful",
                                 "description": "Best for validating realtime board interaction.",
                                 "is_active": True,
+                                "capabilities": [
+                                    {
+                                        "capability_id": "game.place_mark",
+                                        "mode": "write",
+                                        "title": "Place Mark",
+                                        "input_schema": {
+                                            "type": "object",
+                                            "properties": {
+                                                "index": {"type": "integer"},
+                                            },
+                                        },
+                                    }
+                                ],
+                                "capability_invoke_contract": {
+                                    "action_type": "view.capability.invoke",
+                                    "payload_example": {
+                                        "view_id": "tictactoe.main",
+                                        "capability_id": "<capability_id>",
+                                        "input": {},
+                                    },
+                                    "note": (
+                                        "Use capabilities[].capability_id as the identifier and place "
+                                        "business parameters inside payload.input."
+                                    ),
+                                },
+                                "view_open_contract": {
+                                    "function": "view.open",
+                                    "payload_example": {
+                                        "view_id": "tictactoe.main",
+                                        "resource": {},
+                                        "initial_anchor": "<anchor_id>",
+                                    },
+                                    "note": (
+                                        "Use this top-level capability to enter a scene and optionally bind "
+                                        "resource or initial anchor state."
+                                    ),
+                                },
                                 "recommended_flow": [
-                                    "Use view.open(tictactoe.main) to open the round resource."
+                                    "Use the top-level view.open capability with view_id=tictactoe.main to bind the round resource."
                                 ],
                                 "current_state_summary": {
                                     "status": "playing",
@@ -72,6 +149,19 @@ class _CapabilitiesCatalogBridgeStub(_BridgeStub):
                             },
                         ],
                         "functions": [
+                            {
+                                "name": "view.open",
+                                "description": "Open one registered assistant view and optionally bind its resource payload.",
+                                "input_schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "view_id": {"type": "string"},
+                                        "resource": {"type": "object"},
+                                        "initial_anchor": {"type": "string"},
+                                    },
+                                    "required": ["view_id"],
+                                },
+                            },
                             {
                                 "name": "assistant.view.describe",
                                 "description": "Inspect one specific view contract or the current active view state.",
@@ -218,8 +308,48 @@ async def test_capabilities_list_returns_view_catalog_from_view_list(monkeypatch
                 "state_mode": "stateful",
                 "description": "Best for single-resource reading.",
                 "is_active": False,
+                "capabilities": [
+                    {
+                        "capability_id": "append_etymology",
+                        "mode": "write",
+                        "title": "Append Etymology",
+                        "input_schema": {
+                            "type": "object",
+                            "properties": {
+                                "items": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                }
+                            },
+                        },
+                    }
+                ],
+                "capability_invoke_contract": {
+                    "action_type": "view.capability.invoke",
+                    "payload_example": {
+                        "view_id": "word.main",
+                        "capability_id": "<capability_id>",
+                        "input": {},
+                    },
+                    "note": (
+                        "Use capabilities[].capability_id as the identifier and place "
+                        "business parameters inside payload.input."
+                    ),
+                },
+                "view_open_contract": {
+                    "function": "view.open",
+                    "payload_example": {
+                        "view_id": "word.main",
+                        "resource": {},
+                        "initial_anchor": "<anchor_id>",
+                    },
+                    "note": (
+                        "Use this top-level capability to enter a scene and optionally bind "
+                        "resource or initial anchor state."
+                    ),
+                },
                 "recommended_flow": [
-                    "Use view.open(word.main) to bind the target word resource."
+                    "Use the top-level view.open capability with view_id=word.main to bind the target word resource."
                 ],
             },
             {
@@ -229,8 +359,45 @@ async def test_capabilities_list_returns_view_catalog_from_view_list(monkeypatch
                 "state_mode": "stateful",
                 "description": "Best for validating realtime board interaction.",
                 "is_active": True,
+                "capabilities": [
+                    {
+                        "capability_id": "game.place_mark",
+                        "mode": "write",
+                        "title": "Place Mark",
+                        "input_schema": {
+                            "type": "object",
+                            "properties": {
+                                "index": {"type": "integer"},
+                            },
+                        },
+                    }
+                ],
+                "capability_invoke_contract": {
+                    "action_type": "view.capability.invoke",
+                    "payload_example": {
+                        "view_id": "tictactoe.main",
+                        "capability_id": "<capability_id>",
+                        "input": {},
+                    },
+                    "note": (
+                        "Use capabilities[].capability_id as the identifier and place "
+                        "business parameters inside payload.input."
+                    ),
+                },
+                "view_open_contract": {
+                    "function": "view.open",
+                    "payload_example": {
+                        "view_id": "tictactoe.main",
+                        "resource": {},
+                        "initial_anchor": "<anchor_id>",
+                    },
+                    "note": (
+                        "Use this top-level capability to enter a scene and optionally bind "
+                        "resource or initial anchor state."
+                    ),
+                },
                 "recommended_flow": [
-                    "Use view.open(tictactoe.main) to open the round resource."
+                    "Use the top-level view.open capability with view_id=tictactoe.main to bind the round resource."
                 ],
                 "current_state_summary": {
                     "status": "playing",
@@ -240,6 +407,19 @@ async def test_capabilities_list_returns_view_catalog_from_view_list(monkeypatch
             },
         ],
         "functions": [
+            {
+                "name": "view.open",
+                "description": "Open one registered assistant view and optionally bind its resource payload.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "view_id": {"type": "string"},
+                        "resource": {"type": "object"},
+                        "initial_anchor": {"type": "string"},
+                    },
+                    "required": ["view_id"],
+                },
+            },
             {
                 "name": "assistant.view.describe",
                 "description": "Inspect one specific view contract or the current active view state.",
@@ -286,6 +466,78 @@ async def test_session_start_dispatches_as_capability_invoke(monkeypatch: pytest
     assert bridge.last_payload["function"] == "assistant.session.start"
     assert bridge.last_payload["payload"]["steps"][0]["action"]["type"] == "card.show"
     assert bridge.last_payload["payload"]["steps"][0]["timeout_ms"] == 45000
+
+
+@pytest.mark.asyncio
+async def test_capability_invoke_preserves_view_capability_id_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    bridge = _BridgeStub()
+    service = UiToolService(bridge_service=bridge, artifact_store=_ArtifactStoreStub())
+    monkeypatch.setattr(resolver_module, "get_plugin_manager", lambda: _ManagerStub())
+
+    result = await service.execute(
+        "dawnchat.ui.capability.invoke",
+        {
+            "plugin_id": "com.demo.plugin",
+            "function": "view.capability.invoke",
+            "payload": {
+                "view_id": "word.main",
+                "capability_id": "append_etymology",
+                "input": {
+                    "items": ["ize"],
+                },
+            },
+        },
+    )
+
+    assert result["ok"] is True
+    assert bridge.last_op == BridgeOperation.CAPABILITY_INVOKE
+    assert bridge.last_payload == {
+        "function": "view.capability.invoke",
+        "payload": {
+            "view_id": "word.main",
+            "capability_id": "append_etymology",
+            "input": {
+                "items": ["ize"],
+            },
+        },
+        "options": {},
+    }
+
+
+@pytest.mark.asyncio
+async def test_capability_invoke_preserves_top_level_view_open_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    bridge = _BridgeStub()
+    service = UiToolService(bridge_service=bridge, artifact_store=_ArtifactStoreStub())
+    monkeypatch.setattr(resolver_module, "get_plugin_manager", lambda: _ManagerStub())
+
+    result = await service.execute(
+        "dawnchat.ui.capability.invoke",
+        {
+            "plugin_id": "com.demo.plugin",
+            "function": "view.open",
+            "payload": {
+                "view_id": "board.main",
+                "resource": {
+                    "resource_type": "board.workspace",
+                },
+                "initial_anchor": "board.canvas",
+            },
+        },
+    )
+
+    assert result["ok"] is True
+    assert bridge.last_op == BridgeOperation.CAPABILITY_INVOKE
+    assert bridge.last_payload == {
+        "function": "view.open",
+        "payload": {
+            "view_id": "board.main",
+            "resource": {
+                "resource_type": "board.workspace",
+            },
+            "initial_anchor": "board.canvas",
+        },
+        "options": {},
+    }
 
 
 @pytest.mark.asyncio

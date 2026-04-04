@@ -2,8 +2,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.plugins.models import PluginPreviewState, PluginState
 from app.plugins.application.preview_application_service import PluginPreviewApplicationService
+from app.plugins.models import PluginPreviewState, PluginState
 
 
 class _RegistryDouble:

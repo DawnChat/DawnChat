@@ -44,46 +44,24 @@ SUPPORTED_PROVIDERS: Dict[str, Dict[str, Any]] = {
         "env_key": "SILICONFLOW_API_KEY",
         "default_base_url": "https://api.siliconflow.cn/v1",
         "openai_compatible": True,
-        "models": [
-            "deepseek-ai/DeepSeek-V3.2",
-            "deepseek-ai/DeepSeek-R1",
-            "Pro/zai-org/GLM-4.7",
-            "zai-org/GLM-4.6V",
-            "Qwen/Qwen3-VL-32B-Instruct",
-            "Qwen/Qwen3-VL-235B-A22B-Instruct",
-            "Qwen/Qwen3-VL-235B-A22B-Thinking"
-        ]
     },
     "openai": {
         "name": "OpenAI",
         "env_key": "OPENAI_API_KEY",
         "default_base_url": None,
         "openai_compatible": False,  # 原生支持
-        "models": [
-            "gpt-4o",
-            "gpt-4o-mini",
-            "gpt-4-turbo",
-            "gpt-4",
-            "gpt-3.5-turbo",
-            "o1-preview",
-            "o1-mini"
-        ]
     },
     "gemini": {
         "name": "Google Gemini",
         "env_key": "GEMINI_API_KEY",
         "default_base_url": None,
         "openai_compatible": False,  # 原生支持
-        "models": [
-            "gemini-3-pro-preview",
-            "gemini-3-flash-preview",
-            "gemini-2.5-pro",
-            "gemini-2.5-flash",
-            "gemini-2.0-flash-exp",
-            "gemini-1.5-pro",
-            "gemini-1.5-flash",
-            "gemini-1.5-flash-8b"
-        ]
+    },
+    "openrouter": {
+        "name": "OpenRouter",
+        "env_key": "OPENROUTER_API_KEY",
+        "default_base_url": "https://openrouter.ai/api/v1",
+        "openai_compatible": True,
     }
 }
 
@@ -162,6 +140,15 @@ async def fetch_provider_config(provider_id: str) -> Dict[str, Any]:
 get_provider_config = fetch_provider_config
 
 
+async def _get_dynamic_provider_models(provider_id: str) -> list[str]:
+    """获取 provider 的动态模型清单（未来由云端同步写入 KV）。"""
+    models = await storage_manager.get_app_config(f"provider.{provider_id}.models")
+    if isinstance(models, list):
+        normalized = [str(model).strip() for model in models if str(model).strip()]
+        return normalized
+    return []
+
+
 # ============ API 端点 ============
 
 @router.get("/providers")
@@ -181,7 +168,7 @@ async def list_providers():
                 "id": provider_id,
                 "name": config["name"],
                 "is_configured": is_configured,
-                "model_count": len(config["models"])
+                "model_count": len(await _get_dynamic_provider_models(provider_id))
             })
         
         return {
@@ -203,6 +190,7 @@ async def get_provider_config_api(provider_id: str):
             raise HTTPException(status_code=404, detail=f"厂商 {provider_id} 不存在")
         
         config = SUPPORTED_PROVIDERS[provider_id]
+        models = await _get_dynamic_provider_models(provider_id)
         
         # 获取 API Key（遮蔽显示）
         api_key = await storage_manager.get_api_key(provider_id)
@@ -216,7 +204,7 @@ async def get_provider_config_api(provider_id: str):
                 "is_configured": bool(api_key),
                 "api_key_preview": _mask_api_key(api_key) if api_key else None,
                 "base_url": base_url or config.get("default_base_url"),
-                "models": config["models"]
+                "models": models
             }
         }
     except HTTPException:
@@ -306,17 +294,20 @@ async def get_provider_enabled_models(provider_id: str):
         if provider_id not in SUPPORTED_PROVIDERS:
             raise HTTPException(status_code=404, detail=f"厂商 {provider_id} 不存在")
         
-        config = SUPPORTED_PROVIDERS[provider_id]
+        all_models = await _get_dynamic_provider_models(provider_id)
         
         # 获取用户启用的模型（如果未设置，默认全部启用）
         enabled_models = await storage_manager.get_app_config(f"provider.{provider_id}.enabled_models")
         if enabled_models is None:
-            enabled_models = config["models"]  # 默认全部启用
+            enabled_models = all_models  # 默认全部启用
+
+        if not isinstance(enabled_models, list):
+            enabled_models = []
         
         return {
             "status": "success",
             "provider_id": provider_id,
-            "all_models": config["models"],
+            "all_models": all_models,
             "enabled_models": enabled_models
         }
     except HTTPException:
@@ -335,10 +326,10 @@ async def set_provider_enabled_models(provider_id: str, request: EnabledModelsRe
         if provider_id not in SUPPORTED_PROVIDERS:
             raise HTTPException(status_code=404, detail=f"厂商 {provider_id} 不存在")
         
-        config = SUPPORTED_PROVIDERS[provider_id]
-        
-        # 验证模型是否有效
-        invalid_models = [m for m in request.models if m not in config["models"]]
+        all_models = await _get_dynamic_provider_models(provider_id)
+
+        # 动态模型列表存在时才进行校验，避免依赖硬编码模型清单
+        invalid_models = [m for m in request.models if all_models and m not in all_models]
         if invalid_models:
             raise HTTPException(status_code=400, detail=f"无效的模型: {invalid_models}")
         

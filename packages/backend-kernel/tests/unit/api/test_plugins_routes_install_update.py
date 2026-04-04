@@ -1,5 +1,5 @@
-import pytest
 from fastapi import HTTPException
+import pytest
 
 from app.api import plugins_routes
 

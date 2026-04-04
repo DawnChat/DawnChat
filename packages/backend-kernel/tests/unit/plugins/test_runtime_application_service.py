@@ -1,15 +1,15 @@
 import asyncio
 from pathlib import Path
-from types import SimpleNamespace
 import sys
+from types import SimpleNamespace
 
 import pytest
 
 import app.plugins.application.runtime_application_service as runtime_module
-from app.plugins.models import PluginInfo, PluginManifest, PluginRuntimeInfo, PluginState
-from app.plugins.registry import PluginRegistry
 from app.plugins.application.runtime_application_service import PluginRuntimeApplicationService
 from app.plugins.infrastructure.runtime_state_store import PluginRuntimeStateStore
+from app.plugins.models import PluginInfo, PluginManifest, PluginRuntimeInfo, PluginState
+from app.plugins.registry import PluginRegistry
 
 
 def _build_plugin(*, app_type: str, backend: str):

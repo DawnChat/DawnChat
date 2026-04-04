@@ -466,14 +466,27 @@ class UiToolService:
             ),
             UiToolDefinition(
                 name="dawnchat.ui.capability.invoke",
-                description="Invoke a plugin-exposed UI capability with structured payload",
+                description=(
+                    "Invoke a plugin-exposed UI capability with structured payload. "
+                    "For function=view.open, use view_id plus optional resource and initial_anchor. "
+                    "For function=view.capability.invoke, use view_id + capability_id + input."
+                ),
                 op=BridgeOperation.CAPABILITY_INVOKE,
                 input_schema={
                     "type": "object",
                     "properties": {
                         "plugin_id": {"type": "string"},
                         "function": {"type": "string"},
-                        "payload": {"type": "object"},
+                        "payload": {
+                            "type": "object",
+                            "description": (
+                                "Plugin-defined payload object. "
+                                "For function=view.open, the standard wrapper is "
+                                "{view_id, resource?, initial_anchor?}. "
+                                "For function=view.capability.invoke, the standard wrapper is "
+                                "{view_id, capability_id, input}."
+                            ),
+                        },
                         "options": {"type": "object"},
                     },
                     "required": ["plugin_id", "function"],

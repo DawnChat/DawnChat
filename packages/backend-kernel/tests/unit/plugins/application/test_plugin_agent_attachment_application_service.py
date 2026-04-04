@@ -4,8 +4,8 @@ import importlib.util
 from io import BytesIO
 from pathlib import Path
 
-import pytest
 from fastapi import UploadFile
+import pytest
 
 _MODULE_PATH = (
     Path(__file__).resolve().parents[4]

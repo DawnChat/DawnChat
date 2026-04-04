@@ -1,9 +1,10 @@
-import wave
 from decimal import Decimal
 from io import BytesIO
 from pathlib import Path
+import wave
 
 import pytest
+
 from app.voice.synthesis_service import TextPreprocessor, TtsSynthesisService
 
 

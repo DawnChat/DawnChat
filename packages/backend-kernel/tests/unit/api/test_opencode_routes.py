@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
-import pytest
 from fastapi import HTTPException
+import pytest
 
 from app.api import opencode_routes as routes
 

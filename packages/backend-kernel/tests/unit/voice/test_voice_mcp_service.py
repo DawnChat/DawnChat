@@ -1,8 +1,8 @@
 import pytest
 
 from app.plugin_ui_bridge.errors import PluginUIBridgeError
-from app.voice.voice_mcp_service import VoiceMcpService
 import app.services.plugin_id_resolver as resolver_module
+from app.voice.voice_mcp_service import VoiceMcpService
 
 
 class _RuntimeStub:

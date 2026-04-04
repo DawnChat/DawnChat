@@ -1,7 +1,6 @@
-from types import SimpleNamespace
 import importlib
 import sys
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 import pytest
 

@@ -18,6 +18,8 @@ logger = logging.getLogger("dawnchat.model_list_service")
 SUPPORTED_PROVIDERS = {
     "siliconflow": {
         "name": "SiliconFlow",
+        "openai_compatible": True,
+        "default_base_url": "https://api.siliconflow.cn/v1",
         "models": [
             "deepseek-ai/DeepSeek-V3.2",
             "deepseek-ai/DeepSeek-R1",
@@ -47,6 +49,12 @@ SUPPORTED_PROVIDERS = {
     "qwen": {
         "name": "通义千问",
         "models": ["qwen-turbo", "qwen-plus", "qwen-max"]
+    },
+    "openrouter": {
+        "name": "OpenRouter",
+        "openai_compatible": True,
+        "default_base_url": "https://openrouter.ai/api/v1",
+        "models": []
     },
 }
 

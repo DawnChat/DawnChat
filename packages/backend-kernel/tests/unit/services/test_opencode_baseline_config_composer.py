@@ -213,3 +213,57 @@ async def test_compose_skips_unmarked_providers(monkeypatch) -> None:
 
     assert "openai" in result.config["provider"]
     assert read_candidates == ["openai"]
+
+
+@pytest.mark.asyncio
+async def test_compose_falls_back_to_default_base_url_for_openai_compatible_provider(monkeypatch) -> None:
+    async def _get_marked_api_key(provider_id: str):
+        return "sf-key" if provider_id == "siliconflow" else None
+
+    async def _list_providers_with_key_marker():
+        return ["siliconflow"]
+
+    async def _get_app_config(_key: str):
+        return None
+
+    async def _get_config(_key: str):
+        return None
+
+    monkeypatch.setattr(storage_manager, "get_marked_api_key", _get_marked_api_key)
+    monkeypatch.setattr(storage_manager, "list_providers_with_key_marker", _list_providers_with_key_marker)
+    monkeypatch.setattr(storage_manager, "get_app_config", _get_app_config)
+    monkeypatch.setattr(storage_manager, "get_config", _get_config)
+
+    composer = OpenCodeBaselineConfigComposer(_InstructionResolverStub())
+    result = await composer.compose(host="127.0.0.1", port=4096, workspace=Path("/tmp/demo"))
+
+    options = result.config["provider"]["siliconflow"]["options"]
+    assert options["apiKey"] == "sf-key"
+    assert options["baseURL"] == "https://api.siliconflow.cn/v1"
+
+
+@pytest.mark.asyncio
+async def test_compose_keeps_openrouter_provider_without_hardcoded_model_catalog(monkeypatch) -> None:
+    async def _get_marked_api_key(provider_id: str):
+        return "or-key" if provider_id == "openrouter" else None
+
+    async def _list_providers_with_key_marker():
+        return ["openrouter"]
+
+    async def _get_app_config(_key: str):
+        return None
+
+    async def _get_config(_key: str):
+        return None
+
+    monkeypatch.setattr(storage_manager, "get_marked_api_key", _get_marked_api_key)
+    monkeypatch.setattr(storage_manager, "list_providers_with_key_marker", _list_providers_with_key_marker)
+    monkeypatch.setattr(storage_manager, "get_app_config", _get_app_config)
+    monkeypatch.setattr(storage_manager, "get_config", _get_config)
+
+    composer = OpenCodeBaselineConfigComposer(_InstructionResolverStub())
+    result = await composer.compose(host="127.0.0.1", port=4096, workspace=Path("/tmp/demo"))
+
+    options = result.config["provider"]["openrouter"]["options"]
+    assert options["apiKey"] == "or-key"
+    assert options["baseURL"] == "https://openrouter.ai/api/v1"

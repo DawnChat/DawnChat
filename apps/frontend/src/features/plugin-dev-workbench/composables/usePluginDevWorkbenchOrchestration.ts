@@ -156,8 +156,24 @@ export const usePluginDevWorkbenchOrchestration = () => {
   const pluginUrl = computed(() => {
     const previewUrl = activeApp.value?.preview?.url || ''
     if (!previewUrl) return ''
-    const separator = previewUrl.includes('?') ? '&' : '?'
-    return `${previewUrl}${separator}theme=${theme.value}&lang=${locale.value}`
+    const currentPluginId = String(pluginId.value || '').trim()
+    try {
+      const url = new URL(previewUrl)
+      url.searchParams.set('theme', String(theme.value || ''))
+      url.searchParams.set('lang', String(locale.value || ''))
+      if (currentPluginId) {
+        url.searchParams.set('plugin_id', currentPluginId)
+      }
+      return url.toString()
+    } catch {
+      const separator = previewUrl.includes('?') ? '&' : '?'
+      const query = [
+        `theme=${encodeURIComponent(String(theme.value || ''))}`,
+        `lang=${encodeURIComponent(String(locale.value || ''))}`,
+        currentPluginId ? `plugin_id=${encodeURIComponent(currentPluginId)}` : '',
+      ].filter(Boolean).join('&')
+      return `${previewUrl}${separator}${query}`
+    }
   })
   const previewFrontendMode = computed<'dev' | 'dist'>(() => {
     const raw = String(activeApp.value?.preview?.frontend_mode || 'dev')

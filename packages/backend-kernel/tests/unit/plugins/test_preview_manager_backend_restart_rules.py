@@ -210,7 +210,7 @@ async def test_wait_frontend_reachable_timeout_returns_false(monkeypatch: pytest
     assert ready is False
 
 
-def test_apply_preview_runtime_fields_syncs_frontend_probe_state() -> None:
+def test_apply_preview_runtime_fields_syncs_frontend_probe_state_with_namespace() -> None:
     session = SimpleNamespace(
         backend_port=6001,
         frontend_port=5173,

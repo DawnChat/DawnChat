@@ -1,6 +1,7 @@
 import type { Router } from 'vue-router'
 import { logger } from '@/utils/logger'
 import { parseDeepLink } from '@/app/router/deepLink'
+import { openPluginFullscreen } from '@/app/router/navigation'
 
 export async function initDeepLinkBootstrap(router: Router): Promise<() => void> {
   logger.info('🔗 初始化新的 Deep Link 监听器...')
@@ -12,7 +13,16 @@ export async function initDeepLinkBootstrap(router: Router): Promise<() => void>
       for (const url of urls) {
         const parsed = parseDeepLink(url)
         if (parsed.status === 'valid' && parsed.route) {
-          await router.push(parsed.route)
+          if (parsed.route.name === 'plugin-fullscreen') {
+            const pluginId = String((parsed.route.params as Record<string, unknown> | undefined)?.pluginId || '').trim()
+            if (pluginId) {
+              await openPluginFullscreen(router, pluginId)
+            } else {
+              await router.push(parsed.route)
+            }
+          } else {
+            await router.push(parsed.route)
+          }
           logger.info('✅ Deep Link 已路由跳转', { url, target: parsed.route })
           break
         }

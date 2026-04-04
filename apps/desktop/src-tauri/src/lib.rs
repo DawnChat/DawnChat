@@ -20,6 +20,7 @@ static PROCESS_MANAGER: OnceLock<Arc<Mutex<Option<Child>>>> = OnceLock::new();
 
 // 全局应用关闭标志
 static APP_SHUTTING_DOWN: AtomicBool = AtomicBool::new(false);
+const MAIN_WINDOW_LABEL: &str = "main";
 
 static BACKEND_URL: OnceLock<String> = OnceLock::new();
 
@@ -381,10 +382,14 @@ pub fn run() {
 
             Ok(())
         })
-        .on_window_event(move |_window, event| {
+        .on_window_event(move |window, event| {
             use tauri::WindowEvent;
             match event {
                 WindowEvent::Destroyed => {
+                    if window.label() != MAIN_WINDOW_LABEL {
+                        info!("🪟 忽略非主窗口销毁事件: {}", window.label());
+                        return;
+                    }
                     info!("🪟 窗口销毁事件触发");
 
                     // 设置应用关闭标志，通知 ProcessSupervisor 停止重启

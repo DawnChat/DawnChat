@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from app.plugin_ui_bridge.models import BridgeOperation
-from app.plugin_ui_bridge.service import PluginUIBridgeService
 import app.plugin_ui_bridge.service as service_module
+from app.plugin_ui_bridge.service import PluginUIBridgeService
 
 
 def test_resolve_dispatch_timeout_uses_default_timeout(monkeypatch) -> None:

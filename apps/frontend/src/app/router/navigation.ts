@@ -2,6 +2,7 @@ import type { Router, RouteLocationRaw } from 'vue-router'
 import type { SpaceType } from '@/shared/types/common'
 import { getSpaceDefaultSection } from './manifest'
 import { APPS_HUB_PATH } from './paths'
+import { openPluginRuntimeSurface } from './pluginSurfaceNavigation'
 
 const buildSpaceLocation = (
   space: SpaceType,
@@ -52,11 +53,7 @@ export const openPluginFullscreen = async (
   from = APPS_HUB_PATH,
   mode: 'normal' | 'preview' = 'normal'
 ) => {
-  await router.push({
-    name: 'plugin-fullscreen',
-    params: { pluginId },
-    query: { from, mode }
-  })
+  await openPluginRuntimeSurface(router, pluginId, from, mode)
 }
 
 export const openPluginDevWorkbench = async (
