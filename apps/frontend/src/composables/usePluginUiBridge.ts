@@ -426,6 +426,14 @@ export function usePluginUiBridge(options: UiBridgeOptions) {
         })
         return
       }
+      logger.info('[plugin_ui_bridge] recv assistant_runtime_event', {
+        pluginId: options.pluginId.value,
+        eventType: event.data.payload.type,
+        source: event.data.payload.source,
+        sessionId: event.data.payload.session_id,
+        stepId: event.data.payload.step_id,
+        payload: event.data.payload.payload
+      })
       options.onAssistantRuntimeEvent?.(event.data.payload)
     }
   }

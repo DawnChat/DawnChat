@@ -33,6 +33,7 @@ export interface CreatePluginPayload {
   description: string
   owner_email: string
   owner_user_id: string
+  is_main_assistant?: boolean
 }
 
 export interface WebPublishState {

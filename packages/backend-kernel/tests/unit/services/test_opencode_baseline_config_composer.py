@@ -57,6 +57,7 @@ async def test_compose_builds_baseline_with_resolved_instructions(monkeypatch) -
     assert "models" not in result.config["provider"]["openai"]
     assert "dawnchat_ui_bridge" in result.config["mcp"]
     assert "dawnchat_iwp" in result.config["mcp"]
+    assert "dawnchat_search" in result.config["mcp"]
     assert result.config["mcp"]["dawnchat_ui_bridge"]["timeout"] == 310000
     assert result.config["server"]["hostname"] == "127.0.0.1"
     assert result.config["server"]["port"] == 4096

@@ -13,6 +13,9 @@ const isDirtyRef = ref(false)
 const isStreamingRef = ref(false)
 const {
   onBeforeRouteLeaveMock,
+  routerPushMock,
+  runLifecycleOperationMock,
+  getSessionMock,
   hostTtsStartSpeak,
   hostTtsWaitForPlaybackCompletion,
   getTtsCapabilityMock,
@@ -22,6 +25,27 @@ const {
   saveAzureTtsConfigMock,
 } = vi.hoisted(() => ({
   onBeforeRouteLeaveMock: vi.fn(),
+  routerPushMock: vi.fn(async () => {}),
+  runLifecycleOperationMock: vi.fn(async () => ({
+    task_id: 'create-task-1',
+    operation_type: 'create_dev_session',
+    plugin_id: 'com.test.created-assistant',
+    app_type: 'desktop',
+    status: 'completed',
+    created_at: '',
+    updated_at: '',
+    elapsed_seconds: 0,
+    progress: {
+      stage: 'completed',
+      stage_label: 'completed',
+      progress: 100,
+      message: 'done',
+    },
+    result: { plugin_id: 'com.test.created-assistant' },
+  })),
+  getSessionMock: vi.fn(async () => ({
+    user: { id: 'user-1', email: 'tester@example.com' },
+  })),
   hostTtsStartSpeak: vi.fn(async () => 'task-voice-1'),
   hostTtsWaitForPlaybackCompletion: vi.fn(async () => {}),
   getTtsCapabilityMock: vi.fn(async () => ({
@@ -53,7 +77,7 @@ const {
 
 vi.mock('vue-router', () => ({
   useRoute: () => routeRef.value,
-  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+  useRouter: () => ({ replace: vi.fn(), push: routerPushMock }),
   onBeforeRouteLeave: onBeforeRouteLeaveMock,
 }))
 
@@ -66,6 +90,7 @@ vi.mock('@/features/plugin-dev-workbench/services/devWorkbenchFacade', () => ({
     rememberBuildHubRecentSession: vi.fn(),
     closeApp: vi.fn(),
     updateAppDisplayName: vi.fn(async () => null),
+    runLifecycleOperation: runLifecycleOperationMock,
   }),
 }))
 
@@ -220,6 +245,10 @@ vi.mock('@/composables/useI18n', () => ({
         workbenchRenameNameRequired: '名称不能为空',
         workbenchCloseRunningWarning: '会话会保留但预览会停止',
         workbenchCloseSaveFailed: '保存失败',
+        workbenchCreateAssistantAuthRequired: '请先登录',
+        workbenchCreateAssistantLaunching: '创建完成，打开中...',
+        workbenchCreateAssistantFailed: '创建失败',
+        workbenchCreateAssistantNavigationFailed: '已创建但跳转失败',
       },
     }),
     locale: ref('zh-CN'),
@@ -231,7 +260,7 @@ vi.mock('@/composables/useTheme', () => ({
 }))
 
 vi.mock('@/shared/composables/supabaseClient', () => ({
-  useSupabase: () => ({ getSession: vi.fn(async () => null) }),
+  useSupabase: () => ({ getSession: getSessionMock }),
 }))
 
 import { usePluginDevWorkbenchOrchestration } from '../usePluginDevWorkbenchOrchestration'
@@ -267,6 +296,7 @@ describe('usePluginDevWorkbenchOrchestration close flow', () => {
         default_voice_en: 'en-US-JennyNeural',
       },
     })
+    routeRef.value.params.pluginId = 'com.test.plugin'
   })
 
   it('无阻断时直接退出', async () => {
@@ -332,6 +362,54 @@ describe('usePluginDevWorkbenchOrchestration close flow', () => {
     expect(leaveGuard).toBeTypeOf('function')
     const allowed = await leaveGuard({ name: 'login', fullPath: '/login' })
     expect(allowed).toBe(true)
+  })
+
+  it('新建助手期间放行受控内部 workbench 跳转，并在完成后恢复守卫', async () => {
+    let resolveLifecycle: ((value: any) => void) | null = null
+    runLifecycleOperationMock.mockImplementationOnce(
+      async () => await new Promise((resolve) => { resolveLifecycle = resolve })
+    )
+    const Harness = defineComponent({
+      setup() {
+        return usePluginDevWorkbenchOrchestration()
+      },
+      template: '<div />',
+    })
+    const wrapper = mount(Harness)
+    const createPromise = (wrapper.vm as any).createAssistantFromWorkbench()
+    await Promise.resolve()
+
+    expect((wrapper.vm as any).creatingAssistant).toBe(true)
+    const leaveGuard = onBeforeRouteLeaveMock.mock.calls.at(-1)?.[0]
+    expect(leaveGuard).toBeTypeOf('function')
+    const allowedDuringCreate = await leaveGuard({
+      name: 'plugin-dev-workbench',
+      fullPath: '/app/plugin-dev-workbench/com.test.created-assistant',
+    })
+    expect(allowedDuringCreate).toBe(true)
+
+    resolveLifecycle?.({
+      task_id: 'create-task-2',
+      operation_type: 'create_dev_session',
+      plugin_id: 'com.test.created-assistant',
+      app_type: 'desktop',
+      status: 'completed',
+      created_at: '',
+      updated_at: '',
+      elapsed_seconds: 0,
+      progress: {
+        stage: 'completed',
+        stage_label: 'completed',
+        progress: 100,
+        message: 'done',
+      },
+      result: { plugin_id: 'com.test.created-assistant' },
+    })
+    await createPromise
+
+    expect((wrapper.vm as any).creatingAssistant).toBe(false)
+    const blockedAfterCreate = await leaveGuard({ name: 'apps', fullPath: '/app/apps/hub' })
+    expect(blockedAfterCreate).toBe(false)
   })
 
   it('dawnchat.host.voice.speak 会在播放完成后才返回成功', async () => {

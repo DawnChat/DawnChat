@@ -192,6 +192,7 @@ class PluginManager:
                 plugin.owner_email = str(metadata.get("owner_email") or "")
                 plugin.template_id = str(metadata.get("template_id") or "")
                 plugin.created_at = str(metadata.get("created_at") or "")
+                plugin.is_main_assistant = bool(metadata.get("is_main_assistant"))
             elif not plugin.source_type:
                 plugin.source_type = "unknown"
     
@@ -431,6 +432,8 @@ class PluginManager:
         owner_email: str,
         owner_user_id: str,
         app_type: str = "desktop",
+        source_type: str = "user_created",
+        is_main_assistant: bool = False,
     ) -> dict[str, Any]:
         return await self._template_service.create_plugin_from_template(
             template_id=template_id,
@@ -440,6 +443,8 @@ class PluginManager:
             owner_email=owner_email,
             owner_user_id=owner_user_id,
             app_type=app_type,
+            source_type=source_type,
+            is_main_assistant=is_main_assistant,
         )
 
     async def scaffold_plugin_from_template(
@@ -452,6 +457,8 @@ class PluginManager:
         owner_email: str,
         owner_user_id: str,
         app_type: str = "desktop",
+        source_type: str = "user_created",
+        is_main_assistant: bool = False,
     ) -> dict[str, Any]:
         return await self._template_service.scaffold_plugin_from_template(
             template_id=template_id,
@@ -461,6 +468,8 @@ class PluginManager:
             owner_email=owner_email,
             owner_user_id=owner_user_id,
             app_type=app_type,
+            source_type=source_type,
+            is_main_assistant=is_main_assistant,
         )
 
     async def prepare_plugin_runtime(

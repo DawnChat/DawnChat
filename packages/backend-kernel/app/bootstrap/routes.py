@@ -16,6 +16,7 @@ def include_api_routers(app: FastAPI) -> None:
     from app.api.opencode_plugin_mcp_routes import router as opencode_plugin_mcp_router
     from app.api.opencode_plugin_python_mcp_routes import router as opencode_plugin_python_mcp_router
     from app.api.opencode_routes import router as opencode_router
+    from app.api.opencode_search_mcp_routes import router as opencode_search_mcp_router
     from app.api.opencode_voice_mcp_routes import router as opencode_voice_mcp_router
     from app.api.plugin_ui_bridge_routes import router as plugin_ui_bridge_router
     from app.api.plugins_routes import router as plugins_router
@@ -41,6 +42,7 @@ def include_api_routers(app: FastAPI) -> None:
     app.include_router(opencode_plugin_mcp_router, prefix="/api")
     app.include_router(opencode_plugin_python_mcp_router, prefix="/api")
     app.include_router(opencode_iwp_mcp_router, prefix="/api")
+    app.include_router(opencode_search_mcp_router, prefix="/api")
     app.include_router(opencode_voice_mcp_router, prefix="/api")
     app.include_router(scoring_router, prefix="/api")
     app.include_router(web_publish_router, prefix="/api")

@@ -77,6 +77,7 @@ class CreateDevSessionOperationRequest(BaseModel):
     description: str = ""
     owner_email: str
     owner_user_id: str
+    is_main_assistant: bool = False
 
 
 class StartDevSessionOperationRequest(BaseModel):
@@ -450,6 +451,7 @@ async def create_dev_session_operation(request: CreateDevSessionOperationRequest
             "description": request.description,
             "owner_email": request.owner_email,
             "owner_user_id": request.owner_user_id,
+            "is_main_assistant": request.is_main_assistant,
         }
     )
     return {"status": "accepted", "task_id": task_id}

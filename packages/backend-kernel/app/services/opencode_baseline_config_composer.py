@@ -88,6 +88,7 @@ class OpenCodeBaselineConfigComposer:
         startup_context: Dict[str, Any] | None = None,
     ) -> BaselineComposeResult:
         mcp_timeout_ms = max(1, int(Config.MCP_PROXY_TIMEOUT_READ_SECONDS * 1000))
+        search_timeout_ms = max(1, int(Config.OPENCODE_SEARCH_TIMEOUT_READ_SECONDS * 1000))
         ui_bridge_mcp_timeout_ms = max(1, int(Config.OPENCODE_UI_BRIDGE_MCP_TIMEOUT_READ_SECONDS * 1000))
         policy = instruction_policy or {}
         include_shared_rules = bool(policy.get("include_shared_rules", True))
@@ -224,6 +225,14 @@ class OpenCodeBaselineConfigComposer:
                     "oauth": False,
                     "timeout": mcp_timeout_ms,
                     "headers": {"X-DawnChat-MCP": "voice"},
+                },
+                "dawnchat_search": {
+                    "type": "remote",
+                    "url": f"http://127.0.0.1:{Config.API_PORT}/api/opencode/mcp/search",
+                    "enabled": True,
+                    "oauth": False,
+                    "timeout": search_timeout_ms,
+                    "headers": {"X-DawnChat-MCP": "search"},
                 },
             },
         }

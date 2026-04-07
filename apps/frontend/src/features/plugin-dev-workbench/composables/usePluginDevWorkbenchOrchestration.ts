@@ -5,6 +5,7 @@ import type { LocationQueryRaw } from 'vue-router'
 import { useTheme } from '@/composables/useTheme'
 import { useI18n } from '@/composables/useI18n'
 import { logger } from '@/utils/logger'
+import { openPluginDevWorkbench } from '@/app/router/navigation'
 import { useCodingAgentStore } from '@/features/coding-agent/store/codingAgentStore'
 import { usePluginBackTarget } from '@/features/plugin-shared/navigation/usePluginBackTarget'
 import { useDevWorkbenchFacade } from '@/features/plugin-dev-workbench/services/devWorkbenchFacade'
@@ -20,6 +21,7 @@ import type { HostInvokeExecutionContext } from '@/composables/usePluginUiBridge
 import { getWorkbenchLayoutProfile } from '@/features/plugin-dev-workbench/services/workbenchLayoutProfile'
 import { resolveWorkbenchLayoutVariant } from '@/features/plugin-dev-workbench/services/workbenchLayoutVariant'
 import { useHostTtsPlayback } from '@/features/coding-agent/tts/useHostTtsPlayback'
+import { AI_ASSISTANT_TEMPLATE_ID } from '@/config/appTemplates'
 import {
   getAzureTtsConfigStatus,
   getTtsCapability,
@@ -42,6 +44,27 @@ const HOST_VOICE_TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled'
 const HOST_VOICE_POLL_INTERVAL_MS = 200
 const HOST_VOICE_WAIT_TIMEOUT_MS = 120_000
 type WorkbenchTtsEngine = 'azure' | 'python' | 'system'
+const toSlug = (value: string) =>
+  String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^[._-]+|[._-]+$/g, '')
+
+const buildOwnerPrefix = (email: string, userId: string): string => {
+  const normalizedEmail = String(email || '').toLowerCase()
+  const normalizedUserId = String(userId || 'uid').trim() || 'uid'
+  if (!normalizedEmail.includes('@')) return `com.local.user.${normalizedUserId.slice(0, 12)}`
+  const [localPart, domainPart] = normalizedEmail.split('@')
+  const domain = String(domainPart || 'local')
+    .split('.')
+    .reverse()
+    .map((item) => item.replace(/[^a-z0-9]+/g, '-'))
+    .filter(Boolean)
+  const local = String(localPart || 'user').replace(/[^a-z0-9]+/g, '-')
+  return ['com', ...domain, local, normalizedUserId.slice(0, 12)].join('.')
+}
+
 const AZURE_ZH_VOICE_OPTIONS = [
   { value: 'zh-CN-XiaoxiaoNeural', label: 'Xiaoxiao (女声)' },
   { value: 'zh-CN-YunxiNeural', label: 'Yunxi (男声)' },
@@ -81,6 +104,8 @@ export const usePluginDevWorkbenchOrchestration = () => {
   const exitBusy = ref(false)
   const exitWarningMessage = ref('')
   const allowRouteLeaveAfterClose = ref(false)
+  const allowLifecycleWorkbenchNavigation = ref(false)
+  const creatingAssistant = ref(false)
   const pendingExitAction = ref<((choice: 'save' | 'direct' | 'cancel') => void) | null>(null)
 
   const {
@@ -125,6 +150,7 @@ export const usePluginDevWorkbenchOrchestration = () => {
   })
   const workbenchProfile = computed(() => getWorkbenchLayoutProfile(workbenchLayout.value))
   const isAgentPreviewLayout = computed(() => workbenchProfile.value.isAgentPreview)
+  const showCreateAssistantAction = computed(() => workbenchLayout.value === 'agent_preview')
   const hasIwpRequirements = computed(() => {
     const fromActive = activeApp.value?.preview?.has_iwp_requirements
     if (typeof fromActive === 'boolean') return fromActive
@@ -819,6 +845,61 @@ export const usePluginDevWorkbenchOrchestration = () => {
     }
   }
 
+  const createAssistantFromWorkbench = async () => {
+    if (creatingAssistant.value) return
+    creatingAssistant.value = true
+    const session = await getSession()
+    const userId = String(session?.user?.id || '').trim()
+    const userEmail = String(session?.user?.email || '').trim()
+    if (!userId || !userEmail) {
+      showPublishToast(t.value.apps.workbenchCreateAssistantAuthRequired, 'error')
+      creatingAssistant.value = false
+      return
+    }
+    const ownerPrefix = buildOwnerPrefix(userEmail, userId)
+    const suffix = toSlug(`ai-assistant-${Date.now().toString().slice(-6)}`) || `ai-assistant-${Date.now()}`
+    try {
+      allowLifecycleWorkbenchNavigation.value = true
+      const task = await facade.runLifecycleOperation({
+        operationType: 'create_dev_session',
+        payload: {
+          template_id: AI_ASSISTANT_TEMPLATE_ID,
+          app_type: 'desktop',
+          name: t.value.apps.quickCreateAssistantName,
+          plugin_id: `${ownerPrefix}.${suffix}`,
+          description: '',
+          owner_email: userEmail,
+          owner_user_id: userId,
+          is_main_assistant: false,
+        },
+        navigationIntent: 'workbench',
+        from: String(route.fullPath || ''),
+        uiMode: 'modal',
+        completionMessage: t.value.apps.workbenchCreateAssistantLaunching,
+      })
+      const createdPluginId = String(task.result?.plugin_id || task.plugin_id || '').trim()
+      const currentPluginId = String(route.params.pluginId || '').trim()
+      if (createdPluginId && currentPluginId === pluginId.value) {
+        // Guard fallback: if lifecycle navigation was blocked, do one explicit retry.
+        allowLifecycleWorkbenchNavigation.value = true
+        await openPluginDevWorkbench(router, createdPluginId, String(route.fullPath || ''))
+        const afterRetryPluginId = String(route.params.pluginId || '').trim()
+        if (afterRetryPluginId !== createdPluginId) {
+          showPublishToast(t.value.apps.workbenchCreateAssistantNavigationFailed, 'error')
+        }
+      }
+    } catch (error) {
+      showPublishToast(t.value.apps.workbenchCreateAssistantFailed, 'error')
+      logger.warn('plugin_dev_workbench_create_assistant_failed', {
+        pluginId: pluginId.value,
+        error: String(error),
+      })
+    } finally {
+      allowLifecycleWorkbenchNavigation.value = false
+      creatingAssistant.value = false
+    }
+  }
+
   const handleInspectorSelect = async (payload: InspectorSelectPayload) => {
     pushInspectorContext(payload)
     if (hasIwpRequirements.value) {
@@ -836,6 +917,9 @@ export const usePluginDevWorkbenchOrchestration = () => {
 
   onBeforeRouteLeave(async (to) => {
     if (allowRouteLeaveAfterClose.value) {
+      return true
+    }
+    if (allowLifecycleWorkbenchNavigation.value && String(to.name || '') === 'plugin-dev-workbench') {
       return true
     }
     if (!pluginId.value) {
@@ -1005,6 +1089,8 @@ export const usePluginDevWorkbenchOrchestration = () => {
     workbenchProfile,
     isAgentPreviewLayout,
     hasIwpRequirements,
+    showCreateAssistantAction,
+    creatingAssistant,
     surfaceMode,
     workbenchLayoutVariant,
     isAssistantCompactSurface,
@@ -1042,5 +1128,6 @@ export const usePluginDevWorkbenchOrchestration = () => {
     handleCapabilityInvokeRequest,
     handleAssistantRuntimeEvent,
     handleHostInvokeRequest,
+    createAssistantFromWorkbench,
   }
 }

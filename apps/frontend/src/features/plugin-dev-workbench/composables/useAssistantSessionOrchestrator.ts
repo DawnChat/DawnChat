@@ -440,6 +440,14 @@ export function useAssistantSessionOrchestrator(options: UseAssistantSessionOrch
   }
 
   const handleAssistantRuntimeEvent = (event: AssistantRuntimeEventPayload): void => {
+    logger.info('assistant_session_runtime_event_forward', {
+      pluginId: configuredPluginId,
+      eventType: event.type,
+      source: event.source,
+      sessionId: event.session_id,
+      stepId: event.step_id,
+      payload: event.payload
+    })
     runtimeEventWaitRegistry.handleEvent(toAssistantSessionRuntimeEvent(event))
   }
 

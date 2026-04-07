@@ -3,11 +3,33 @@
     <section class="launcher-stage">
       <section class="launcher-shell">
         <header class="launcher-header">
-          <div class="title-row">
+          <div class="brand-bar">
             <img src="/logo.svg" alt="DawnChat" class="brand-logo" width="20" height="20" />
-            <h1>{{ t.app.name }}</h1>
+            <div class="brand-copy">
+              <h1>{{ t.app.name }}</h1>
+              <p class="launcher-slogan">{{ t.app.subtitle }}</p>
+            </div>
           </div>
         </header>
+
+        <button
+          class="launcher-create-card assistant-hero-card"
+          type="button"
+          :disabled="quickCreateLoadingType === 'assistant'"
+          @click="handleAssistantEntryClick"
+        >
+          <div class="card-icon">
+            <Bot :size="20" />
+          </div>
+          <div class="card-copy">
+            <h3>{{ t.apps.launcherAssistantTitle }}</h3>
+            <p>{{ t.apps.launcherAssistantDescription }}</p>
+          </div>
+        </button>
+
+        <div class="create-toolbar">
+          <h2>{{ t.apps.newProjectSectionTitle }}</h2>
+        </div>
 
         <div class="launcher-create-grid">
           <button
@@ -84,7 +106,6 @@
     </Transition>
 
     <footer class="apps-footer">
-      <p>{{ t.app.subtitle }}</p>
       <span class="brand-name">@InstructWare Protocol v1.0</span>
     </footer>
 
@@ -98,22 +119,14 @@
       @confirm="handleCreatePlugin"
     />
 
-    <DesktopTemplateQuickSelectModal
-      :visible="desktopTemplateModalVisible"
-      :selected-template-id="desktopTemplateSelectionMemory"
-      @close="desktopTemplateModalVisible = false"
-      @selection-change="desktopTemplateSelectionMemory = $event"
-      @confirm="handleDesktopTemplateSelect"
-    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
-import { ChevronRight, MonitorSmartphone, Globe, Smartphone } from 'lucide-vue-next'
+import { ChevronRight, MonitorSmartphone, Globe, Smartphone, Bot } from 'lucide-vue-next'
 import CreateAppWizardModal from '@/features/plugin/components/CreateAppWizardModal.vue'
-import DesktopTemplateQuickSelectModal from '@/features/plugin/components/DesktopTemplateQuickSelectModal.vue'
 import BuildHubUnifiedFeed from '@/features/plugin/components/build-hub/BuildHubUnifiedFeed.vue'
 import { useBuildHubState } from '@/features/plugin/composables/useBuildHubState'
 import { useBuildHubActions } from '@/features/plugin/composables/useBuildHubActions'
@@ -136,7 +149,7 @@ const props = defineProps<Props>()
 const pluginStore = usePluginStore()
 const lifecycleFacade = useBuildHubLifecycleFacade()
 const { t } = useI18n()
-const { createWizardVisible, creatingPlugin, templateCacheInfo } = storeToRefs(pluginStore)
+const { createWizardVisible, creatingPlugin, templateCacheInfo, installedApps } = storeToRefs(pluginStore)
 const { closeCreateWizard } = pluginStore
 const currentUser = computed(() => props.user || null)
 const {
@@ -160,18 +173,19 @@ const {
   handleCreatePlugin,
   handleCreateAppTypeChange,
   handleQuickCreate,
-  handleQuickCreateDesktopByTemplate,
+  openOrCreateMainAssistant,
   handleForkApp,
 } = useBuildHubCreationFlow({
   user: currentUser,
+  installedApps,
   openCreateWizard,
   closeCreateWizard,
   createDevSession: lifecycleFacade.createDevSession,
+  startAppDevSession,
+  openAppDevWorkbench,
   ensureTemplateCache: pluginStore.ensureTemplateCache,
 })
 const showMoreApps = ref(buildHubFilter.value !== 'all')
-const desktopTemplateModalVisible = ref(false)
-const desktopTemplateSelectionMemory = ref<string | null>(null)
 
 const createCards = computed(() => [
   {
@@ -221,18 +235,12 @@ const toggleMoreApps = () => {
   showMoreApps.value = !showMoreApps.value
 }
 
-const handleCreateCardClick = (appType: CreateAppType) => {
-  if (appType === 'desktop') {
-    desktopTemplateModalVisible.value = true
-    return
-  }
-  void handleQuickCreate(appType)
+const handleAssistantEntryClick = () => {
+  void openOrCreateMainAssistant()
 }
 
-const handleDesktopTemplateSelect = (templateId: string) => {
-  desktopTemplateSelectionMemory.value = templateId
-  desktopTemplateModalVisible.value = false
-  void handleQuickCreateDesktopByTemplate(templateId)
+const handleCreateCardClick = (appType: CreateAppType) => {
+  void handleQuickCreate(appType)
 }
 
 const handleDeleteApp = async (app: Plugin) => {
@@ -281,18 +289,18 @@ const handleUninstallApp = async (app: Plugin) => {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.66rem;
+  gap: 0.82rem;
 }
 
-.title-row {
+.brand-bar {
   display: flex;
   align-items: center;
-  gap: 0.46rem;
+  gap: 0.52rem;
 }
 
 .brand-logo {
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   opacity: 0.9;
   filter: grayscale(0.1);
 }
@@ -306,7 +314,14 @@ const handleUninstallApp = async (app: Plugin) => {
   flex-shrink: 0;
 }
 
-.title-row h1 {
+.brand-copy {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+}
+
+.brand-copy h1 {
   margin: 0;
   font-size: 1.95rem;
   line-height: 1.2;
@@ -314,10 +329,44 @@ const handleUninstallApp = async (app: Plugin) => {
   font-weight: 620;
 }
 
+.launcher-slogan {
+  margin: 0.12rem 0 0;
+  color: var(--color-text-secondary);
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
 .launcher-create-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.46rem;
+}
+
+.launcher-create-card.assistant-hero-card {
+  width: 100%;
+  min-height: 92px;
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  align-items: center;
+  gap: 0.56rem;
+  padding: 0.66rem 0.72rem;
+  text-align: left;
+}
+
+.launcher-create-card.assistant-hero-card .card-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+}
+
+.launcher-create-card.assistant-hero-card .card-copy h3 {
+  font-size: 0.88rem;
+}
+
+.launcher-create-card.assistant-hero-card .card-copy p {
+  margin-top: 0.2rem;
+  font-size: 0.66rem;
+  line-height: 1.3;
 }
 
 .launcher-create-card {
@@ -384,6 +433,14 @@ const handleUninstallApp = async (app: Plugin) => {
   margin-top: 0.1rem;
 }
 
+.create-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.12rem;
+}
+
 .apps-toggle-trigger {
   margin-left: auto;
   border: none;
@@ -427,7 +484,8 @@ const handleUninstallApp = async (app: Plugin) => {
   padding: 0;
 }
 
-.recent-toolbar h2 {
+.recent-toolbar h2,
+.create-toolbar h2 {
   margin: 0;
   font-size: 0.96rem;
   line-height: 1.2;
@@ -533,11 +591,6 @@ const handleUninstallApp = async (app: Plugin) => {
   gap: 0.22rem;
 }
 
-.apps-footer p {
-  margin: 0;
-  font-size: 0.82rem;
-}
-
 .resume-hint {
   margin: 0;
   color: var(--color-text-secondary);
@@ -560,7 +613,7 @@ const handleUninstallApp = async (app: Plugin) => {
     padding: 2.4rem 0.7rem 1rem;
   }
 
-  .title-row h1 {
+  .brand-copy h1 {
     font-size: 1.5rem;
   }
 

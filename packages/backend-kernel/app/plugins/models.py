@@ -197,6 +197,7 @@ class PluginInfo:
     owner_email: str = ""
     template_id: str = ""
     created_at: str = ""
+    is_main_assistant: bool = False
     
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API responses."""
@@ -248,6 +249,7 @@ class PluginInfo:
             "owner_email": self.owner_email,
             "template_id": self.template_id,
             "created_at": self.created_at,
+            "is_main_assistant": self.is_main_assistant,
         }
 
 

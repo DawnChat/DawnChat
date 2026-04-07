@@ -33,6 +33,10 @@
       :publish-web-label="t.apps.publishWeb"
       :mobile-preview-qr-label="t.apps.mobilePreviewQr"
       :mobile-offline-upload-label="t.apps.mobileOfflineUpload"
+      :show-create-assistant-action="showCreateAssistantAction"
+      :create-assistant-label="t.apps.workbenchCreateAssistant"
+      :create-assistant-loading="creatingAssistant"
+      :create-assistant-loading-label="t.apps.workbenchCreateAssistantCreating"
       :close-label="t.apps.workbenchClose"
       :edit-name-label="t.apps.workbenchRenameAction"
       :save-name-label="t.apps.workbenchRenameSave"
@@ -45,6 +49,7 @@
       @open-web-publish="openPublishDialog"
       @open-mobile-qr="openMobilePreviewQr"
       @open-mobile-offline="openMobileOfflinePlaceholder"
+      @create-assistant="createAssistantFromWorkbench"
       @close="handleCloseWorkbench"
     />
     <template v-if="workbenchLayoutVariant !== 'compact'">
@@ -96,7 +101,7 @@
         :tts-stream-status="ttsStreamStatus"
         :selected-tts-engine="selectedTtsEngine"
         :tts-engine-options="ttsEngineOptions"
-        :enable-file-attachments="workbenchLayoutVariant === 'agent_preview'"
+        :enable-file-attachments="isAgentPreviewLayout"
         :file-tree-collapsed="fileTreeCollapsed"
         :files-loading="filesLoading"
         :file-list="fileList"
@@ -167,7 +172,7 @@
         :tts-stream-status="ttsStreamStatus"
         :selected-tts-engine="selectedTtsEngine"
         :tts-engine-options="ttsEngineOptions"
-        :enable-file-attachments="workbenchLayoutVariant === 'agent_preview'"
+        :enable-file-attachments="isAgentPreviewLayout"
         @update-chat-input="setChatInput"
         @composer-selection-change="handleComposerSelectionChange"
         @update-markdown="updateContent"
@@ -371,7 +376,10 @@ const {
   renameActiveApp,
   workbenchMode,
   workbenchLayoutVariant,
+  isAgentPreviewLayout,
   hasIwpRequirements,
+  showCreateAssistantAction,
+  creatingAssistant,
   isAssistantCompactSurface,
   setWorkbenchMode,
   setChatInput,
@@ -406,6 +414,7 @@ const {
   handleCapabilityInvokeRequest,
   handleAssistantRuntimeEvent,
   handleHostInvokeRequest,
+  createAssistantFromWorkbench,
 } = usePluginDevWorkbenchOrchestration()
 
 const handleAzureApiKeyChange = (value: string) => {

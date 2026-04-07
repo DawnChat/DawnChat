@@ -69,4 +69,5 @@ export interface Plugin {
   owner_email?: string
   template_id?: string
   created_at?: string
+  is_main_assistant?: boolean
 }

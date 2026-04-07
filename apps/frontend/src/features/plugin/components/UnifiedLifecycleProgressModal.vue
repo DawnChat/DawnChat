@@ -99,7 +99,7 @@ const onClose = () => emit('close')
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1400;
+  z-index: 10050;
   padding: 0.8rem;
 }
 

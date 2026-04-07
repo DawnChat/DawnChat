@@ -221,16 +221,14 @@ ensure_pbs_python_deps() {
     fi
 
     local pbs_python="$SIDECAR_DIR/python/bin/python3.11"
-    local pbs_pip="$SIDECAR_DIR/python/bin/pip3.11"
     local pbs_rg="$SIDECAR_DIR/python/bin/rg"
 
     if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
         pbs_python="$SIDECAR_DIR/python/python.exe"
-        pbs_pip="$SIDECAR_DIR/python/Scripts/pip.exe"
         pbs_rg="$SIDECAR_DIR/python/Scripts/rg.exe"
     fi
 
-    if [[ ! -x "$pbs_python" || ! -f "$pbs_pip" ]]; then
+    if [[ ! -x "$pbs_python" ]]; then
         return 0
     fi
     if ! ensure_pbs_python_usable; then
@@ -321,22 +319,22 @@ ensure_pbs_python_deps() {
     fi
 
     print_info "升级 pip..."
-    "$pbs_pip" install --upgrade pip --quiet "${mirror_args[@]}"
+    "$pbs_python" -m pip install --upgrade pip --quiet "${mirror_args[@]}"
 
     print_info "安装 Python 依赖（PBS）..."
     if [[ "$CLEAN_INSTALL" == true || "$STRICT_DEPS" == true ]]; then
-        "$pbs_pip" uninstall -y opencv-python opencv-contrib-python >/dev/null 2>&1 || true
-        "$pbs_pip" install --upgrade --force-reinstall -r requirements.txt --no-cache-dir --quiet "${mirror_args[@]}"
+        "$pbs_python" -m pip uninstall -y opencv-python opencv-contrib-python >/dev/null 2>&1 || true
+        "$pbs_python" -m pip install --upgrade --force-reinstall -r requirements.txt --no-cache-dir --quiet "${mirror_args[@]}"
     else
-        "$pbs_pip" install --upgrade -r requirements.txt --no-cache-dir --quiet "${mirror_args[@]}"
+        "$pbs_python" -m pip install --upgrade -r requirements.txt --no-cache-dir --quiet "${mirror_args[@]}"
     fi
 
     if [[ "${#mlx_specs[@]}" -gt 0 ]]; then
         print_info "安装 MLX 依赖..."
         if [[ "$CLEAN_INSTALL" == true ]]; then
-            "$pbs_pip" install --upgrade --force-reinstall --no-deps --no-cache-dir --quiet "${mlx_specs[@]}" "${mirror_args[@]}"
+            "$pbs_python" -m pip install --upgrade --force-reinstall --no-deps --no-cache-dir --quiet "${mlx_specs[@]}" "${mirror_args[@]}"
         else
-            "$pbs_pip" install --upgrade --no-deps --no-cache-dir --quiet "${mlx_specs[@]}" "${mirror_args[@]}"
+            "$pbs_python" -m pip install --upgrade --no-deps --no-cache-dir --quiet "${mlx_specs[@]}" "${mirror_args[@]}"
         fi
     fi
 

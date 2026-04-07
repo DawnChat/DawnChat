@@ -149,6 +149,12 @@ class PluginLifecycleService:
                 owner_email=str(payload["owner_email"]),
                 owner_user_id=str(payload["owner_user_id"]),
                 app_type=str(payload["app_type"]),
+                source_type=(
+                    "official_user_main_assistant"
+                    if bool(payload.get("is_main_assistant"))
+                    else "user_created"
+                ),
+                is_main_assistant=bool(payload.get("is_main_assistant")),
             )
             plugin_id = str(created.get("plugin_id") or "")
             if plugin_id:

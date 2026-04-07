@@ -1,4 +1,5 @@
 import type { AssistantSessionRuntimeEvent } from '@/features/plugin-dev-workbench/composables/assistantRuntimeEventTypes'
+import { logger } from '@/utils/logger'
 
 export interface AssistantRuntimeEventWaitRequest {
   sessionId?: string
@@ -56,6 +57,12 @@ export function createAssistantRuntimeEventWaitRegistry() {
   }
 
   const startWait = (request: AssistantRuntimeEventWaitRequest) => {
+    logger.info('assistant_runtime_event_wait_registered', {
+      sessionId: request.sessionId,
+      eventTypes: request.eventTypes,
+      match: request.match,
+      timeoutMs: request.timeoutMs
+    })
     let waiter: RuntimeEventWaiter
     const promise = new Promise<AssistantSessionRuntimeEvent>((resolve, reject) => {
       waiter = {
@@ -80,10 +87,32 @@ export function createAssistantRuntimeEventWaitRegistry() {
   }
 
   const handleEvent = (event: AssistantSessionRuntimeEvent) => {
+    logger.info('assistant_runtime_event_wait_event_received', {
+      eventType: event.type,
+      source: event.source,
+      sessionId: event.sessionId,
+      stepId: event.stepId,
+      payload: event.payload,
+      waiterCount: waiters.size
+    })
     for (const waiter of Array.from(waiters)) {
-      if (!matchesRuntimeEvent(event, waiter)) {
+      const matched = matchesRuntimeEvent(event, waiter)
+      logger.info('assistant_runtime_event_wait_match_check', {
+        eventType: event.type,
+        eventPayload: event.payload,
+        waitEventTypes: waiter.eventTypes,
+        waitSessionId: waiter.sessionId,
+        waitMatch: waiter.match,
+        matched
+      })
+      if (!matched) {
         continue
       }
+      logger.info('assistant_runtime_event_wait_matched', {
+        eventType: event.type,
+        sessionId: event.sessionId,
+        payload: event.payload
+      })
       settleWaiter(waiter, 'resolve', event)
     }
   }

@@ -1,8 +1,6 @@
 export type CreateAppType = 'desktop' | 'web' | 'mobile'
 export type AppTemplateDescriptionKey =
   | 'desktopTemplateDescription'
-  | 'desktopHelloWorldTemplateDescription'
-  | 'desktopAssistantTemplateDescription'
   | 'webTemplateDescription'
   | 'mobileTemplateDescription'
 
@@ -14,30 +12,8 @@ export interface AppTemplateCatalogItem {
   descriptionKey: AppTemplateDescriptionKey
 }
 
-export interface DesktopQuickTemplateOption {
-  templateId: string
-  nameKey: 'desktopTemplateHelloWorldName' | 'desktopTemplateAssistantName'
-  templateName: string
-  stack: string
-  descriptionKey: AppTemplateDescriptionKey
-}
-
-export const DESKTOP_QUICK_TEMPLATE_OPTIONS: DesktopQuickTemplateOption[] = [
-  {
-    templateId: 'com.dawnchat.desktop-hello-world',
-    nameKey: 'desktopTemplateHelloWorldName',
-    templateName: 'desktop-hello-world',
-    stack: 'Vue + Bun',
-    descriptionKey: 'desktopHelloWorldTemplateDescription'
-  },
-  {
-    templateId: 'com.dawnchat.desktop-ai-assistant',
-    nameKey: 'desktopTemplateAssistantName',
-    templateName: 'desktop-ai-assistant',
-    stack: 'Vue + Bun',
-    descriptionKey: 'desktopAssistantTemplateDescription'
-  }
-]
+export const AI_ASSISTANT_TEMPLATE_ID = 'com.dawnchat.desktop-ai-assistant'
+export const MAIN_AI_ASSISTANT_ID_SUFFIX = 'dawnchat-ai-assistant'
 
 export const APP_TEMPLATE_CATALOG: Record<CreateAppType, AppTemplateCatalogItem> = {
   desktop: {

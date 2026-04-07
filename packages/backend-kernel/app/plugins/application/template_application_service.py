@@ -101,6 +101,8 @@ class PluginTemplateApplicationService:
         owner_email: str,
         owner_user_id: str,
         app_type: str = "desktop",
+        source_type: str = "user_created",
+        is_main_assistant: bool = False,
     ) -> dict[str, Any]:
         payload = await self.scaffold_plugin_from_template(
             template_id=template_id,
@@ -110,6 +112,8 @@ class PluginTemplateApplicationService:
             owner_email=owner_email,
             owner_user_id=owner_user_id,
             app_type=app_type,
+            source_type=source_type,
+            is_main_assistant=is_main_assistant,
         )
         await self._prepare_plugin_runtime(payload["plugin_id"])
         await self._refresh_registry()
@@ -126,6 +130,8 @@ class PluginTemplateApplicationService:
         owner_email: str,
         owner_user_id: str,
         app_type: str = "desktop",
+        source_type: str = "user_created",
+        is_main_assistant: bool = False,
     ) -> dict[str, Any]:
         cache = await self.ensure_template_cached(template_id, force_refresh=True)
         template_source = Path(str(cache.get("source_dir") or ""))
@@ -162,11 +168,12 @@ class PluginTemplateApplicationService:
         self._metadata_upsert(
             plugin_id,
             {
-                "source_type": "user_created",
+                "source_type": source_type or "user_created",
                 "owner_user_id": owner_user_id,
                 "owner_email": owner_email,
                 "template_id": template_id,
                 "created_at": datetime.now().isoformat(),
+                "is_main_assistant": bool(is_main_assistant),
             },
         )
         await self._refresh_registry()
