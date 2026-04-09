@@ -67,6 +67,15 @@ def _validate_patch_payload(req: PatchConfigRequest) -> Dict[str, Any]:
 @router.post("/start_with_workspace")
 async def start_opencode_with_workspace(request: StartWithWorkspaceRequest) -> Dict[str, Any]:
     manager = get_opencode_manager()
+    logger.info(
+        "OpenCode start_with_workspace request: requested_kind=%s requested_plugin_id=%s requested_project_id=%s force_restart=%s current_workspace=%s current_startup_context=%s",
+        request.workspace_kind,
+        request.plugin_id,
+        request.project_id,
+        request.force_restart,
+        manager.workspace_path,
+        manager.startup_context,
+    )
     try:
         resolved = resolve_coding_agent_workspace(
             workspace_kind=request.workspace_kind,
@@ -113,6 +122,13 @@ async def start_opencode_with_workspace(request: StartWithWorkspaceRequest) -> D
     health_payload = await manager.get_health_payload()
     health_payload["rules"] = rules_status
     health_payload["workspace_profile"] = workspace_profile
+    logger.info(
+        "OpenCode start_with_workspace resolved: workspace_path=%s startup_context=%s health_status=%s health_workspace=%s",
+        workspace_path,
+        startup_context,
+        health_payload.get("status"),
+        health_payload.get("workspace_path"),
+    )
     return {"status": "success", "data": health_payload}
 
 
@@ -148,6 +164,7 @@ async def opencode_workspace() -> Dict[str, Any]:
         "data": {
             "workspace_path": manager.workspace_path,
             "state": manager.status.value,
+            "startup_context": manager.startup_context,
         },
     }
 

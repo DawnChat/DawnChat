@@ -28,6 +28,7 @@ class UiToolDefinition:
 class UiToolService:
     _ACT_TARGET_REQUIRED_ANY: Tuple[str, ...] = ("nodeId", "pathIndex", "selector", "bounds", "textContains")
     _DESCRIBE_SCOPE_ALLOWED: Tuple[str, ...] = ("all", "visible", "viewport")
+    _DESCRIPTION_MAX_LENGTH: int = 120
 
     def __init__(
         self,
@@ -52,6 +53,7 @@ class UiToolService:
         plugin_id = self._resolve_plugin_id(plugin_id)
 
         payload = self._normalize_tool_payload(tool, arguments)
+        display_title, display_source = self._resolve_display_title(tool, payload)
         if tool.op == BridgeOperation.RUNTIME_INFO:
             started = perf_counter()
             manager = get_plugin_manager()
@@ -59,7 +61,13 @@ class UiToolService:
             if runtime_info is None:
                 raise PluginUIBridgeError(code="plugin_not_found", message=f"plugin not found: {plugin_id}")
             elapsed_ms = int((perf_counter() - started) * 1000)
-            return self._build_local_response(op=tool.op, data=runtime_info, elapsed_ms=elapsed_ms)
+            return self._build_local_response(
+                op=tool.op,
+                data=runtime_info,
+                elapsed_ms=elapsed_ms,
+                display_title=display_title,
+                display_source=display_source,
+            )
         if tool.op == BridgeOperation.RUNTIME_RESTART:
             started = perf_counter()
             manager = get_plugin_manager()
@@ -81,12 +89,20 @@ class UiToolService:
                     "poll_url": f"http://127.0.0.1:{Config.API_PORT}/api/plugins/operations/{task_id}",
                 },
                 elapsed_ms=elapsed_ms,
+                display_title=display_title,
+                display_source=display_source,
             )
         if tool.op == BridgeOperation.CAPABILITIES_LIST:
             started = perf_counter()
             data = await self._build_capabilities_catalog(plugin_id)
             elapsed_ms = int((perf_counter() - started) * 1000)
-            return self._build_local_response(op=tool.op, data=data, elapsed_ms=elapsed_ms)
+            return self._build_local_response(
+                op=tool.op,
+                data=data,
+                elapsed_ms=elapsed_ms,
+                display_title=display_title,
+                display_source=display_source,
+            )
         started = perf_counter()
         dispatch_result = await self._bridge.dispatch(plugin_id=plugin_id, op=tool.op, payload=payload)
         elapsed_ms = int((perf_counter() - started) * 1000)
@@ -103,6 +119,10 @@ class UiToolService:
             "ok": ok,
             "data": self._compact_data(tool.op, artifact_result.data),
             "artifacts": artifact_result.artifacts,
+            "display": {
+                "title": display_title,
+                "source": display_source,
+            },
             "debug": {
                 "request_id": dispatch_result.request_id,
                 "op": tool.op.value,
@@ -185,6 +205,8 @@ class UiToolService:
                 "function": "assistant.session.start",
                 "payload": session_payload,
                 "options": arguments.get("options", {}),
+                "description": arguments.get("description"),
+                "title": arguments.get("title"),
             },
         )
 
@@ -208,6 +230,8 @@ class UiToolService:
                 "function": "assistant.session.stop",
                 "payload": stop_payload,
                 "options": arguments.get("options", {}),
+                "description": arguments.get("description"),
+                "title": arguments.get("title"),
             },
         )
 
@@ -226,6 +250,8 @@ class UiToolService:
                     "session_id": session_id,
                 },
                 "options": arguments.get("options", {}),
+                "description": arguments.get("description"),
+                "title": arguments.get("title"),
             },
         )
 
@@ -267,6 +293,8 @@ class UiToolService:
                 "function": "assistant.event.wait",
                 "payload": wait_payload,
                 "options": arguments.get("options", {}),
+                "description": arguments.get("description"),
+                "title": arguments.get("title"),
             },
         )
 
@@ -297,6 +325,8 @@ class UiToolService:
                 "function": "assistant.session.wait_for_end",
                 "payload": wait_payload,
                 "options": arguments.get("options", {}),
+                "description": arguments.get("description"),
+                "title": arguments.get("title"),
             },
         )
 
@@ -636,11 +666,30 @@ class UiToolService:
                 },
             ),
         ]
+        for item in defs:
+            properties = item.input_schema.setdefault("properties", {})
+            if "description" not in properties:
+                properties["description"] = {
+                    "type": "string",
+                    "description": "Short user-facing intent for this call (5-12 words).",
+                }
+            if "title" not in properties:
+                properties["title"] = {
+                    "type": "string",
+                    "description": "Legacy intent text. Prefer description.",
+                }
         return {item.name: item for item in defs}
 
     @staticmethod
     def _validate_and_normalize_arguments(op: BridgeOperation, arguments: Dict[str, Any]) -> Dict[str, Any]:
         payload = {k: v for k, v in arguments.items() if k != "plugin_id"}
+        description = UiToolService._normalize_description(
+            payload.get("description"),
+            payload.get("title"),
+        )
+        if description:
+            payload["description"] = description
+        payload.pop("title", None)
         if op == BridgeOperation.DESCRIBE:
             raw_scope = payload.get("scope")
             scope = str(raw_scope or "all").strip().lower()
@@ -747,12 +796,15 @@ class UiToolService:
         if op == BridgeOperation.RUNTIME_INFO:
             return {}
         if op == BridgeOperation.RUNTIME_REFRESH:
-            return {}
+            return {"description": description} if description else {}
         if op == BridgeOperation.RUNTIME_RESTART:
             target = str(payload.get("target") or "dev_session").strip().lower()
             if target != "dev_session":
                 raise PluginUIBridgeError(code="invalid_arguments", message="target must be 'dev_session'")
-            return {"target": target}
+            normalized = {"target": target}
+            if description:
+                normalized["description"] = description
+            return normalized
         if op == BridgeOperation.CAPABILITY_INVOKE:
             function_name = str(payload.get("function") or "").strip()
             if not function_name:
@@ -767,25 +819,102 @@ class UiToolService:
                 normalized_payload = {str(key): value for key, value in raw_payload.items()}
             else:
                 raise PluginUIBridgeError(code="invalid_arguments", message="payload must be an object")
-            return {
+            normalized = {
                 "function": function_name,
                 "payload": normalized_payload,
                 "options": options if isinstance(options, dict) else {},
             }
+            if description:
+                normalized["description"] = description
+            return normalized
         return payload
 
     @staticmethod
-    def _build_local_response(op: BridgeOperation, data: Dict[str, Any], elapsed_ms: int) -> Dict[str, Any]:
+    def _build_local_response(
+        op: BridgeOperation,
+        data: Dict[str, Any],
+        elapsed_ms: int,
+        display_title: str,
+        display_source: str,
+    ) -> Dict[str, Any]:
         return {
             "ok": True,
             "data": data,
             "artifacts": [],
+            "display": {
+                "title": display_title,
+                "source": display_source,
+            },
             "debug": {
                 "request_id": "local",
                 "op": op.value,
                 "elapsed_ms": elapsed_ms,
             },
         }
+
+    @classmethod
+    def _normalize_description(cls, value: Any, legacy_title: Any) -> str:
+        raw = value if value is not None else legacy_title
+        text = str(raw or "").strip()
+        if not text:
+            return ""
+        if len(text) > cls._DESCRIPTION_MAX_LENGTH:
+            raise PluginUIBridgeError(
+                code="invalid_arguments",
+                message=f"description must be <= {cls._DESCRIPTION_MAX_LENGTH} characters",
+            )
+        return text
+
+    @classmethod
+    def _resolve_display_title(cls, tool: UiToolDefinition, payload: Dict[str, Any]) -> Tuple[str, str]:
+        description = str(payload.get("description") or "").strip()
+        if description:
+            return description, "agent_description"
+        return cls._generate_display_title(tool, payload), "server_generated"
+
+    @staticmethod
+    def _generate_display_title(tool: UiToolDefinition, payload: Dict[str, Any]) -> str:
+        op = tool.op
+        if op == BridgeOperation.DESCRIBE:
+            scope = str(payload.get("scope") or "all").strip().lower()
+            return f"查看界面快照（{scope}）"
+        if op == BridgeOperation.QUERY:
+            locator = payload.get("locator")
+            if isinstance(locator, dict):
+                selector = str(locator.get("selector") or "").strip()
+                text = str(locator.get("textContains") or locator.get("text_contains") or "").strip()
+                if selector:
+                    return f"查询界面元素（{selector}）"
+                if text:
+                    return f"查询界面元素（包含“{text}”）"
+            return "查询界面元素"
+        if op == BridgeOperation.ACT:
+            action = str(payload.get("action") or "").strip().lower()
+            if action:
+                return f"执行界面操作（{action}）"
+            return "执行界面操作"
+        if op == BridgeOperation.SCROLL:
+            y = payload.get("y")
+            direction = str(payload.get("direction") or "").strip().lower()
+            if y is not None:
+                return "滚动到指定位置"
+            if direction:
+                return f"滚动界面（{direction}）"
+            return "滚动界面"
+        if op == BridgeOperation.CAPABILITIES_LIST:
+            return "查看可用能力"
+        if op == BridgeOperation.CAPABILITY_INVOKE:
+            function_name = str(payload.get("function") or "").strip()
+            if function_name:
+                return f"调用能力（{function_name}）"
+            return "调用能力"
+        if op == BridgeOperation.RUNTIME_INFO:
+            return "查看运行状态"
+        if op == BridgeOperation.RUNTIME_REFRESH:
+            return "刷新预览页面"
+        if op == BridgeOperation.RUNTIME_RESTART:
+            return "重启插件开发会话"
+        return tool.name
 
     async def _build_capabilities_catalog(self, plugin_id: str) -> Dict[str, Any]:
         list_payload = {

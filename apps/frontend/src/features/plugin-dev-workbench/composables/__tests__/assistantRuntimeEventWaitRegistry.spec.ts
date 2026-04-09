@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
+import { createAssistantRuntimeEventWaitRegistry } from '@dawnchat/host-orchestration-sdk/event-wait'
 
-import { createAssistantRuntimeEventWaitRegistry } from '@/features/plugin-dev-workbench/composables/assistantRuntimeEventWaitRegistry'
 
 describe('assistantRuntimeEventWaitRegistry', () => {
   it('matches a realtime event by session, type, and payload', async () => {

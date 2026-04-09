@@ -2,11 +2,8 @@ import { ref } from 'vue'
 import { describe, expect, it, vi } from 'vitest'
 import { useComposerContextBridge } from '@/features/plugin-dev-workbench/composables/useComposerContextBridge'
 
-vi.mock('@/services/plugin-ui-bridge/contextToken', () => ({
-  encodeContextToken: vi.fn((preview: string, fullText: string) => `[[${preview}]]\n${fullText}`)
-}))
-
-vi.mock('@/services/plugin-ui-bridge/contextInbox', () => ({
+vi.mock('@dawnchat/host-orchestration-sdk/assistant-client', () => ({
+  encodeContextToken: vi.fn((preview: string, fullText: string) => `[[${preview}]]\n${fullText}`),
   contextPayloadToComposerToken: vi.fn(() => ({
     preview: 'CTX_PREVIEW',
     fullText: 'CTX_FULL',

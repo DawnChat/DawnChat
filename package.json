@@ -11,6 +11,7 @@
 
     "//--- 构建 ---": "",
     "build": "./build.sh",
+    "build:assistant-sdk": "bun --cwd ./dawnchat-plugins/assistant-workspace run build:sdk",
     "build:frontend": "pnpm --filter @dawnchat/frontend build",
     "build:backend": "cd packages/backend-kernel && poetry run pyinstaller dawnchat-backend.spec --distpath ../../apps/desktop/src-tauri/sidecars --clean",
     "build:tauri": "cd apps/desktop && pnpm tauri build",
@@ -25,6 +26,7 @@
     "lint:frontend": "pnpm --filter @dawnchat/frontend run typecheck",
     "lint:tauri": "cd apps/desktop/src-tauri && cargo fmt --all -- --check",
     "lint": "pnpm run lint:backend && pnpm run typecheck:backend && pnpm run lint:frontend && pnpm run lint:tauri",
+    "verify:assistant-workspace": "bun --cwd ./dawnchat-plugins/assistant-workspace run verify",
     "scan:secrets": "gitleaks detect --config .gitleaks.toml --no-banner --redact --exit-code 1",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

@@ -36,6 +36,10 @@ class WebTemplateScaffolder(TemplateScaffolder):
                 package_json["description"] = request.app_description.strip()
             package_json["version"] = "0.1.0"
             self.write_json(package_json_path, package_json)
+            self.rewrite_frontend_sdk_dependencies(
+                package_json_path,
+                plugin_root=request.target_dir,
+            )
 
         self.replace_plugin_id_references(request.target_dir, old_plugin_id, request.plugin_id)
         return TemplateScaffoldResult(

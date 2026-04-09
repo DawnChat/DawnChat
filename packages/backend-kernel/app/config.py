@@ -3,6 +3,7 @@ DawnChat - 配置管理模块
 统一管理应用配置、路径、日志级别等
 """
 
+import json
 import logging
 import os
 from pathlib import Path
@@ -315,6 +316,12 @@ class Config:
     PLUGIN_OPENCODE_RULES_CURRENT_LINK = PLUGIN_OPENCODE_RULES_DIR / "current"
     PLUGIN_OPENCODE_RULES_STATE = PLUGIN_OPENCODE_RULES_DIR / "state.json"
     PLUGIN_OPENCODE_RULES_CACHE_DIR = PLUGIN_DOWNLOAD_DIR / "opencode-rules"
+    ASSISTANT_SDK_DIRNAME = "assistant-sdk"
+    ASSISTANT_SDK_PACKAGE_DIRS = {
+        "@dawnchat/assistant-core": "assistant-core",
+        "@dawnchat/host-orchestration-sdk": "host-orchestration-sdk",
+    }
+    ASSISTANT_SDK_BUNDLE_DIR = SIDECAR_DIR / "dawnchat-plugins" / ASSISTANT_SDK_DIRNAME
 
     # 向后兼容：历史代码把插件源码目录命名为 PLUGIN_DIR
     PLUGIN_DIR = PLUGIN_SOURCES_DIR
@@ -467,6 +474,89 @@ class Config:
         if candidate.exists():
             return candidate
         return None
+
+    @staticmethod
+    def get_runtime_distribution_mode() -> str:
+        raw = str(os.getenv("DAWNCHAT_RUNTIME_DISTRIBUTION", "")).strip().lower()
+        if raw in {"dev", "debug", "release"}:
+            return raw
+        return "release" if Config.IS_PBS_APP else "dev"
+
+    @classmethod
+    def get_assistant_sdk_bundle_dir(cls) -> Path:
+        raw = str(os.getenv("DAWNCHAT_ASSISTANT_SDK_BUNDLE_DIR", "")).strip()
+        if raw:
+            return Path(raw).expanduser()
+        return cls.ASSISTANT_SDK_BUNDLE_DIR
+
+    @classmethod
+    def get_assistant_sdk_package_dirs(
+        cls,
+        *,
+        allow_dev_fallback: bool = False,
+    ) -> dict[str, Path]:
+        bundle_root = cls.get_assistant_sdk_bundle_dir()
+        resolved = {
+            package_name: bundle_root / package_dir
+            for package_name, package_dir in cls.ASSISTANT_SDK_PACKAGE_DIRS.items()
+        }
+        if all(path.exists() for path in resolved.values()):
+            return resolved
+        if allow_dev_fallback:
+            dev_root = cls.PROJECT_ROOT / "dawnchat-plugins" / cls.ASSISTANT_SDK_DIRNAME
+            fallback = {
+                package_name: dev_root / package_dir
+                for package_name, package_dir in cls.ASSISTANT_SDK_PACKAGE_DIRS.items()
+            }
+            if all(path.exists() for path in fallback.values()):
+                return fallback
+        return resolved
+
+    @staticmethod
+    def _collect_package_export_targets(value: object) -> list[str]:
+        targets: list[str] = []
+        if isinstance(value, str):
+            targets.append(value)
+        elif isinstance(value, dict):
+            for nested in value.values():
+                targets.extend(Config._collect_package_export_targets(nested))
+        elif isinstance(value, list):
+            for nested in value:
+                targets.extend(Config._collect_package_export_targets(nested))
+        return targets
+
+    @classmethod
+    def get_assistant_sdk_required_files(cls, package_dir: Path) -> list[Path]:
+        package_json_path = package_dir / "package.json"
+        if not package_json_path.exists():
+            return [package_json_path]
+        try:
+            payload = json.loads(package_json_path.read_text(encoding="utf-8"))
+        except Exception:
+            return [package_json_path]
+
+        relative_targets: set[str] = set()
+        for key in ("main", "types"):
+            value = payload.get(key)
+            if isinstance(value, str) and value.startswith("./"):
+                relative_targets.add(value)
+
+        exports_value = payload.get("exports")
+        for target in cls._collect_package_export_targets(exports_value):
+            if isinstance(target, str) and target.startswith("./"):
+                relative_targets.add(target)
+
+        required = [package_json_path]
+        required.extend(package_dir / target[2:] for target in sorted(relative_targets))
+        return required
+
+    @classmethod
+    def get_assistant_sdk_missing_files(cls, package_dir: Path) -> list[Path]:
+        return [path for path in cls.get_assistant_sdk_required_files(package_dir) if not path.exists()]
+
+    @classmethod
+    def is_assistant_sdk_package_ready(cls, package_dir: Path) -> bool:
+        return not cls.get_assistant_sdk_missing_files(package_dir)
 
     @staticmethod
     def get_opencode_binary() -> Optional[Path]:

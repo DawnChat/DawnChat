@@ -1,32 +1,52 @@
 <template>
-  <div class="auth-callback">
-    <div class="callback-container">
-      <div v-if="isProcessing" class="processing">
-        <div class="spinner"></div>
-        <h2>{{ t.auth.processing }}</h2>
-        <p>{{ t.auth.wait }}</p>
-      </div>
-      
-      <div v-else-if="error" class="error">
-        <AlertTriangle :size="64" class="error-icon" />
-        <h2>{{ t.auth.failed }}</h2>
-        <p>{{ error }}</p>
-        <button @click="goToLogin" class="retry-btn">{{ t.auth.backToLogin }}</button>
-      </div>
-      
-      <div v-else class="success">
-        <CheckCircle :size="64" class="success-icon" />
-        <h2>{{ t.auth.success }}</h2>
-        <p>{{ t.auth.redirecting }}</p>
-      </div>
-    </div>
+  <div class="auth-callback build-hub-view">
+    <section class="launcher-stage">
+      <section class="launcher-shell">
+        <header class="launcher-header">
+          <div class="brand-bar">
+            <img src="/logo.svg" :alt="t.app.name" class="brand-logo" width="40" height="40" />
+            <div class="brand-copy">
+              <h1>{{ t.app.name }}</h1>
+              <p class="launcher-slogan">{{ t.app.subtitle }}</p>
+            </div>
+          </div>
+        </header>
+
+        <div class="callback-card">
+          <div v-if="isProcessing" class="state-block">
+            <Loader2 class="state-loader" :size="32" aria-hidden="true" />
+            <h2 class="state-title">{{ t.auth.processing }}</h2>
+            <p class="state-desc">{{ t.auth.wait }}</p>
+          </div>
+
+          <div v-else-if="error" class="state-block">
+            <div class="state-icon-wrap state-icon-wrap--error" aria-hidden="true">
+              <AlertCircle :size="28" />
+            </div>
+            <h2 class="state-title">{{ t.auth.failed }}</h2>
+            <p class="state-desc state-desc--error">{{ error }}</p>
+            <button type="button" class="action-btn ui-btn ui-btn--emphasis" @click="goToLogin">
+              {{ t.auth.backToLogin }}
+            </button>
+          </div>
+
+          <div v-else class="state-block">
+            <div class="state-icon-wrap state-icon-wrap--success" aria-hidden="true">
+              <CheckCircle :size="28" />
+            </div>
+            <h2 class="state-title">{{ t.auth.success }}</h2>
+            <p class="state-desc">{{ t.auth.redirecting }}</p>
+          </div>
+        </div>
+      </section>
+    </section>
   </div>
 </template>
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { AlertTriangle, CheckCircle } from 'lucide-vue-next'
+import { AlertCircle, CheckCircle, Loader2 } from 'lucide-vue-next'
 import { logger } from '@/utils/logger'
 import { useI18n } from '@/composables/useI18n'
 import { useAuth } from '@/shared/composables/useAuth'
@@ -62,11 +82,11 @@ const summarizeCallbackLocation = (): Record<string, unknown> => {
 }
 
 onMounted(async () => {
-  logger.info('🔄 AuthCallback 页面加载，处理统一登录回调...')
+  logger.info('AuthCallback: handling unified login callback')
 
   try {
     const callbackUrl = resolveCallbackUrl()
-    logger.info('📨 准备处理回调 URL', summarizeCallbackLocation())
+    logger.info('AuthCallback: processing callback URL', summarizeCallbackLocation())
 
     const result = await handleDeepLinkCallback(callbackUrl)
     if (!result.success) {
@@ -75,11 +95,11 @@ onMounted(async () => {
 
     isProcessing.value = false
     const redirect = result.redirectPath || resolveRedirect()
-    logger.info('✅ 统一登录回调处理成功，准备跳转', { redirect })
+    logger.info('AuthCallback: success, navigating', { redirect })
     await router.replace(redirect)
-  } catch (err: any) {
-    logger.error('❌ 统一登录回调处理失败:', err)
-    error.value = err.message || t.value.auth.errors.failed
+  } catch (err: unknown) {
+    logger.error('AuthCallback: handler failed', err)
+    error.value = err instanceof Error ? err.message : t.value.auth.errors.failed
     isProcessing.value = false
   }
 })
@@ -91,78 +111,145 @@ const goToLogin = () => {
 
 <style scoped>
 .auth-callback {
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  box-sizing: border-box;
+  background: var(--color-app-canvas);
+  color: var(--color-text-primary);
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
+    max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
 }
 
-.callback-container {
+.launcher-stage {
   width: 100%;
-  max-width: 420px;
-  padding: 3rem;
-  background: white;
-  border-radius: 16px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-  text-align: center;
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 0.25rem 0;
+  flex-shrink: 0;
 }
 
-.processing, .error, .success {
+.launcher-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.82rem;
+}
+
+.launcher-header {
+  margin-bottom: 0.1rem;
+}
+
+.brand-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.52rem;
+}
+
+.brand-logo {
+  opacity: 0.9;
+  filter: grayscale(0.1);
+}
+
+.brand-copy h1 {
+  margin: 0;
+  font-size: 1.95rem;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  font-weight: 620;
+}
+
+.launcher-slogan {
+  margin: 0.12rem 0 0;
+  color: var(--color-text-secondary);
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.callback-card {
+  border: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-surface-2) 82%, transparent);
+  padding: 1.25rem 0.9rem 1.1rem;
+}
+
+.state-block {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1rem;
+  gap: 0.62rem;
+  text-align: center;
 }
 
-.spinner {
-  width: 48px;
-  height: 48px;
-  border: 4px solid #f3f3f3;
-  border-top: 4px solid #667eea;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
+.state-loader {
+  color: var(--color-text-secondary);
+  animation: spin 0.9s linear infinite;
+}
+
+.state-icon-wrap {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--color-border) 85%, transparent);
+}
+
+.state-icon-wrap--error {
+  background: color-mix(in srgb, var(--color-danger) 12%, var(--color-surface-1));
+  color: color-mix(in srgb, var(--color-danger) 92%, var(--color-text-primary));
+}
+
+.state-icon-wrap--success {
+  background: color-mix(in srgb, var(--color-success) 14%, var(--color-surface-1));
+  color: var(--color-success);
+}
+
+.state-title {
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 620;
+  line-height: 1.3;
+  color: var(--color-text-primary);
+}
+
+.state-desc {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--color-text-secondary);
+  max-width: 28rem;
+}
+
+.state-desc--error {
+  color: color-mix(in srgb, var(--color-danger) 88%, var(--color-text-secondary));
+}
+
+.action-btn {
+  margin-top: 0.35rem;
+  width: 100%;
+  max-width: 280px;
+  min-height: 40px;
+  padding: 0.48rem 0.85rem;
+  font-size: 0.88rem;
+  font-weight: 600;
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
-h2 {
-  margin: 0;
-  font-size: 1.5rem;
-  color: #333;
-}
-
-p {
-  margin: 0;
-  color: #666;
-}
-
-.error-icon {
-  color: #ef4444;
-}
-
-.success-icon {
-  color: #22c55e;
-}
-
-.retry-btn {
-  margin-top: 1rem;
-  padding: 0.75rem 1.5rem;
-  background: #667eea;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-size: 1rem;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.retry-btn:hover {
-  background: #5a6fd6;
-  transform: translateY(-2px);
+@media (max-width: 760px) {
+  .brand-copy h1 {
+    font-size: 1.5rem;
+  }
 }
 </style>

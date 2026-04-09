@@ -123,9 +123,9 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useEngineHealth } from '@/composables/useEngineHealth'
 import { useI18n } from '@/composables/useI18n'
+import { expandContextTokens } from '@dawnchat/host-orchestration-sdk/assistant-client'
 import { logger } from '@/utils/logger'
 import { useCodingAgentStore } from '@/features/coding-agent'
-import { expandContextTokens } from '@/services/plugin-ui-bridge/contextToken'
 import { isEngineId, type EngineId } from '@/services/coding-agent/adapterRegistry'
 import type { WorkspaceResolveOptions, WorkspaceTarget } from '@/features/coding-agent'
 import type { TtsPlaybackState } from '@/services/tts/ttsPlaybackQueue'
@@ -566,7 +566,13 @@ const handleQuestionReject = async (requestID: string) => {
 
 const handleCreateSession = async () => {
   try {
-    await codingAgentStore.createSession(props.newChatLabel, true)
+    const workspaceOptions = getWorkspaceOptions()
+    await codingAgentStore.createSession(props.newChatLabel, true, workspaceOptions)
+    logger.info('coding_chat_shell_create_session', {
+      workspaceId: props.workspaceTarget?.id || props.pluginId || '',
+      pluginId: props.pluginId || '',
+      sessionId: activeSessionId.value
+    })
   } catch (err) {
     logger.error('coding_chat_shell_create_session_failed', err)
   }
@@ -606,7 +612,7 @@ const handleSwitchSession = async (sessionID: string) => {
     pendingFileAttachments.value = []
     closeImagePreview()
     attachmentNotice.value = ''
-    await codingAgentStore.switchSession(sessionID)
+    await codingAgentStore.switchSession(sessionID, getWorkspaceOptions())
   } catch (err) {
     logger.error('coding_chat_shell_switch_session_failed', err)
   }

@@ -109,9 +109,37 @@ export function createSessionCrud(input: {
     return rows.filter((row) => getSessionDirectory(row) === workspaceDirectory)
   }
 
+  function isSessionInCurrentWorkspace(row: CodingAgentSession): boolean {
+    return filterWorkspaceSessions([row]).length > 0
+  }
+
   async function loadSessions() {
-    const rows = await getAdapter().listSessions(resolveSessionQueryOptions())
-    const metas = filterWorkspaceSessions(rows)
+    const query = resolveSessionQueryOptions()
+    const rows = await getAdapter().listSessions(query)
+    const filteredRows = filterWorkspaceSessions(rows)
+    logger.info('[codingAgentStore] loadSessions_workspace_snapshot', {
+      activeSessionId: String(activeSessionId.value || ''),
+      workspaceKind: String(query.workspaceKind || ''),
+      pluginId: String(query.pluginId || ''),
+      workspaceDirectory: String(query.directory || ''),
+      rawCount: rows.length,
+      filteredCount: filteredRows.length,
+      rawSample: rows.slice(0, 5).map((row) => ({
+        id: String(row.id || ''),
+        directory: getSessionDirectory(row),
+        workspace_path: normalizeDirectory(row.workspace_path),
+        workspace_kind: String(row.workspace_kind || ''),
+        plugin_id: String(row.plugin_id || ''),
+      })),
+      filteredSample: filteredRows.slice(0, 5).map((row) => ({
+        id: String(row.id || ''),
+        directory: getSessionDirectory(row),
+        workspace_path: normalizeDirectory(row.workspace_path),
+        workspace_kind: String(row.workspace_kind || ''),
+        plugin_id: String(row.plugin_id || ''),
+      })),
+    })
+    const metas = filteredRows
       .map((row) => normalizeSessionMeta(row))
       .filter((row) => row.id)
     sessions.value = metas
@@ -163,16 +191,36 @@ export function createSessionCrud(input: {
 
   async function createSession(title = DEFAULT_SESSION_TITLE, injectContext = true): Promise<string> {
     const adapter = getAdapter()
+    const query = resolveSessionQueryOptions()
     globalError.value = null
     let id = ''
     try {
-      id = await adapter.createSession(title, resolveSessionQueryOptions())
+      logger.info('[codingAgentStore] createSession_request', {
+        title,
+        injectContext,
+        workspaceKind: String(query.workspaceKind || ''),
+        pluginId: String(query.pluginId || ''),
+        workspaceDirectory: String(query.directory || ''),
+      })
+      id = await adapter.createSession(title, query)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       globalError.value = `创建会话失败: ${message}`
       throw err
     }
     const session = await adapter.getSession(id).catch(() => null)
+    if (session && !isSessionInCurrentWorkspace(session)) {
+      logger.warn('[codingAgentStore] createSession returned session outside current workspace', {
+        sessionId: id,
+        workspaceKind: String(query.workspaceKind || ''),
+        pluginId: String(query.pluginId || ''),
+        workspaceDirectory: String(query.directory || ''),
+        sessionDirectory: getSessionDirectory(session),
+        sessionWorkspacePath: normalizeDirectory(session.workspace_path),
+        sessionPluginId: String(session.plugin_id || ''),
+        sessionWorkspaceKind: String(session.workspace_kind || ''),
+      })
+    }
     const meta = session
       ? normalizeSessionMeta(session)
       : {
@@ -225,8 +273,27 @@ export function createSessionCrud(input: {
       if (!remote) {
         throw new Error(`session not found: ${sessionID}`)
       }
+      if (!isSessionInCurrentWorkspace(remote)) {
+        logger.warn('[codingAgentStore] reject cross-workspace session switch', {
+          sessionID,
+          workspaceKind: String((boundWorkspaceTarget.value || workspaceProfile.value)?.kind || ''),
+          pluginId: String((boundWorkspaceTarget.value || workspaceProfile.value)?.pluginId || ''),
+          workspaceDirectory: resolveWorkspaceDirectory(),
+          sessionDirectory: getSessionDirectory(remote),
+          sessionWorkspacePath: normalizeDirectory(remote.workspace_path),
+          sessionPluginId: String(remote.plugin_id || ''),
+          sessionWorkspaceKind: String(remote.workspace_kind || ''),
+        })
+        throw new Error(`session not in current workspace: ${sessionID}`)
+      }
       upsertSessionMeta(normalizeSessionMeta(remote))
     }
+    logger.info('[codingAgentStore] switchSession', {
+      sessionID,
+      workspaceKind: String((boundWorkspaceTarget.value || workspaceProfile.value)?.kind || ''),
+      pluginId: String((boundWorkspaceTarget.value || workspaceProfile.value)?.pluginId || ''),
+      workspaceDirectory: resolveWorkspaceDirectory(),
+    })
     setActiveSession(sessionID)
     await reconcileMessages(sessionID)
   }

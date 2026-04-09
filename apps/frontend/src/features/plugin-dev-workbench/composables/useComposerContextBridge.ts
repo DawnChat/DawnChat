@@ -1,9 +1,11 @@
 import { ref, type Ref } from 'vue'
+import type { ContextPushPayload } from '@dawnchat/host-orchestration-sdk/assistant-client'
+import {
+  contextPayloadToComposerToken,
+  encodeContextToken
+} from '@dawnchat/host-orchestration-sdk/assistant-client'
 import { logger } from '@/utils/logger'
 import type { InspectorSelectPayload } from '@/types/inspector'
-import type { ContextPushPayload } from '@/services/plugin-ui-bridge/messageProtocol'
-import { contextPayloadToComposerToken } from '@/services/plugin-ui-bridge/contextInbox'
-import { encodeContextToken } from '@/services/plugin-ui-bridge/contextToken'
 
 interface UseComposerContextBridgeOptions {
   chatInput: Ref<string>

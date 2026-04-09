@@ -78,22 +78,20 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { Maximize2, Minimize2 } from 'lucide-vue-next'
-import { useI18n } from '@/composables/useI18n'
 import type {
+  AssistantRuntimeEventPayload,
   CapabilityInvokeExecutionContext,
-  HostInvokeExecutionContext
-} from '@/composables/usePluginUiBridge'
+  ContextPushPayload,
+  HostInvokeExecutionContext,
+  TtsSpeakAcceptedPayload,
+  TtsStoppedPayload
+} from '@dawnchat/host-orchestration-sdk/assistant-client'
+import { useI18n } from '@/composables/useI18n'
 import { usePluginUiBridge } from '@/composables/usePluginUiBridge'
 import { usePluginHostStyleBridge } from '@/features/plugin/composables/usePluginHostStyleBridge'
 import { buildBackendUrl } from '@/utils/backendUrl'
 import { logger } from '@/utils/logger'
 import type { InspectorSelectPayload } from '@/types/inspector'
-import type {
-  AssistantRuntimeEventPayload,
-  ContextPushPayload,
-  TtsSpeakAcceptedPayload,
-  TtsStoppedPayload
-} from '@/services/plugin-ui-bridge/messageProtocol'
 import type { LifecycleTask } from '@/features/plugin/store'
 
 interface InspectorEventPayload {

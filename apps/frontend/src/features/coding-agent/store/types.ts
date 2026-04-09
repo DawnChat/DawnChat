@@ -31,6 +31,7 @@ export interface ToolDisplayMeta {
   hasOutput: boolean
   hasError: boolean
   hasDetails: boolean
+  // User-facing intent text for the tool row title.
   title: string
   summary: string
   detailBody: string

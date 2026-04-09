@@ -506,6 +506,21 @@ describe('codingAgentStore', () => {
     expect(directoryCalls.at(-1)).toBe('/tmp/web-plugin')
   })
 
+  it('不会切换到当前插件工作区之外的 session', async () => {
+    const store = useCodingAgentStore()
+    await store.ensureReadyWithWorkspace({ pluginId: 'com.dawnchat.hello-world-vue' })
+
+    mockAdapter.getSession.mockResolvedValueOnce({
+      id: 'ses_foreign',
+      title: 'Foreign Session',
+      directory: '/tmp/web-plugin',
+      time: { created: '2026-01-03T00:00:00.000Z', updated: '2026-01-03T00:00:00.000Z' }
+    })
+
+    await expect(store.switchSession('ses_foreign')).rejects.toThrow('session not in current workspace')
+    expect(store.activeSessionId).toBe('ses_test_1')
+  })
+
   it('切换引擎会重置状态并持久化 selectedEngine', async () => {
     const store = useCodingAgentStore()
     await store.ensureReadyWithWorkspace({ pluginId: 'com.dawnchat.hello-world-vue' })

@@ -71,7 +71,7 @@ describe('plugin runtime surface navigation', () => {
   it('reuses existing runtime window when windowed mode enabled', async () => {
     setTauriRuntime(true)
     localStorage.setItem('dawnchat.plugin.runtime.surface.mode', 'windowed')
-    webviewWindowMocks.getByLabel.mockReturnValue(webviewWindowMocks.existingWindow)
+    webviewWindowMocks.getByLabel.mockResolvedValue(webviewWindowMocks.existingWindow)
     const router = createRouterMock()
 
     await openPluginRuntimeSurface(router, 'com.demo.plugin', '/app/apps/installed', 'normal')
@@ -86,7 +86,7 @@ describe('plugin runtime surface navigation', () => {
   it('creates runtime window when absent in windowed mode', async () => {
     setTauriRuntime(true)
     localStorage.setItem('dawnchat.plugin.runtime.surface.mode', 'windowed')
-    webviewWindowMocks.getByLabel.mockReturnValue(null)
+    webviewWindowMocks.getByLabel.mockResolvedValue(null)
     const router = createRouterMock()
 
     await openPluginRuntimeSurface(router, 'com.demo.plugin', '/app/apps/installed', 'preview')

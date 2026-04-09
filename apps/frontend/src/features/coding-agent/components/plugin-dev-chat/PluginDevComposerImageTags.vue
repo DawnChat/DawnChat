@@ -31,7 +31,7 @@
 <script setup lang="ts">
 import type { PromptFilePart } from '@/services/coding-agent/engineAdapter'
 
-const props = defineProps<{
+defineProps<{
   images: PromptFilePart[]
 }>()
 

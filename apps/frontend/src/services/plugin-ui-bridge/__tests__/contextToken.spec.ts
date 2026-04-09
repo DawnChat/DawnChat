@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { encodeContextToken, expandContextTokens, parseContextTokens } from '../contextToken'
+import {
+  encodeContextToken,
+  expandContextTokens,
+  parseContextTokens
+} from '@dawnchat/host-orchestration-sdk/assistant-client'
 
 describe('contextToken', () => {
   it('encode + expand 可还原 preview 与 fullText', () => {

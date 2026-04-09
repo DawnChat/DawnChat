@@ -51,7 +51,8 @@ async def test_compose_builds_baseline_with_resolved_instructions(monkeypatch) -
     result = await composer.compose(host="127.0.0.1", port=4096, workspace=Path("/tmp/demo"))
 
     assert result.config["model"] == "openai/gpt-4o-mini"
-    assert result.config["instructions"] == ["/shared/context/base.md", "AGENTS.md"]
+    assert result.config["instructions"][:2] == ["/shared/context/base.md", "AGENTS.md"]
+    assert any("always provide a concise 'description' argument" in item for item in result.config["instructions"])
     assert "openai" in result.config["provider"]
     assert result.config["provider"]["openai"]["options"]["apiKey"] == "sk-test"
     assert "models" not in result.config["provider"]["openai"]
@@ -95,7 +96,7 @@ async def test_compose_can_disable_shared_instructions(monkeypatch) -> None:
         instruction_policy={"include_shared_rules": False, "include_workspace_rules": True},
     )
 
-    assert result.config["instructions"] == ["AGENTS.md"]
+    assert result.config["instructions"][0] == "AGENTS.md"
 
 
 @pytest.mark.asyncio

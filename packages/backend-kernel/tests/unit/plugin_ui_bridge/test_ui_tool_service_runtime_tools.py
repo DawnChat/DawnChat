@@ -256,6 +256,8 @@ async def test_runtime_refresh_dispatches_bridge_operation(monkeypatch: pytest.M
 
     assert result["ok"] is True
     assert bridge.last_op == BridgeOperation.RUNTIME_REFRESH
+    assert result["display"]["title"] == "刷新预览页面"
+    assert result["display"]["source"] == "server_generated"
 
 
 @pytest.mark.asyncio
@@ -466,6 +468,36 @@ async def test_session_start_dispatches_as_capability_invoke(monkeypatch: pytest
     assert bridge.last_payload["function"] == "assistant.session.start"
     assert bridge.last_payload["payload"]["steps"][0]["action"]["type"] == "card.show"
     assert bridge.last_payload["payload"]["steps"][0]["timeout_ms"] == 45000
+
+
+@pytest.mark.asyncio
+async def test_session_start_preserves_description_for_display_title(monkeypatch: pytest.MonkeyPatch) -> None:
+    bridge = _BridgeStub()
+    service = UiToolService(bridge_service=bridge, artifact_store=_ArtifactStoreStub())
+    monkeypatch.setattr(resolver_module, "get_plugin_manager", lambda: _ManagerStub())
+
+    result = await service.execute(
+        "dawnchat.ui.session.start",
+        {
+            "plugin_id": "com.demo.plugin",
+            "description": "Starting a guided geometry proof session in Coordinate Lab.",
+            "steps": [
+                {
+                    "id": "setup-viewport",
+                    "action": {
+                        "type": "view.capability.invoke",
+                        "payload": {},
+                    },
+                }
+            ],
+        },
+    )
+
+    assert result["ok"] is True
+    assert bridge.last_payload["function"] == "assistant.session.start"
+    assert bridge.last_payload["description"] == "Starting a guided geometry proof session in Coordinate Lab."
+    assert result["display"]["title"] == "Starting a guided geometry proof session in Coordinate Lab."
+    assert result["display"]["source"] == "agent_description"
 
 
 @pytest.mark.asyncio
@@ -760,3 +792,51 @@ async def test_session_stop_requires_session_id(monkeypatch: pytest.MonkeyPatch)
         )
     assert exc.value.code == "invalid_arguments"
     assert exc.value.message == "session_id is required"
+
+
+def test_tool_definitions_expose_description_field() -> None:
+    service = UiToolService(bridge_service=_BridgeStub(), artifact_store=_ArtifactStoreStub())
+    defs = {item.name: item for item in service.tool_definitions()}
+    describe_schema = defs["dawnchat.ui.describe"].input_schema
+    assert "description" in describe_schema["properties"]
+    assert "title" in describe_schema["properties"]
+
+
+@pytest.mark.asyncio
+async def test_runtime_refresh_uses_description_as_display_title(monkeypatch: pytest.MonkeyPatch) -> None:
+    bridge = _BridgeStub()
+    service = UiToolService(bridge_service=bridge, artifact_store=_ArtifactStoreStub())
+    monkeypatch.setattr(resolver_module, "get_plugin_manager", lambda: _ManagerStub())
+
+    result = await service.execute(
+        "dawnchat.ui.runtime.refresh",
+        {
+            "plugin_id": "com.demo.plugin",
+            "description": "刷新插件预览并确认页面状态",
+        },
+    )
+
+    assert result["ok"] is True
+    assert result["display"]["title"] == "刷新插件预览并确认页面状态"
+    assert result["display"]["source"] == "agent_description"
+
+
+@pytest.mark.asyncio
+async def test_capability_invoke_accepts_legacy_title_and_maps_to_description(monkeypatch: pytest.MonkeyPatch) -> None:
+    bridge = _BridgeStub()
+    service = UiToolService(bridge_service=bridge, artifact_store=_ArtifactStoreStub())
+    monkeypatch.setattr(resolver_module, "get_plugin_manager", lambda: _ManagerStub())
+
+    result = await service.execute(
+        "dawnchat.ui.capability.invoke",
+        {
+            "plugin_id": "com.demo.plugin",
+            "function": "view.open",
+            "title": "打开目标视图并检查初始状态",
+            "payload": {"view_id": "board.main"},
+        },
+    )
+
+    assert result["ok"] is True
+    assert bridge.last_payload["description"] == "打开目标视图并检查初始状态"
+    assert result["display"]["title"] == "打开目标视图并检查初始状态"

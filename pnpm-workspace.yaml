@@ -10,6 +10,8 @@ packages:
   
   # 插件与 SDK 子模块
   - 'dawnchat-plugins/*'
+  - 'dawnchat-plugins/assistant-sdk/*'
+  - 'dawnchat-plugins/official-plugins/desktop-ai-assistant/_ir/frontend/web-src'
 
 # 共享配置
 shared-workspace-lockfile: true

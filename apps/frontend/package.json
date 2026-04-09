@@ -28,6 +28,7 @@
   },
   "dependencies": {
     "@dawnchat/auth-bridge": "npm:@dawnchat/auth-bridge@^0.2.0",
+    "@dawnchat/host-orchestration-sdk": "workspace:*",
     "@dawnchat/shared-protocol": "npm:@dawnchat/shared-protocol@^0.6.0",
     "@dawnchat/shared-ui": "npm:@dawnchat/shared-ui@^0.2.0",
     "@opencode-ai/sdk": "^1.2.27",

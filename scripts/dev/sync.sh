@@ -1,3 +1,6 @@
+ASSISTANT_WORKSPACE_READY=false
+ASSISTANT_TEMPLATE_DIST_READY=false
+
 sync_backend_source() {
     print_step "同步后端源码"
     
@@ -58,7 +61,7 @@ import sys
 from pathlib import Path
 
 web_src = Path(sys.argv[1])
-files = [web_src / "package.json", web_src / "pnpm-lock.yaml", web_src / "package-lock.json", web_src / "yarn.lock"]
+files = [web_src / "package.json", web_src / "bun.lock", web_src / "pnpm-lock.yaml", web_src / "package-lock.json", web_src / "yarn.lock"]
 h = hashlib.sha256()
 for path in files:
     if path.exists():
@@ -85,6 +88,65 @@ try:
 except Exception:
     print("")
 PY
+}
+
+template_uses_assistant_sdk() {
+    local package_json_path="$1"
+    if [[ ! -f "$package_json_path" ]]; then
+        return 1
+    fi
+    python3 - "$package_json_path" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+try:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+except Exception:
+    raise SystemExit(1)
+
+for section in ("dependencies", "devDependencies"):
+    deps = payload.get(section)
+    if not isinstance(deps, dict):
+        continue
+    for package_name in ("@dawnchat/assistant-core", "@dawnchat/host-orchestration-sdk"):
+        if str(deps.get(package_name) or "").strip() == "workspace:*":
+            raise SystemExit(0)
+raise SystemExit(1)
+PY
+}
+
+ensure_assistant_workspace_deps() {
+    if [[ "$ASSISTANT_WORKSPACE_READY" == true ]]; then
+        return 0
+    fi
+    local bun_bin
+    bun_bin="$(resolve_bun_binary || true)"
+    if [[ -z "$bun_bin" || ! -x "$bun_bin" ]]; then
+        print_error "未找到 bun 二进制，无法初始化 assistant workspace"
+        return 1
+    fi
+    if [[ ! -f "$ASSISTANT_WORKSPACE_DIR/package.json" ]]; then
+        print_error "缺少 assistant workspace 配置: $ASSISTANT_WORKSPACE_DIR/package.json"
+        return 1
+    fi
+    print_info "安装 assistant workspace 依赖..."
+    (cd "$ASSISTANT_WORKSPACE_DIR" && "$bun_bin" install --frozen-lockfile) || return 1
+    ASSISTANT_WORKSPACE_READY=true
+}
+
+run_assistant_workspace_script() {
+    local script_name="$1"
+    local bun_bin
+    bun_bin="$(resolve_bun_binary || true)"
+    if [[ -z "$bun_bin" || ! -x "$bun_bin" ]]; then
+        print_error "未找到 bun 二进制，无法执行 assistant workspace 脚本: $script_name"
+        return 1
+    fi
+    ensure_assistant_workspace_deps || return 1
+    print_info "执行 assistant workspace 脚本: $script_name"
+    (cd "$ASSISTANT_WORKSPACE_DIR" && "$bun_bin" run "$script_name")
 }
 
 build_plugin_frontend() {
@@ -191,6 +253,166 @@ sync_sdk() {
     fi
 }
 
+assistant_sdk_needs_build() {
+    local package_dir="$1"
+    python3 - "$package_dir" <<'PY'
+import sys
+from pathlib import Path
+
+package_dir = Path(sys.argv[1])
+dist_dir = package_dir / "dist"
+if not dist_dir.exists():
+    raise SystemExit(0)
+
+watch_targets = [
+    package_dir / "src",
+    package_dir / "package.json",
+    package_dir / "tsconfig.json",
+    package_dir / "vite.config.ts",
+]
+
+def latest_mtime(target: Path) -> float:
+    if not target.exists():
+        return 0.0
+    if target.is_file():
+        return target.stat().st_mtime
+    latest = 0.0
+    for path in target.rglob("*"):
+        if path.is_file():
+            latest = max(latest, path.stat().st_mtime)
+    return latest
+
+latest_source = max(latest_mtime(target) for target in watch_targets)
+latest_dist = latest_mtime(dist_dir)
+raise SystemExit(0 if latest_source > latest_dist else 1)
+PY
+}
+
+assistant_sdk_missing_files() {
+    local package_dir="$1"
+    python3 - "$package_dir" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+package_dir = Path(sys.argv[1])
+package_json_path = package_dir / "package.json"
+if not package_json_path.exists():
+    print(package_json_path)
+    raise SystemExit(0)
+
+try:
+    payload = json.loads(package_json_path.read_text(encoding="utf-8"))
+except Exception:
+    print(package_json_path)
+    raise SystemExit(0)
+
+targets = set()
+
+def collect(value: object) -> None:
+    if isinstance(value, str):
+        if value.startswith("./"):
+            targets.add(value)
+        return
+    if isinstance(value, dict):
+        for nested in value.values():
+            collect(nested)
+        return
+    if isinstance(value, list):
+        for nested in value:
+            collect(nested)
+
+for key in ("main", "types"):
+    collect(payload.get(key))
+collect(payload.get("exports"))
+
+missing = [package_dir / target[2:] for target in sorted(targets) if not (package_dir / target[2:]).exists()]
+for path in missing:
+    print(path)
+PY
+}
+
+build_assistant_sdk_packages() {
+    print_step "构建 Assistant SDK dist 包"
+
+    if [[ ! -d "$ASSISTANT_SDK_DIR" ]]; then
+        print_warning "Assistant SDK 目录不存在: $ASSISTANT_SDK_DIR"
+        return 0
+    fi
+
+    local package_name=""
+    local package_dir=""
+    local needs_build=false
+    for package_name in assistant-core host-orchestration-sdk; do
+        package_dir="$ASSISTANT_SDK_DIR/$package_name"
+        if [[ ! -f "$package_dir/package.json" ]]; then
+            print_error "Assistant SDK 包不存在: $package_dir"
+            return 1
+        fi
+        if assistant_sdk_needs_build "$package_dir"; then
+            needs_build=true
+            break
+        else
+            print_info "$package_name dist 已是最新，跳过构建"
+        fi
+    done
+
+    if [[ "$needs_build" == true ]]; then
+        run_assistant_workspace_script "build:sdk" || return 1
+    fi
+}
+
+copy_dist_ready_assistant_sdk_package() {
+    local src_dir="$1"
+    local dest_dir="$2"
+    local missing_files=""
+
+    missing_files="$(assistant_sdk_missing_files "$src_dir")"
+    if [[ -n "$missing_files" ]]; then
+        print_error "Assistant SDK dist 包不完整:"
+        printf '%s\n' "$missing_files"
+        return 1
+    fi
+
+    rm -rf "$dest_dir"
+    mkdir -p "$dest_dir"
+    cp "$src_dir/package.json" "$dest_dir/package.json"
+    if [[ -f "$src_dir/README.md" ]]; then
+        cp "$src_dir/README.md" "$dest_dir/README.md"
+    fi
+
+    if command -v rsync &> /dev/null; then
+        rsync -a --delete "$src_dir/dist/" "$dest_dir/dist/"
+    else
+        cp -R "$src_dir/dist" "$dest_dir/dist"
+    fi
+}
+
+sync_assistant_sdk_bundle() {
+    print_step "同步 Assistant SDK runtime bundle"
+
+    if [[ ! -d "$ASSISTANT_SDK_DIR" ]]; then
+        print_warning "Assistant SDK 目录不存在: $ASSISTANT_SDK_DIR"
+        return 0
+    fi
+
+    local dest_root="$SIDECAR_DIR/dawnchat-plugins/assistant-sdk"
+    mkdir -p "$SIDECAR_DIR/dawnchat-plugins"
+    rm -rf "$dest_root"
+    mkdir -p "$dest_root"
+
+    local package_name=""
+    local package_src=""
+    local package_dest=""
+    for package_name in assistant-core host-orchestration-sdk; do
+        package_src="$ASSISTANT_SDK_DIR/$package_name"
+        package_dest="$dest_root/$package_name"
+        copy_dist_ready_assistant_sdk_package "$package_src" "$package_dest"
+    done
+
+    print_success "Assistant SDK runtime bundle 同步完成: $dest_root"
+}
+
 sync_builtin_desktop_template() {
     print_step "同步内置 starter 模板"
 
@@ -201,7 +423,7 @@ sync_builtin_desktop_template() {
     local web_src=""
     local bun_bin
     bun_bin="$(resolve_bun_binary || true)"
-    local template_ids=("desktop-starter" "desktop-hello-world" "desktop-ai-assistant" "web-starter-vue" "mobile-starter-ionic")
+    local template_ids=("desktop-starter" "desktop-hello-world" "desktop-ai-assistant" "web-starter-vue" "web-ai-assistant" "mobile-starter-ionic")
 
     for template_id in "${template_ids[@]}"; do
         template_src="$PLUGINS_DIR/$template_id"
@@ -216,8 +438,18 @@ sync_builtin_desktop_template() {
             web_src="$template_src/_ir/frontend/web-src"
         fi
         if [[ -n "$bun_bin" && -f "$web_src/package.json" ]]; then
-            print_info "构建 $template_id 前端产物..."
-            (cd "$web_src" && "$bun_bin" install && "$bun_bin" run build)
+            if template_uses_assistant_sdk "$web_src/package.json"; then
+                if [[ "$ASSISTANT_TEMPLATE_DIST_READY" != true ]]; then
+                    print_info "检测到 assistant-sdk workspace 依赖，改由 assistant workspace 统一构建 assistant templates"
+                    run_assistant_workspace_script "build:templates" || return 1
+                    ASSISTANT_TEMPLATE_DIST_READY=true
+                else
+                    print_info "assistant templates 前端产物已通过 assistant workspace 构建"
+                fi
+            else
+                print_info "构建 $template_id 前端产物..."
+                (cd "$web_src" && "$bun_bin" install && "$bun_bin" run build)
+            fi
         fi
 
         mkdir -p "$template_dest_root"
@@ -313,10 +545,12 @@ sync_all() {
         return 1
     fi
     
-    sync_backend_source
-    sync_sdk
-    sync_builtin_desktop_template
-    sync_tts_kokoro_model
+    sync_backend_source || return 1
+    sync_sdk || return 1
+    build_assistant_sdk_packages || return 1
+    sync_assistant_sdk_bundle || return 1
+    sync_builtin_desktop_template || return 1
+    sync_tts_kokoro_model || return 1
     
     echo ""
     print_success "🎉 代码同步完成！"

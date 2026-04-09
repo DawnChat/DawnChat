@@ -31,6 +31,11 @@ class DesktopTemplateScaffolder(TemplateScaffolder):
                 description=request.app_description.strip(),
             )
 
+        self.rewrite_frontend_sdk_dependencies(
+            request.target_dir / "_ir" / "frontend" / "web-src" / "package.json",
+            plugin_root=request.target_dir,
+        )
+
         self.replace_plugin_id_references(request.target_dir, old_plugin_id, request.plugin_id)
 
         return TemplateScaffoldResult(

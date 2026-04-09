@@ -6,6 +6,7 @@ from app.plugins import get_plugin_manager
 from app.services.llama_binary_manager import get_binary_manager
 from app.services.model_lifecycle_manager import get_lifecycle_manager
 from app.services.network_service import NetworkService
+from app.services.opencode_manager import get_opencode_manager
 from app.services.playwright_installer import PlaywrightInstaller
 from app.storage import storage_manager
 from app.utils.logger import app_logger as logger
@@ -133,6 +134,13 @@ async def shutdown_components() -> None:
         logger.info("✅ MLX Server 已关闭")
     except Exception as e:
         logger.error(f"❌ 关闭 MLX Server 时发生异常: {e}", exc_info=True)
+
+    try:
+        opencode_manager = get_opencode_manager()
+        await opencode_manager.stop()
+        logger.info("✅ OpenCode 已关闭")
+    except Exception as e:
+        logger.error(f"❌ 关闭 OpenCode 时发生异常: {e}", exc_info=True)
 
     try:
         plugin_manager = get_plugin_manager()

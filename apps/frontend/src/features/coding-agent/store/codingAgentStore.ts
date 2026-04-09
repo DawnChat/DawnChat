@@ -296,8 +296,8 @@ export const useCodingAgentStore = defineStore('codingAgent', () => {
   const {
     loadSessions,
     buildWorkspaceSystemPrompt,
-    createSession,
-    switchSession,
+    createSession: createSessionRaw,
+    switchSession: switchSessionRaw,
     renameSession,
     deleteSession,
     tryRenameDefaultSessionAfterSend
@@ -388,9 +388,23 @@ export const useCodingAgentStore = defineStore('codingAgent', () => {
   const interruptActiveRun = async () => runtimeOrchestrator?.interruptSession(activeSessionId.value)
   const dispose = runtimeOrchestrator.dispose
 
+  async function createSession(title?: string, injectContext = true, options?: WorkspaceResolveOptions): Promise<string> {
+    if (options) {
+      await ensureReadyWithWorkspace(options)
+    }
+    return await createSessionRaw(title, injectContext)
+  }
+
+  async function switchSession(sessionID: string, options?: WorkspaceResolveOptions): Promise<void> {
+    if (options) {
+      await ensureReadyWithWorkspace(options)
+    }
+    await switchSessionRaw(sessionID)
+  }
+
   async function createBuildSession(title: string, options?: WorkspaceResolveOptions): Promise<string> {
     await ensureReadyWithWorkspace(options)
-    return await createSession(title, true)
+    return await createSessionRaw(title, true)
   }
 
   async function sendTextToSession(sessionID: string, text: string, options?: WorkspaceResolveOptions): Promise<void> {
@@ -400,7 +414,7 @@ export const useCodingAgentStore = defineStore('codingAgent', () => {
     }
     await ensureReadyWithWorkspace(options)
     if (activeSessionId.value !== targetSessionID) {
-      await switchSession(targetSessionID)
+      await switchSession(targetSessionID, options)
     }
     await sendText(text, options)
   }
@@ -412,7 +426,7 @@ export const useCodingAgentStore = defineStore('codingAgent', () => {
     }
     await ensureReadyWithWorkspace(options)
     if (activeSessionId.value !== targetSessionID) {
-      await switchSession(targetSessionID)
+      await switchSession(targetSessionID, options)
     }
     await sendPromptParts(parts, options)
   }

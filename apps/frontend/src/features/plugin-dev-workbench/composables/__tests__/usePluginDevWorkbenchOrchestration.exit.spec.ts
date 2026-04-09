@@ -11,11 +11,23 @@ const stopAndExit = vi.fn(async () => {})
 const saveCurrentFile = vi.fn(async () => {})
 const isDirtyRef = ref(false)
 const isStreamingRef = ref(false)
+const previewInstalledAppsRef = ref<any[]>([{ id: 'com.test.plugin' }])
+const previewActiveAppRef = ref({
+  id: 'com.test.plugin',
+  name: 'Demo',
+  app_type: 'web',
+  preview: { url: 'http://127.0.0.1:5173', log_session_id: 'log-1', install_status: 'idle', has_iwp_requirements: true },
+})
+const facadeLoadAppsMock = vi.fn(async () => {})
+const facadeRefreshPreviewStatusMock = vi.fn(async () => {})
+const activeLifecycleTaskRef = ref<any>(null)
 const {
   onBeforeRouteLeaveMock,
   routerPushMock,
   runLifecycleOperationMock,
   getSessionMock,
+  openLifecycleModalMock,
+  finalizeActiveLifecycleTaskMock,
   hostTtsStartSpeak,
   hostTtsWaitForPlaybackCompletion,
   getTtsCapabilityMock,
@@ -46,6 +58,8 @@ const {
   getSessionMock: vi.fn(async () => ({
     user: { id: 'user-1', email: 'tester@example.com' },
   })),
+  openLifecycleModalMock: vi.fn(),
+  finalizeActiveLifecycleTaskMock: vi.fn(),
   hostTtsStartSpeak: vi.fn(async () => 'task-voice-1'),
   hostTtsWaitForPlaybackCompletion: vi.fn(async () => {}),
   getTtsCapabilityMock: vi.fn(async () => ({
@@ -91,19 +105,19 @@ vi.mock('@/features/plugin-dev-workbench/services/devWorkbenchFacade', () => ({
     closeApp: vi.fn(),
     updateAppDisplayName: vi.fn(async () => null),
     runLifecycleOperation: runLifecycleOperationMock,
+    loadApps: facadeLoadAppsMock,
+    refreshPreviewStatus: facadeRefreshPreviewStatusMock,
+    activeLifecycleTask: activeLifecycleTaskRef,
+    openLifecycleModal: openLifecycleModalMock,
+    finalizeActiveLifecycleTask: finalizeActiveLifecycleTaskMock,
   }),
 }))
 
 vi.mock('@/features/plugin-dev-workbench/composables/usePreviewSessionGuard', () => ({
   usePreviewSessionGuard: () => ({
-    activeApp: ref({
-      id: 'com.test.plugin',
-      name: 'Demo',
-      app_type: 'web',
-      preview: { url: 'http://127.0.0.1:5173', log_session_id: 'log-1', install_status: 'idle', has_iwp_requirements: true },
-    }),
+    activeApp: previewActiveAppRef,
     activeMode: ref<'normal' | 'preview'>('preview'),
-    installedApps: ref([{ id: 'com.test.plugin' }]),
+    installedApps: previewInstalledAppsRef,
     previewReady: ref(true),
     previewLoadingText: ref('loading'),
     previewPaneKey: ref(1),
@@ -245,8 +259,17 @@ vi.mock('@/composables/useI18n', () => ({
         workbenchRenameNameRequired: '名称不能为空',
         workbenchCloseRunningWarning: '会话会保留但预览会停止',
         workbenchCloseSaveFailed: '保存失败',
+        quickCreateAssistantName: '我的 AI 助手',
         workbenchCreateAssistantAuthRequired: '请先登录',
         workbenchCreateAssistantLaunching: '创建完成，打开中...',
+        workbenchCreateAssistantCreated: '助手已创建',
+        workbenchCreateAssistantPreparingPreview: '助手已创建，正在准备预览...',
+        workbenchCreateAssistantPreviewStarting: '正在启动预览...',
+        workbenchCreateAssistantPreviewWaitingStage: '等待预览可用',
+        workbenchCreateAssistantPreviewWaiting: '正在检查预览...',
+        workbenchCreateAssistantPreviewReadyStage: '预览已就绪',
+        workbenchCreateAssistantPreviewReady: '预览已就绪，打开中...',
+        workbenchCreateAssistantPreviewFailed: '预览未就绪',
         workbenchCreateAssistantFailed: '创建失败',
         workbenchCreateAssistantNavigationFailed: '已创建但跳转失败',
       },
@@ -297,6 +320,18 @@ describe('usePluginDevWorkbenchOrchestration close flow', () => {
       },
     })
     routeRef.value.params.pluginId = 'com.test.plugin'
+    previewInstalledAppsRef.value = [{ id: 'com.test.plugin' }]
+    previewActiveAppRef.value = {
+      id: 'com.test.plugin',
+      name: 'Demo',
+      app_type: 'web',
+      preview: { url: 'http://127.0.0.1:5173', log_session_id: 'log-1', install_status: 'idle', has_iwp_requirements: true },
+    }
+    activeLifecycleTaskRef.value = null
+    facadeLoadAppsMock.mockReset()
+    facadeRefreshPreviewStatusMock.mockReset()
+    openLifecycleModalMock.mockReset()
+    finalizeActiveLifecycleTaskMock.mockReset()
   })
 
   it('无阻断时直接退出', async () => {
@@ -362,54 +397,6 @@ describe('usePluginDevWorkbenchOrchestration close flow', () => {
     expect(leaveGuard).toBeTypeOf('function')
     const allowed = await leaveGuard({ name: 'login', fullPath: '/login' })
     expect(allowed).toBe(true)
-  })
-
-  it('新建助手期间放行受控内部 workbench 跳转，并在完成后恢复守卫', async () => {
-    let resolveLifecycle: ((value: any) => void) | null = null
-    runLifecycleOperationMock.mockImplementationOnce(
-      async () => await new Promise((resolve) => { resolveLifecycle = resolve })
-    )
-    const Harness = defineComponent({
-      setup() {
-        return usePluginDevWorkbenchOrchestration()
-      },
-      template: '<div />',
-    })
-    const wrapper = mount(Harness)
-    const createPromise = (wrapper.vm as any).createAssistantFromWorkbench()
-    await Promise.resolve()
-
-    expect((wrapper.vm as any).creatingAssistant).toBe(true)
-    const leaveGuard = onBeforeRouteLeaveMock.mock.calls.at(-1)?.[0]
-    expect(leaveGuard).toBeTypeOf('function')
-    const allowedDuringCreate = await leaveGuard({
-      name: 'plugin-dev-workbench',
-      fullPath: '/app/plugin-dev-workbench/com.test.created-assistant',
-    })
-    expect(allowedDuringCreate).toBe(true)
-
-    resolveLifecycle?.({
-      task_id: 'create-task-2',
-      operation_type: 'create_dev_session',
-      plugin_id: 'com.test.created-assistant',
-      app_type: 'desktop',
-      status: 'completed',
-      created_at: '',
-      updated_at: '',
-      elapsed_seconds: 0,
-      progress: {
-        stage: 'completed',
-        stage_label: 'completed',
-        progress: 100,
-        message: 'done',
-      },
-      result: { plugin_id: 'com.test.created-assistant' },
-    })
-    await createPromise
-
-    expect((wrapper.vm as any).creatingAssistant).toBe(false)
-    const blockedAfterCreate = await leaveGuard({ name: 'apps', fullPath: '/app/apps/hub' })
-    expect(blockedAfterCreate).toBe(false)
   })
 
   it('dawnchat.host.voice.speak 会在播放完成后才返回成功', async () => {

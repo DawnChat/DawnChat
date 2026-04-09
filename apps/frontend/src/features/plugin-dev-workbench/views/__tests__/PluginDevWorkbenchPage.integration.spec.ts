@@ -4,6 +4,9 @@ import { shallowMount } from '@vue/test-utils'
 
 const orchestrationMock = {
   t: {
+    common: {
+      cancel: '取消',
+    },
     apps: {
       publishWeb: '发布网页',
       mobilePreviewQr: '移动端预览二维码',
@@ -20,12 +23,6 @@ const orchestrationMock = {
       workbenchRenameSave: '保存名称',
       workbenchRenameCancel: '取消修改',
       workbenchRenamePlaceholder: '请输入应用名称',
-      workbenchCreateAssistant: '新建',
-      workbenchCreateAssistantCreating: '创建中...',
-      workbenchCreateAssistantLaunching: '创建完成，打开中...',
-      workbenchCreateAssistantFailed: '创建失败',
-      workbenchCreateAssistantAuthRequired: '请先登录',
-      workbenchCreateAssistantNavigationFailed: '已创建但跳转失败',
       iwpOpenBuildSession: '打开会话',
       iwpSave: '保存',
       iwpSaving: '保存中',
@@ -72,8 +69,6 @@ const orchestrationMock = {
   },
   workbenchLayoutVariant: 'split_with_iwp' as const,
   hasIwpRequirements: true,
-  showCreateAssistantAction: false,
-  creatingAssistant: false,
   isAssistantCompactSurface: false,
   previewChatBlocked: false,
   publishDialogVisible: false,
@@ -138,7 +133,6 @@ const orchestrationMock = {
   isBuildRunning: false,
   renamingApp: false,
   renameActiveApp: vi.fn(async () => true),
-  createAssistantFromWorkbench: vi.fn(),
   setWorkbenchMode: vi.fn(),
   setChatInput: vi.fn(),
   togglePreviewFullscreen: vi.fn(),
@@ -158,8 +152,8 @@ import PluginDevWorkbenchPage from '@/features/plugin-dev-workbench/views/Plugin
 
 const HeaderStub = defineComponent({
   name: 'WorkbenchHeaderBar',
-  props: ['isWebApp', 'isMobileApp', 'appTypeLabel', 'showModeSwitch', 'createAssistantLoading', 'createAssistantLoadingLabel'],
-  emits: ['openWebPublish', 'openMobileQr', 'openMobileOffline', 'switchMode', 'openBuildSession', 'close', 'renameApp', 'createAssistant'],
+  props: ['isWebApp', 'isMobileApp', 'appTypeLabel', 'showModeSwitch'],
+  emits: ['openWebPublish', 'openMobileQr', 'openMobileOffline', 'switchMode', 'openBuildSession', 'close', 'renameApp'],
   template: '<div />',
 })
 
@@ -227,7 +221,6 @@ describe('PluginDevWorkbenchPage integration', () => {
     }
     orchestrationMock.workbenchLayoutVariant = 'split_with_iwp'
     orchestrationMock.hasIwpRequirements = true
-    orchestrationMock.creatingAssistant = false
     orchestrationMock.isAssistantCompactSurface = false
     vi.clearAllMocks()
   })
@@ -252,7 +245,6 @@ describe('PluginDevWorkbenchPage integration', () => {
     header.vm.$emit('switchMode', 'agent')
     header.vm.$emit('openBuildSession')
     header.vm.$emit('renameApp', 'New App')
-    header.vm.$emit('createAssistant')
     header.vm.$emit('close')
     await Promise.resolve()
 
@@ -262,28 +254,7 @@ describe('PluginDevWorkbenchPage integration', () => {
     expect(orchestrationMock.setWorkbenchMode).toHaveBeenCalledWith('agent')
     expect(orchestrationMock.openBuildSession).toHaveBeenCalledTimes(1)
     expect(orchestrationMock.renameActiveApp).toHaveBeenCalledWith('New App')
-    expect(orchestrationMock.createAssistantFromWorkbench).toHaveBeenCalledTimes(1)
     expect(orchestrationMock.handleCloseWorkbench).toHaveBeenCalledTimes(1)
-  })
-
-  it('透传 assistant 新建 loading 状态到 Header', () => {
-    orchestrationMock.showCreateAssistantAction = true
-    orchestrationMock.creatingAssistant = true
-    const wrapper = shallowMount(PluginDevWorkbenchPage, {
-      global: {
-        stubs: {
-          WorkbenchHeaderBar: HeaderStub,
-          WorkbenchPreviewSection: PreviewStub,
-          WorkbenchPublishOverlays: OverlaysStub,
-          WorkbenchSplitWithIwpLayout: SplitWithIwpStub,
-          WorkbenchSplitNoIwpLayout: SplitNoIwpStub,
-        },
-      },
-    })
-
-    const header = wrapper.findComponent(HeaderStub)
-    expect(header.props('createAssistantLoading')).toBe(true)
-    expect(header.props('createAssistantLoadingLabel')).toBe('创建中...')
   })
 
   it('转发 Preview 和 Chat 事件到 orchestration', async () => {

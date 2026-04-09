@@ -12,20 +12,37 @@
           </div>
         </header>
 
-        <button
-          class="launcher-create-card assistant-hero-card"
-          type="button"
-          :disabled="quickCreateLoadingType === 'assistant'"
-          @click="handleAssistantEntryClick"
-        >
-          <div class="card-icon">
-            <Bot :size="20" />
-          </div>
-          <div class="card-copy">
-            <h3>{{ t.apps.launcherAssistantTitle }}</h3>
-            <p>{{ t.apps.launcherAssistantDescription }}</p>
-          </div>
-        </button>
+        <div class="assistant-entry-grid">
+          <button
+            class="launcher-create-card assistant-hero-card assistant-primary-card"
+            type="button"
+            :disabled="quickCreateLoadingType === 'assistant'"
+            @click="handleAssistantEntryClick"
+          >
+            <div class="card-icon">
+              <Bot :size="20" />
+            </div>
+            <div class="card-copy">
+              <h3>{{ t.apps.launcherAssistantTitle }}</h3>
+              <p>{{ t.apps.launcherAssistantDescription }}</p>
+            </div>
+          </button>
+
+          <button
+            class="launcher-create-card assistant-hero-card assistant-secondary-card"
+            type="button"
+            :disabled="creatingAssistant"
+            @click="handleCreateAssistantClick"
+          >
+            <div class="card-icon">
+              <Plus :size="18" />
+            </div>
+            <div class="card-copy">
+              <h3>{{ t.apps.launcherCreateAssistantTitle }}</h3>
+              <p>{{ t.apps.launcherCreateAssistantDescription }}</p>
+            </div>
+          </button>
+        </div>
 
         <div class="create-toolbar">
           <h2>{{ t.apps.newProjectSectionTitle }}</h2>
@@ -119,14 +136,36 @@
       @confirm="handleCreatePlugin"
     />
 
+    <CreateAssistantDialog
+      :visible="createAssistantDialogVisible"
+      :submitting="creatingAssistant"
+      :default-name="createAssistantDraftName"
+      :default-platform="createAssistantDraftPlatform"
+      :platform-options="assistantPlatformOptions"
+      :platform-label="t.apps.workbenchCreateAssistantPlatformLabel"
+      :default-open-after-create="true"
+      :show-open-after-create="false"
+      :title="t.apps.workbenchCreateAssistantDialogTitle"
+      :description="t.apps.workbenchCreateAssistantDialogDescription"
+      :name-label="t.apps.workbenchCreateAssistantNameLabel"
+      :name-placeholder="t.apps.workbenchCreateAssistantNamePlaceholder"
+      :open-after-create-label="t.apps.workbenchCreateAssistantOpenAfterCreate"
+      :cancel-label="t.common.cancel"
+      :confirm-label="t.apps.workbenchCreateAssistantConfirm"
+      :submitting-label="t.apps.workbenchCreateAssistantCreating"
+      @close="closeCreateAssistantDialog"
+      @confirm="handleCreateAssistantConfirm"
+    />
+
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
-import { ChevronRight, MonitorSmartphone, Globe, Smartphone, Bot } from 'lucide-vue-next'
+import { ChevronRight, MonitorSmartphone, Globe, Smartphone, Bot, Plus } from 'lucide-vue-next'
 import CreateAppWizardModal from '@/features/plugin/components/CreateAppWizardModal.vue'
+import CreateAssistantDialog from '@/features/plugin-dev-workbench/components/CreateAssistantDialog.vue'
 import BuildHubUnifiedFeed from '@/features/plugin/components/build-hub/BuildHubUnifiedFeed.vue'
 import { useBuildHubState } from '@/features/plugin/composables/useBuildHubState'
 import { useBuildHubActions } from '@/features/plugin/composables/useBuildHubActions'
@@ -170,9 +209,16 @@ const {
 } = useBuildHubActions(currentUser.value)
 const {
   quickCreateLoadingType,
+  creatingAssistant,
+  createAssistantDialogVisible,
+  createAssistantDraftName,
+  createAssistantDraftPlatform,
   handleCreatePlugin,
   handleCreateAppTypeChange,
   handleQuickCreate,
+  openCreateAssistantDialog,
+  closeCreateAssistantDialog,
+  createAssistant,
   openOrCreateMainAssistant,
   handleForkApp,
 } = useBuildHubCreationFlow({
@@ -209,6 +255,18 @@ const createCards = computed(() => [
 ])
 
 const recentQuickList = computed(() => visibleRecentApps.value.slice(0, 6))
+const assistantPlatformOptions = computed(() => [
+  {
+    value: 'desktop',
+    label: t.value.apps.workbenchCreateAssistantPlatformDesktop,
+    description: t.value.apps.workbenchCreateAssistantPlatformDesktopDescription
+  },
+  {
+    value: 'web',
+    label: t.value.apps.workbenchCreateAssistantPlatformWeb,
+    description: t.value.apps.workbenchCreateAssistantPlatformWebDescription
+  }
+])
 
 const resolveAppTypeIcon = (appType?: string) => {
   if (appType === 'web') return Globe
@@ -241,6 +299,17 @@ const handleAssistantEntryClick = () => {
 
 const handleCreateCardClick = (appType: CreateAppType) => {
   void handleQuickCreate(appType)
+}
+
+const handleCreateAssistantClick = () => {
+  openCreateAssistantDialog()
+}
+
+const handleCreateAssistantConfirm = (
+  payload: { name: string; openAfterCreate: boolean; platform: string }
+) => {
+  const platform = payload.platform === 'web' ? 'web' : 'desktop'
+  void createAssistant(payload.name, platform)
 }
 
 const handleDeleteApp = async (app: Plugin) => {
@@ -342,6 +411,12 @@ const handleUninstallApp = async (app: Plugin) => {
   gap: 0.46rem;
 }
 
+.assistant-entry-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 0.46rem;
+}
+
 .launcher-create-card.assistant-hero-card {
   width: 100%;
   min-height: 92px;
@@ -351,6 +426,25 @@ const handleUninstallApp = async (app: Plugin) => {
   gap: 0.56rem;
   padding: 0.66rem 0.72rem;
   text-align: left;
+}
+
+.assistant-primary-card {
+  border-color: color-mix(in srgb, var(--color-primary) 22%, var(--color-border));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--color-primary) 11%, var(--color-surface-2)) 0%, transparent 100%),
+    color-mix(in srgb, var(--color-surface-2) 88%, transparent);
+}
+
+.assistant-primary-card:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--color-primary) 42%, var(--color-border));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--color-primary) 16%, var(--color-surface-2)) 0%, transparent 100%),
+    color-mix(in srgb, var(--color-surface-2) 94%, transparent);
+}
+
+.assistant-secondary-card {
+  border-style: solid;
+  background: color-mix(in srgb, var(--color-surface-1) 64%, transparent);
 }
 
 .launcher-create-card.assistant-hero-card .card-icon {
@@ -369,6 +463,10 @@ const handleUninstallApp = async (app: Plugin) => {
   line-height: 1.3;
 }
 
+.assistant-secondary-card .card-copy p {
+  max-width: 18ch;
+}
+
 .launcher-create-card {
   border: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
   border-radius: 10px;
@@ -382,6 +480,12 @@ const handleUninstallApp = async (app: Plugin) => {
   text-align: left;
   cursor: pointer;
   transition: border-color 0.18s ease, transform 0.18s ease, background 0.18s ease;
+}
+
+@media (max-width: 640px) {
+  .assistant-entry-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .launcher-create-card:hover:not(:disabled) {

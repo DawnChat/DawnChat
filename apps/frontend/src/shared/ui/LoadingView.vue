@@ -1,49 +1,62 @@
 <template>
-  <div class="shell-view">
-    <div class="shell-panel">
-      <div class="shell-header">
-        <div class="brand-mark">
-          <img src="/logo.png" alt="DawnChat" class="brand-logo" />
-        </div>
-        <div>
-          <h1 class="app-title">DawnChat</h1>
-          <p class="app-subtitle">{{ t.loading.subtitle }}</p>
-        </div>
-      </div>
+  <div class="loading-view build-hub-view">
+    <section class="launcher-stage">
+      <section class="launcher-shell">
+        <header class="launcher-header">
+          <div class="brand-bar">
+            <img src="/logo.svg" alt="DawnChat" class="brand-logo" width="40" height="40" />
+            <div class="brand-copy">
+              <h1>{{ t.app.name }}</h1>
+              <p class="launcher-slogan">{{ t.loading.subtitle }}</p>
+            </div>
+          </div>
+        </header>
 
-      <div class="status-card">
-        <div class="status-badge">
-          <Brain :size="18" />
-          <span>{{ statusText }}</span>
+        <div class="startup-card">
+          <div class="startup-card-body">
+            <div class="startup-visual">
+              <div class="card-icon">
+                <Sparkles :size="20" />
+              </div>
+              <Loader2
+                v-if="!props.status.isReady && !props.status.error"
+                class="status-loader"
+                :size="20"
+                aria-hidden="true"
+              />
+            </div>
+            <p class="status-headline">{{ headline }}</p>
+            <p class="status-meta">{{ metaLine }}</p>
+            <p v-if="devRetryHint" class="dev-retry-hint">{{ devRetryHint }}</p>
+
+            <div v-if="props.status.error" class="error-block">
+              <p class="error-text">{{ props.status.error }}</p>
+              <button type="button" class="retry-btn ui-btn ui-btn--emphasis" @click="props.retry">
+                {{ t.loading.retry }}
+              </button>
+            </div>
+          </div>
+
+          <div v-if="!props.status.error" class="progress-block">
+            <div class="progress-header">
+              <span class="progress-pill">{{ progressLabel }}</span>
+            </div>
+            <div class="progress-outer">
+              <div class="progress-inner" :style="{ width: `${progressPercent}%` }" />
+            </div>
+          </div>
         </div>
-        <div class="loading-spinner"></div>
-        <p class="status-text">{{ statusText }}</p>
-        <div v-if="props.status.retryCount > 0" class="retry-info">
-          <span>{{ t.loading.retryCount.replace('{current}', String(props.status.retryCount)).replace('{max}', String(props.status.maxRetries || maxRetries)) }}</span>
-        </div>
-        <div v-if="props.status.error" class="error-section">
-          <p class="error-text">{{ props.status.error }}</p>
-          <button @click="props.retry" class="retry-button">
-            {{ t.loading.retry }}
-          </button>
-        </div>
-      </div>
-      
-      <div class="progress-section">
-        <div class="progress-bar">
-          <div class="progress-fill" :style="{ width: `${progressPercentage}%` }"></div>
-        </div>
-        <p class="progress-text">{{ progressText }}</p>
-      </div>
-    </div>
+      </section>
+    </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { Brain } from 'lucide-vue-next'
+import { computed, toRef } from 'vue'
+import { Loader2, Sparkles } from 'lucide-vue-next'
 import { useI18n } from '../../composables/useI18n'
 import type { BackendStatus } from '@/composables/useBackendStatus'
+import { useBackendStartupProgress } from '@/shared/composables/useBackendStartupProgress'
 
 const props = defineProps<{
   status: BackendStatus
@@ -51,9 +64,10 @@ const props = defineProps<{
 }>()
 
 const { t } = useI18n()
-const maxRetries = 30
+const statusRef = toRef(props, 'status')
+const { progressPercent, progressLabel } = useBackendStartupProgress(statusRef)
 
-const statusText = computed(() => {
+const headline = computed(() => {
   if (props.status.error) {
     return t.value.loading.connectionFailed
   }
@@ -61,243 +75,219 @@ const statusText = computed(() => {
     return t.value.loading.serviceReady
   }
   if (props.status.phase === 'backend_restarting') {
-    return t.value.loading.connectingService
+    return t.value.loading.startupRestarting
   }
-  if (props.status.retryCount === 0) {
-    return t.value.loading.detectingService
-  }
-  return t.value.loading.connectingService
+  return t.value.loading.startupHeadline
 })
 
-const progressPercentage = computed(() => {
-  if (props.status.isReady) {
-    return 100
-  }
-  if (props.status.error) {
-    return 0
-  }
-  return Math.min((props.status.retryCount / maxRetries) * 100, 95)
-})
-
-const progressText = computed(() => {
-  if (props.status.isReady) {
-    return t.value.loading.loadingApp
-  }
+const metaLine = computed(() => {
   if (props.status.error) {
     return t.value.loading.timeout
   }
-  if (props.status.phase === 'backend_restarting') {
-    return '正在恢复本地服务，请稍候…'
+  if (props.status.isReady) {
+    return t.value.loading.loadingApp
   }
-  return t.value.loading.startingService.replace('{seconds}', props.status.retryCount.toString())
+  return t.value.loading.startupProgressHint
+})
+
+const devRetryHint = computed(() => {
+  if (!import.meta.env.DEV || props.status.retryCount <= 0 || props.status.error) {
+    return ''
+  }
+  return t.value.loading.retryCount
+    .replace('{current}', String(props.status.retryCount))
+    .replace('{max}', String(props.status.maxRetries))
 })
 </script>
 
 <style scoped>
-.shell-view {
-  width: 100vw;
-  height: 100vh;
+.loading-view {
+  width: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  box-sizing: border-box;
+  background: var(--color-app-canvas);
+  color: var(--color-text-primary);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2rem;
-  background:
-    radial-gradient(circle at top, rgba(99, 102, 241, 0.16), transparent 42%),
-    linear-gradient(135deg, #f8fafc 0%, #eef2ff 45%, #e0f2fe 100%);
-  color: #0f172a;
+  padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
+    max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
 }
 
-.shell-panel {
-  width: min(100%, 480px);
-  padding: 2rem;
-  border-radius: 28px;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.12);
-  backdrop-filter: blur(16px);
+.launcher-stage {
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 0.25rem 0;
+  flex-shrink: 0;
 }
 
-.shell-header {
+.launcher-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.82rem;
+}
+
+.launcher-header {
+  margin-bottom: 0.1rem;
+}
+
+.brand-bar {
   display: flex;
   align-items: center;
-  gap: 1rem;
-  margin-bottom: 1.75rem;
-}
-
-.brand-mark {
-  width: 64px;
-  height: 64px;
-  border-radius: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, rgba(79, 70, 229, 0.12), rgba(56, 189, 248, 0.18));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  gap: 0.52rem;
 }
 
 .brand-logo {
-  width: 42px;
-  height: 42px;
-  object-fit: contain;
+  opacity: 0.9;
+  filter: grayscale(0.1);
 }
 
-.app-title {
-  font-size: 1.8rem;
-  font-weight: 700;
-  margin: 0 0 0.25rem 0;
-  color: #0f172a;
-}
-
-.app-subtitle {
-  font-size: 0.95rem;
-  color: #64748b;
+.brand-copy h1 {
   margin: 0;
+  font-size: 1.95rem;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  font-weight: 620;
 }
 
-.status-card {
+.launcher-slogan {
+  margin: 0.12rem 0 0;
+  color: var(--color-text-secondary);
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.startup-card {
+  border: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-surface-2) 82%, transparent);
+  overflow: hidden;
+}
+
+.startup-card-body {
+  padding: 0.86rem 0.9rem 0.72rem;
+}
+
+.startup-visual {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  padding: 1.5rem;
-  border-radius: 22px;
-  background: linear-gradient(180deg, rgba(248, 250, 252, 0.9), rgba(241, 245, 249, 0.92));
-  border: 1px solid rgba(148, 163, 184, 0.14);
+  gap: 0.62rem;
+  margin-bottom: 0.62rem;
 }
 
-.status-badge {
+.card-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--color-border) 85%, transparent);
+  background: color-mix(in srgb, var(--color-surface-1) 54%, transparent);
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.45rem 0.75rem;
-  border-radius: 999px;
-  margin-bottom: 1rem;
-  background: rgba(79, 70, 229, 0.08);
-  color: #4338ca;
-  font-size: 0.88rem;
-  font-weight: 600;
+  justify-content: center;
+  color: var(--color-text-secondary);
 }
 
-.loading-spinner {
-  width: 40px;
-  height: 40px;
-  border: 3px solid rgba(79, 70, 229, 0.12);
-  border-top: 3px solid #4f46e5;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin: 0 auto 1rem auto;
+.status-loader {
+  color: var(--color-text-secondary);
+  animation: spin 0.9s linear infinite;
 }
 
-.status-text {
-  font-size: 1.1rem;
-  margin: 0 0 0.5rem 0;
-  font-weight: 500;
-  color: #0f172a;
+.status-headline {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 620;
+  line-height: 1.35;
+  color: var(--color-text-primary);
 }
 
-.retry-info {
-  font-size: 0.9rem;
-  color: #64748b;
-  margin-bottom: 1rem;
+.status-meta {
+  margin: 0.28rem 0 0;
+  font-size: 0.74rem;
+  line-height: 1.35;
+  color: var(--color-text-secondary);
 }
 
-.error-section {
-  margin-top: 1rem;
+.dev-retry-hint {
+  margin: 0.5rem 0 0;
+  font-size: 0.66rem;
+  color: color-mix(in srgb, var(--color-text-secondary) 88%, transparent);
+}
+
+.error-block {
+  margin-top: 0.75rem;
 }
 
 .error-text {
-  color: #dc2626;
-  font-size: 0.9rem;
-  margin-bottom: 1rem;
+  margin: 0 0 0.62rem;
+  font-size: 0.74rem;
+  line-height: 1.4;
+  color: var(--color-danger);
 }
 
-.retry-button {
-  background: #4f46e5;
-  border: 1px solid #4338ca;
-  color: white;
-  padding: 0.65rem 1rem;
-  border-radius: 12px;
-  cursor: pointer;
-  font-size: 0.9rem;
+.retry-btn {
+  width: 100%;
+  padding: 0.48rem 0.85rem;
+  font-size: 0.82rem;
+}
+
+.progress-block {
+  padding: 0.72rem 0.9rem 0.86rem;
+  border-top: 1px solid color-mix(in srgb, var(--color-border) 84%, transparent);
+  background: color-mix(in srgb, var(--color-surface-1) 28%, transparent);
+}
+
+.progress-header {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.42rem;
+}
+
+.progress-pill {
+  border: 1px solid color-mix(in srgb, var(--color-primary) 34%, var(--color-border));
+  border-radius: 999px;
+  padding: 0.12rem 0.46rem;
+  color: color-mix(in srgb, var(--color-primary) 80%, white 12%);
+  font-size: 0.64rem;
+  line-height: 1.2;
   font-weight: 600;
-  transition: all 0.2s ease;
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
 }
 
-.retry-button:hover {
-  background: #4338ca;
-}
-
-.progress-section {
-  margin-top: 1.5rem;
-}
-
-.progress-bar {
+.progress-outer {
   width: 100%;
   height: 8px;
-  background: rgba(148, 163, 184, 0.18);
   border-radius: 999px;
+  background: color-mix(in srgb, var(--color-surface-2) 80%, transparent);
   overflow: hidden;
-  margin-bottom: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--color-border) 82%, transparent);
 }
 
-.progress-fill {
+.progress-inner {
   height: 100%;
-  background: linear-gradient(90deg, #4f46e5 0%, #06b6d4 100%);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--color-primary) 65%, transparent),
+    var(--color-primary)
+  );
+  box-shadow: 0 0 12px color-mix(in srgb, var(--color-primary) 36%, transparent);
   border-radius: 999px;
-  transition: width 0.3s ease;
-}
-
-.progress-text {
-  font-size: 0.85rem;
-  color: #64748b;
-  margin: 0;
+  transition: width 0.12s ease-out;
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
-@media (prefers-color-scheme: dark) {
-  .shell-view {
-    background:
-      radial-gradient(circle at top, rgba(99, 102, 241, 0.2), transparent 42%),
-      linear-gradient(135deg, #0f172a 0%, #111827 45%, #172554 100%);
-    color: #e2e8f0;
-  }
-
-  .shell-panel {
-    background: rgba(15, 23, 42, 0.86);
-    border-color: rgba(148, 163, 184, 0.12);
-    box-shadow: 0 24px 60px rgba(2, 6, 23, 0.5);
-  }
-
-  .app-title,
-  .status-text {
-    color: #f8fafc;
-  }
-
-  .app-subtitle,
-  .retry-info,
-  .progress-text {
-    color: #94a3b8;
-  }
-
-  .status-card {
-    background: linear-gradient(180deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.92));
-    border-color: rgba(148, 163, 184, 0.1);
-  }
-
-  .status-badge {
-    background: rgba(99, 102, 241, 0.14);
-    color: #c7d2fe;
-  }
-
-  .progress-bar {
-    background: rgba(148, 163, 184, 0.14);
-  }
-
-  .error-text {
-    color: #fca5a5;
+@media (max-width: 760px) {
+  .brand-copy h1 {
+    font-size: 1.5rem;
   }
 }
 </style>

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
+import { createAssistantSessionTerminalWaitRegistry } from '@dawnchat/host-orchestration-sdk/event-wait'
 
-import { createAssistantSessionTerminalWaitRegistry } from '@/features/plugin-dev-workbench/composables/assistantSessionTerminalWaitRegistry'
 
 describe('assistantSessionTerminalWaitRegistry', () => {
   it('notifies waiters for the matching session', () => {

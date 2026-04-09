@@ -1,14 +1,18 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { computed, defineComponent, ref } from 'vue'
 import { mount } from '@vue/test-utils'
 
 const ensureReadyWithWorkspace = vi.fn()
 const dispose = vi.fn()
+const fetchMock = vi.fn()
 
 vi.mock('@/features/coding-agent/store/codingAgentStore', () => ({
   useCodingAgentStore: () => ({
     ensureReadyWithWorkspace,
     dispose,
+    boundWorkspaceTarget: null,
+    workspaceProfile: null,
+    activeSessionId: '',
   }),
 }))
 
@@ -19,6 +23,12 @@ describe('useWorkbenchCodingRuntime', () => {
     ensureReadyWithWorkspace.mockReset()
     dispose.mockReset()
     ensureReadyWithWorkspace.mockResolvedValue(undefined)
+    fetchMock.mockReset()
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { workspace_path: '/tmp/plugin.a' } }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
   })
 
   it('挂载时对当前插件触发一次 runtime ensure', async () => {
@@ -61,5 +71,9 @@ describe('useWorkbenchCodingRuntime', () => {
     const wrapper = mount(Harness)
     wrapper.unmount()
     expect(dispose).toHaveBeenCalledTimes(1)
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
   })
 })

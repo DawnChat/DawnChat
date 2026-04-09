@@ -1,7 +1,9 @@
 import { computed } from 'vue'
 import { describe, expect, it, vi } from 'vitest'
-import { useAssistantSessionOrchestrator } from '@/features/plugin-dev-workbench/composables/useAssistantSessionOrchestrator'
-import type { CapabilityInvokeExecutionContext } from '@/composables/usePluginUiBridge'
+import {
+  useAssistantSessionOrchestrator
+} from '@dawnchat/host-orchestration-sdk/session-core'
+import type { CapabilityInvokeExecutionContext } from '@dawnchat/host-orchestration-sdk/assistant-client'
 
 const createContext = (
   functionName: string,

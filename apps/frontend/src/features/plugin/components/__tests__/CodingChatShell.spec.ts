@@ -92,7 +92,7 @@ vi.mock('@/features/coding-agent/store/codingAgentStore', () => ({
   useCodingAgentStore: () => mockStore
 }))
 
-vi.mock('@/services/plugin-ui-bridge/contextToken', () => ({
+vi.mock('@dawnchat/host-orchestration-sdk/assistant-client', () => ({
   expandContextTokens: (value: string) => value
 }))
 
@@ -104,7 +104,13 @@ vi.mock('@/services/plugins/pluginAgentAttachmentApi', () => ({
 vi.mock('@/features/coding-agent/components/plugin-dev-chat/PluginDevSessionTabs.vue', () => ({
   default: {
     name: 'PluginDevSessionTabs',
-    template: '<div class="session-tabs-stub" />'
+    emits: ['switch-session', 'create-session'],
+    template: `
+      <div class="session-tabs-stub">
+        <button class="emit-create-session" @click="$emit('create-session')" />
+        <button class="emit-switch-session" @click="$emit('switch-session', 'ses_other')" />
+      </div>
+    `
   }
 }))
 
@@ -219,6 +225,61 @@ describe('CodingChatShell', () => {
       pluginId: undefined,
       forceRestart: false
     })
+  })
+
+  it('新建会话时会显式携带当前 workspace 选项', async () => {
+    const wrapper = mount(CodingChatShell, {
+      props: {
+        modelValue: '',
+        pluginId: 'com.dawnchat.hello-world-vue',
+        emptyText: 'empty',
+        placeholder: 'placeholder',
+        streamingText: 'streaming',
+        blockedText: 'blocked',
+        runLabel: 'run',
+        newChatLabel: 'new'
+      }
+    })
+
+    await flushPromises()
+    await wrapper.find('.emit-create-session').trigger('click')
+    await flushPromises()
+
+    expect(mockStore.createSession).toHaveBeenCalledWith(
+      'new',
+      true,
+      expect.objectContaining({
+        pluginId: 'com.dawnchat.hello-world-vue',
+        forceRestart: false
+      })
+    )
+  })
+
+  it('切换 session 时会显式携带当前 workspace 选项', async () => {
+    const wrapper = mount(CodingChatShell, {
+      props: {
+        modelValue: '',
+        pluginId: 'com.dawnchat.hello-world-vue',
+        emptyText: 'empty',
+        placeholder: 'placeholder',
+        streamingText: 'streaming',
+        blockedText: 'blocked',
+        runLabel: 'run',
+        newChatLabel: 'new'
+      }
+    })
+
+    await flushPromises()
+    await wrapper.find('.emit-switch-session').trigger('click')
+    await flushPromises()
+
+    expect(mockStore.switchSession).toHaveBeenCalledWith(
+      'ses_other',
+      expect.objectContaining({
+        pluginId: 'com.dawnchat.hello-world-vue',
+        forceRestart: false
+      })
+    )
   })
 
   it('切换引擎时会刷新运行时且保留 workbench 的 general agent 约束', async () => {

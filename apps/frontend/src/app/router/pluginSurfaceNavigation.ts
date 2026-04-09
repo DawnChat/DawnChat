@@ -88,7 +88,7 @@ const openPluginRuntimeWindow = async (
   try {
     const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow')
     const label = buildRuntimeWindowLabel(pluginId)
-    const existingWindow = WebviewWindow.getByLabel(label)
+    const existingWindow = await WebviewWindow.getByLabel(label)
     if (existingWindow) {
       await focusRuntimeWindow(existingWindow)
       return true

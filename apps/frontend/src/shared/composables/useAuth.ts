@@ -285,17 +285,38 @@ export function useAuth() {
   // 通知后端函数已移除 - 纯前端认证
 
   /**
-   * 登出 - 纯前端实现
+   * 远端 Supabase 会话清理：不阻塞 UI / 路由，失败仅记录日志（本地已登出）。
+   */
+  const signOutSupabaseInBackground = (): void => {
+    void (async () => {
+      try {
+        const result = await supabaseSignOut()
+        if (!result.success) {
+          logger.warn('Supabase 登出返回异常，本地已登出', {
+            message: result.error
+          })
+        } else {
+          logger.info('Supabase 远端会话已清理')
+        }
+      } catch (err: unknown) {
+        logger.error('Supabase 登出异常（本地已登出）', err)
+      }
+    })()
+  }
+
+  /**
+   * 登出：先同步清空内存并 await 本地安全存储清理，供路由守卫识别为未登录；
+   * Supabase signOut 在后台执行，避免慢网络阻塞跳转登录页。
    */
   const logout = async () => {
     if (logoutInFlight) {
-      logger.info('ℹ️ logout 已在执行中，忽略重复请求')
+      logger.info('logout 已在执行中，忽略重复请求')
       return logoutInFlight
     }
 
     logoutInFlight = (async () => {
       try {
-        logger.info('🚪 开始登出（纯前端）...')
+        logger.info('开始登出（本地优先）...')
         user.value = null
         session.value = null
         error.value = null
@@ -305,22 +326,17 @@ export function useAuth() {
           clearUserFromStorage()
         ])
 
-        const result = await supabaseSignOut()
-        if (!result.success) {
-          logger.warn('⚠️ Supabase 登出返回异常，已保持本地登出状态', {
-            message: result.error
-          })
-        }
-
-        logger.info('🧹 用户状态已清除')
-        logger.info('✅ 已登出')
-      } catch (err: any) {
-        logger.error('❌ 登出失败:', err)
-        error.value = err.message || t.value.auth.logoutFailed
+        logger.info('本地会话已清除')
+        signOutSupabaseInBackground()
+      } catch (err: unknown) {
+        logger.error('登出失败（本地清理）:', err)
+        error.value =
+          err instanceof Error ? err.message : t.value.auth.logoutFailed
         await Promise.all([
           deleteSupabaseSession(),
           clearUserFromStorage()
         ])
+        signOutSupabaseInBackground()
       } finally {
         logoutInFlight = null
       }

@@ -10,14 +10,14 @@
         @click="expanded = !expanded"
       >
         <Wrench class="tool-icon" :size="13" />
-        <span class="tool-name">{{ displayModel.toolName }}</span>
+        <span class="tool-name" :title="displayModel.title">{{ displayModel.title }}</span>
         <span v-if="displayModel.argsPreview" class="tool-args" :title="displayModel.argsText">{{ displayModel.argsPreview }}</span>
         <span v-if="isWriteKind && displayModel.diffStat" class="tool-diff">{{ displayModel.diffStat }}</span>
         <ChevronRight class="tool-chevron" :size="12" :class="{ open: expanded }" />
       </button>
       <div v-else class="tool-main">
         <Wrench class="tool-icon" :size="13" />
-        <span class="tool-name">{{ displayModel.toolName }}</span>
+        <span class="tool-name" :title="displayModel.title">{{ displayModel.title }}</span>
         <span v-if="displayModel.argsPreview" class="tool-args" :title="displayModel.argsText">{{ displayModel.argsPreview }}</span>
         <span v-if="isWriteKind && displayModel.diffStat" class="tool-diff">{{ displayModel.diffStat }}</span>
       </div>
@@ -63,6 +63,9 @@
     :surface-mix="90"
     @outside-click="showInputPopover = false"
   >
+    <div class="tool-input-popover-meta">
+      <div><strong>Tool</strong>: {{ displayModel.toolName }}</div>
+    </div>
     <div class="tool-input-popover-title">Tool Input</div>
     <pre class="tool-input-pre">{{ displayModel.fullInputText }}</pre>
   </FloatingPopover>
@@ -119,6 +122,7 @@ const displayModel = computed(() => {
   const args = String(props.display?.argsText || '').trim()
   const argsPreview = String(props.display?.argsPreview || args).trim()
   const summary = String(props.display?.summary || props.text || '').trim()
+  const title = String(props.display?.title || summary || name).trim() || name
   const hasError = Boolean(props.display?.hasError)
   const details = String(
     hasError
@@ -129,6 +133,7 @@ const displayModel = computed(() => {
   const hasDetails = Boolean(props.display?.hasDetails || details || shellOutput)
   return {
     kind: String(props.display?.kind || 'other'),
+    title,
     toolName: name,
     argsText: args,
     argsPreview,
@@ -219,9 +224,13 @@ const showDetails = computed(() => {
 }
 
 .tool-name {
-  flex: 0 0 auto;
+  min-width: 0;
+  max-width: min(52vw, 320px);
   color: var(--color-text);
   font-size: 0.78rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .tool-wrap[data-kind='write'] .tool-name {
@@ -304,8 +313,14 @@ const showDetails = computed(() => {
 }
 
 .tool-input-popover-title {
-  margin: 0 0 0.35rem;
+  margin: 0.35rem 0 0.35rem;
   font-size: 0.72rem;
+  color: var(--color-text-secondary);
+}
+
+.tool-input-popover-meta {
+  font-size: 0.73rem;
+  line-height: 1.35;
   color: var(--color-text-secondary);
 }
 

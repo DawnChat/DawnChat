@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { BRIDGE_MESSAGE_TYPE } from '@dawnchat/host-orchestration-sdk/assistant-client'
 
-import { BRIDGE_MESSAGE_TYPE } from '../constants'
 import { PluginUiBridgeClient } from '../bridgeClient'
 
 vi.mock('../../../utils/backendUrl', () => ({

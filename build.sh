@@ -191,6 +191,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$SCRIPT_DIR"
 BACKEND_DIR="$PROJECT_ROOT/packages/backend-kernel"
 SDK_DIR="$PROJECT_ROOT/dawnchat-plugins/sdk"
+ASSISTANT_SDK_DIR="$PROJECT_ROOT/dawnchat-plugins/assistant-sdk"
+ASSISTANT_WORKSPACE_DIR="$PROJECT_ROOT/dawnchat-plugins/assistant-workspace"
 FRONTEND_DIR="$PROJECT_ROOT/apps/frontend"
 TAURI_DIR="$PROJECT_ROOT/apps/desktop/src-tauri"
 SIDECAR_DIR="$TAURI_DIR/sidecars/dawnchat-backend"
@@ -204,6 +206,9 @@ UV_BINARY_ASSETS_DIR="$RUNTIME_ASSETS_DIR/uv-binary"
 BUN_BINARY_ASSETS_DIR="$RUNTIME_ASSETS_DIR/bun-bin"
 OPENCODE_BINARY_ASSETS_DIR="$RUNTIME_ASSETS_DIR/opencode-bin"
 RUNTIME_ASSETS_MANIFEST_PATH="${DAWNCHAT_RUNTIME_ASSETS_MANIFEST_PATH:-$PROJECT_ROOT/scripts/runtime-assets-manifest.json}"
+
+ASSISTANT_WORKSPACE_READY=false
+ASSISTANT_TEMPLATE_DIST_READY=false
 
 # Llama.cpp 版本
 LLAMA_VERSION="b7204"
@@ -1131,6 +1136,176 @@ copy_bun_binary() {
     print_success "bun 二进制复制完成 -> $dest_path"
 }
 
+template_uses_assistant_sdk() {
+    local package_json_path="$1"
+    if [[ ! -f "$package_json_path" ]]; then
+        return 1
+    fi
+    python3 - "$package_json_path" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+try:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+except Exception:
+    raise SystemExit(1)
+
+for section in ("dependencies", "devDependencies"):
+    deps = payload.get(section)
+    if not isinstance(deps, dict):
+        continue
+    for package_name in ("@dawnchat/assistant-core", "@dawnchat/host-orchestration-sdk"):
+        if str(deps.get(package_name) or "").strip() == "workspace:*":
+            raise SystemExit(0)
+raise SystemExit(1)
+PY
+}
+
+ensure_assistant_workspace_deps() {
+    local bun_bin="$1"
+    if [[ "$ASSISTANT_WORKSPACE_READY" == true ]]; then
+        return 0
+    fi
+    if [[ ! -x "$bun_bin" ]]; then
+        print_error "缺少 bun 二进制，无法初始化 assistant workspace: $bun_bin"
+        exit 1
+    fi
+    if [[ ! -f "$ASSISTANT_WORKSPACE_DIR/package.json" ]]; then
+        print_error "缺少 assistant workspace 配置: $ASSISTANT_WORKSPACE_DIR/package.json"
+        exit 1
+    fi
+    print_info "安装 assistant workspace 依赖..."
+    (cd "$ASSISTANT_WORKSPACE_DIR" && "$bun_bin" install --frozen-lockfile)
+    ASSISTANT_WORKSPACE_READY=true
+}
+
+run_assistant_workspace_script() {
+    local bun_bin="$1"
+    local script_name="$2"
+    ensure_assistant_workspace_deps "$bun_bin"
+    print_info "执行 assistant workspace 脚本: $script_name"
+    (cd "$ASSISTANT_WORKSPACE_DIR" && "$bun_bin" run "$script_name")
+}
+
+build_assistant_sdk_bundle() {
+    print_step "构建 Assistant SDK dist 包"
+
+    if [[ ! -d "$ASSISTANT_SDK_DIR" ]]; then
+        print_warning "Assistant SDK 目录不存在，跳过: $ASSISTANT_SDK_DIR"
+        return 0
+    fi
+    local bun_bin="$SIDECAR_DIR/bun-bin/bun"
+    if [[ "$TARGET_PLATFORM" == *"windows"* || "$OSTYPE" == msys* || "$OSTYPE" == cygwin* ]]; then
+        bun_bin="$SIDECAR_DIR/bun-bin/bun.exe"
+    fi
+    run_assistant_workspace_script "$bun_bin" "build:sdk"
+}
+
+assistant_sdk_missing_files() {
+    local package_dir="$1"
+    python3 - "$package_dir" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+package_dir = Path(sys.argv[1])
+package_json_path = package_dir / "package.json"
+if not package_json_path.exists():
+    print(package_json_path)
+    raise SystemExit(0)
+
+try:
+    payload = json.loads(package_json_path.read_text(encoding="utf-8"))
+except Exception:
+    print(package_json_path)
+    raise SystemExit(0)
+
+targets = set()
+
+def collect(value: object) -> None:
+    if isinstance(value, str):
+        if value.startswith("./"):
+            targets.add(value)
+        return
+    if isinstance(value, dict):
+        for nested in value.values():
+            collect(nested)
+        return
+    if isinstance(value, list):
+        for nested in value:
+            collect(nested)
+
+for key in ("main", "types"):
+    collect(payload.get(key))
+collect(payload.get("exports"))
+
+missing = [package_dir / target[2:] for target in sorted(targets) if not (package_dir / target[2:]).exists()]
+for path in missing:
+    print(path)
+PY
+}
+
+copy_dist_ready_assistant_sdk_package() {
+    local src_dir="$1"
+    local dest_dir="$2"
+    local missing_files=""
+
+    missing_files="$(assistant_sdk_missing_files "$src_dir")"
+    if [[ -n "$missing_files" ]]; then
+        print_error "Assistant SDK dist 包不完整:"
+        printf '%s\n' "$missing_files"
+        exit 1
+    fi
+
+    rm -rf "$dest_dir"
+    mkdir -p "$dest_dir"
+    cp "$src_dir/package.json" "$dest_dir/package.json"
+    if [[ -f "$src_dir/README.md" ]]; then
+        cp "$src_dir/README.md" "$dest_dir/README.md"
+    fi
+
+    if command -v rsync >/dev/null 2>&1; then
+        rsync -a --delete "$src_dir/dist/" "$dest_dir/dist/"
+    else
+        cp -R "$src_dir/dist" "$dest_dir/dist"
+    fi
+}
+
+copy_assistant_sdk_bundle() {
+    print_step "复制 Assistant SDK runtime bundle"
+
+    if [[ ! -d "$ASSISTANT_SDK_DIR" ]]; then
+        print_warning "Assistant SDK 目录不存在，跳过: $ASSISTANT_SDK_DIR"
+        return 0
+    fi
+
+    local dest_dir="$SIDECAR_DIR/dawnchat-plugins/assistant-sdk"
+    mkdir -p "$SIDECAR_DIR/dawnchat-plugins"
+    rm -rf "$dest_dir"
+
+    local package_name=""
+    local package_src=""
+    local package_dest=""
+    for package_name in assistant-core host-orchestration-sdk; do
+        package_src="$ASSISTANT_SDK_DIR/$package_name"
+        package_dest="$dest_dir/$package_name"
+        copy_dist_ready_assistant_sdk_package "$package_src" "$package_dest"
+    done
+
+    print_success "Assistant SDK runtime bundle 复制完成 -> $dest_dir"
+}
+
+ensure_assistant_template_dist_ready() {
+    local bun_bin="$1"
+    if [[ "$ASSISTANT_TEMPLATE_DIST_READY" == true ]]; then
+        return 0
+    fi
+    run_assistant_workspace_script "$bun_bin" "build:templates"
+    ASSISTANT_TEMPLATE_DIST_READY=true
+}
+
 # ============ 构建并内置 starter 模板（source + dist，不内置 node_modules） ============
 prepare_builtin_desktop_template() {
     print_step "构建并内置 starter 模板 (source + dist)"
@@ -1149,7 +1324,7 @@ prepare_builtin_desktop_template() {
     local src_dir=""
     local dest_dir=""
     local web_src=""
-    local template_ids=("desktop-starter" "desktop-hello-world" "desktop-ai-assistant" "web-starter-vue" "mobile-starter-ionic")
+    local template_ids=("desktop-starter" "desktop-hello-world" "desktop-ai-assistant" "web-starter-vue" "web-ai-assistant" "mobile-starter-ionic")
     for template_id in "${template_ids[@]}"; do
         src_dir="$OFFICIAL_PLUGINS_DIR/$template_id"
         dest_dir="$dest_root/$template_id"
@@ -1163,10 +1338,15 @@ prepare_builtin_desktop_template() {
             web_src="$src_dir/_ir/frontend/web-src"
         fi
         if [[ -f "$web_src/package.json" ]]; then
-            print_info "安装 $template_id 前端依赖..."
-            (cd "$web_src" && "$bun_bin" install)
-            print_info "构建 $template_id 前端产物..."
-            (cd "$web_src" && "$bun_bin" run build)
+            if template_uses_assistant_sdk "$web_src/package.json"; then
+                print_info "检测到 assistant-sdk workspace 依赖，改由 assistant workspace 统一构建 $template_id 前端产物"
+                ensure_assistant_template_dist_ready "$bun_bin"
+            else
+                print_info "安装 $template_id 前端依赖..."
+                (cd "$web_src" && "$bun_bin" install)
+                print_info "构建 $template_id 前端产物..."
+                (cd "$web_src" && "$bun_bin" run build)
+            fi
         fi
 
         mkdir -p "$dest_root"
@@ -1295,6 +1475,7 @@ export PYTHONHOME="\$BACKEND_DIR/python"
 export PYTHONPATH="\$BACKEND_DIR:\$BACKEND_DIR/python/lib/python3.11/site-packages"
 export PYTHONDONTWRITEBYTECODE=1
 export LOG_LEVEL="$log_level"
+export DAWNCHAT_RUNTIME_DISTRIBUTION="$BUILD_MODE"
 
 exec "\$BACKEND_DIR/python/bin/python3.11" "\$BACKEND_DIR/app/main.py" "\$@"
 SCRIPT
@@ -1310,6 +1491,7 @@ set PYTHONHOME=%BACKEND_DIR%\python
 set PYTHONPATH=%BACKEND_DIR%;%BACKEND_DIR%\python\Lib\site-packages
 set PYTHONDONTWRITEBYTECODE=1
 set LOG_LEVEL=$log_level
+set DAWNCHAT_RUNTIME_DISTRIBUTION=$BUILD_MODE
 
 "%BACKEND_DIR%\python\python.exe" "%BACKEND_DIR%\app\main.py" %*
 SCRIPT
@@ -1851,6 +2033,8 @@ main() {
         copy_tts_kokoro_model
         copy_uv_binary "$platform"
         copy_bun_binary "$platform"
+        build_assistant_sdk_bundle
+        copy_assistant_sdk_bundle
         prepare_builtin_desktop_template
         copy_opencode_binary "$platform"
         copy_opencode_rules_default

@@ -33,10 +33,6 @@
       :publish-web-label="t.apps.publishWeb"
       :mobile-preview-qr-label="t.apps.mobilePreviewQr"
       :mobile-offline-upload-label="t.apps.mobileOfflineUpload"
-      :show-create-assistant-action="showCreateAssistantAction"
-      :create-assistant-label="t.apps.workbenchCreateAssistant"
-      :create-assistant-loading="creatingAssistant"
-      :create-assistant-loading-label="t.apps.workbenchCreateAssistantCreating"
       :close-label="t.apps.workbenchClose"
       :edit-name-label="t.apps.workbenchRenameAction"
       :save-name-label="t.apps.workbenchRenameSave"
@@ -49,7 +45,6 @@
       @open-web-publish="openPublishDialog"
       @open-mobile-qr="openMobilePreviewQr"
       @open-mobile-offline="openMobileOfflinePlaceholder"
-      @create-assistant="createAssistantFromWorkbench"
       @close="handleCloseWorkbench"
     />
     <template v-if="workbenchLayoutVariant !== 'compact'">
@@ -378,8 +373,6 @@ const {
   workbenchLayoutVariant,
   isAgentPreviewLayout,
   hasIwpRequirements,
-  showCreateAssistantAction,
-  creatingAssistant,
   isAssistantCompactSurface,
   setWorkbenchMode,
   setChatInput,
@@ -414,7 +407,6 @@ const {
   handleCapabilityInvokeRequest,
   handleAssistantRuntimeEvent,
   handleHostInvokeRequest,
-  createAssistantFromWorkbench,
 } = usePluginDevWorkbenchOrchestration()
 
 const handleAzureApiKeyChange = (value: string) => {

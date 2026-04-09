@@ -206,10 +206,10 @@ const handleLogout = async () => {
   }
   isLoggingOut.value = true
   try {
+    await logout()
     if (route.name !== 'login') {
       await router.replace({ name: 'login' })
     }
-    await logout()
   } finally {
     isLoggingOut.value = false
   }

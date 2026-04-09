@@ -64,14 +64,6 @@
     <div class="workbench-actions">
       <span v-if="isBuildRunning" class="build-status">{{ buildRunningLabel }}</span>
       <button
-        v-if="showCreateAssistantAction"
-        class="secondary-btn ui-btn ui-btn--neutral"
-        :disabled="createAssistantLoading"
-        @click="emit('createAssistant')"
-      >
-        {{ createAssistantLoading ? createAssistantLoadingLabel : createAssistantLabel }}
-      </button>
-      <button
         v-if="hasBuildSession"
         class="secondary-btn ui-btn ui-btn--neutral"
         @click="emit('openBuildSession')"
@@ -119,10 +111,6 @@ const props = defineProps<{
   publishWebLabel: string
   mobilePreviewQrLabel: string
   mobileOfflineUploadLabel: string
-  showCreateAssistantAction: boolean
-  createAssistantLabel: string
-  createAssistantLoading: boolean
-  createAssistantLoadingLabel: string
   closeLabel: string
   editNameLabel: string
   saveNameLabel: string
@@ -135,7 +123,6 @@ const emit = defineEmits<{
   openWebPublish: []
   openMobileQr: []
   openMobileOffline: []
-  createAssistant: []
   switchMode: [mode: 'requirements' | 'agent']
   openBuildSession: []
   close: []

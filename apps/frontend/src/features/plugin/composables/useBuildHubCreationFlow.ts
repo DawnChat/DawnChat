@@ -2,8 +2,10 @@ import { ref, type Ref } from 'vue'
 import { useI18n } from '@/composables/useI18n'
 import {
   AI_ASSISTANT_TEMPLATE_ID,
+  getAssistantTemplateCatalog,
   MAIN_AI_ASSISTANT_ID_SUFFIX,
   getAppTemplateCatalog,
+  type CreateAssistantPlatformType,
   type CreateAppType
 } from '@/config/appTemplates'
 import type { Plugin } from '@/features/plugin/types'
@@ -66,6 +68,10 @@ export function useBuildHubCreationFlow({
 }: BuildHubCreationFlowOptions) {
   const { t } = useI18n()
   const quickCreateLoadingType = ref<CreateAppType | 'assistant' | null>(null)
+  const creatingAssistant = ref(false)
+  const createAssistantDialogVisible = ref(false)
+  const createAssistantDraftName = ref('')
+  const createAssistantDraftPlatform = ref<CreateAssistantPlatformType>('desktop')
 
   const buildPluginIdFromName = (name: string) => {
     const slug = toSlug(String(name || '').slice(0, 36)) || 'new-app'
@@ -73,6 +79,22 @@ export function useBuildHubCreationFlow({
   }
 
   const buildMainAssistantPluginId = () => `${buildOwnerPrefix(user.value)}.${MAIN_AI_ASSISTANT_ID_SUFFIX}`
+
+  const buildNextAssistantName = () => {
+    const baseName = String(t.value.apps.quickCreateAssistantName || 'AI Assistant').trim()
+    const normalizedBase = baseName.toLocaleLowerCase()
+    const existingNames = installedApps.value
+      .map((item) => String(item?.name || '').trim())
+      .filter(Boolean)
+    if (!existingNames.some((item) => item.toLocaleLowerCase() === normalizedBase)) {
+      return baseName
+    }
+    let index = 2
+    while (existingNames.some((item) => item.toLocaleLowerCase() === `${normalizedBase} ${index}`)) {
+      index += 1
+    }
+    return `${baseName} ${index}`
+  }
 
   const isMainAssistantIdentity = (plugin: Plugin) => {
     if (plugin.is_main_assistant === true) return true
@@ -148,6 +170,53 @@ export function useBuildHubCreationFlow({
     }
   }
 
+  const openCreateAssistantDialog = () => {
+    if (quickCreateLoadingType.value || creatingAssistant.value) return
+    if (!user.value?.id || !user.value.email) {
+      openCreateWizard()
+      return
+    }
+    createAssistantDraftName.value = buildNextAssistantName()
+    createAssistantDraftPlatform.value = 'desktop'
+    createAssistantDialogVisible.value = true
+  }
+
+  const closeCreateAssistantDialog = () => {
+    if (creatingAssistant.value) return
+    createAssistantDialogVisible.value = false
+  }
+
+  const createAssistant = async (name: string, appType: CreateAssistantPlatformType = 'desktop') => {
+    if (creatingAssistant.value) return
+    if (!user.value?.id || !user.value.email) {
+      openCreateWizard()
+      return
+    }
+    const template = getAssistantTemplateCatalog(appType)
+    const assistantName = String(name || '').trim() || buildNextAssistantName()
+    const suffixBase = toSlug(assistantName) || 'ai-assistant'
+    const suffix = toSlug(`${suffixBase}-${Date.now().toString().slice(-6)}`) || `ai-assistant-${Date.now()}`
+    creatingAssistant.value = true
+    createAssistantDialogVisible.value = false
+    try {
+      await ensureTemplateCache(template.templateId, false)
+      await createDevSession({
+        template_id: template.templateId,
+        app_type: template.appType,
+        name: assistantName,
+        plugin_id: `${buildOwnerPrefix(user.value)}.${suffix}`,
+        description: '',
+        owner_email: user.value.email,
+        owner_user_id: user.value.id,
+        is_main_assistant: false,
+      })
+    } catch (err) {
+      logger.error('Create assistant failed', { err })
+    } finally {
+      creatingAssistant.value = false
+    }
+  }
+
   const openOrCreateMainAssistant = async () => {
     if (quickCreateLoadingType.value) return
     if (!user.value?.id || !user.value.email) {
@@ -213,9 +282,16 @@ export function useBuildHubCreationFlow({
 
   return {
     quickCreateLoadingType,
+    creatingAssistant,
+    createAssistantDialogVisible,
+    createAssistantDraftName,
+    createAssistantDraftPlatform,
     handleCreatePlugin,
     handleCreateAppTypeChange,
     handleQuickCreate,
+    openCreateAssistantDialog,
+    closeCreateAssistantDialog,
+    createAssistant,
     openOrCreateMainAssistant,
     handleForkApp,
   }

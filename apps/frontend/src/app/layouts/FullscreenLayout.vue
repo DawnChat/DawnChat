@@ -4,24 +4,54 @@
       <X :size="18" />
     </button>
     <RouterView />
+    <UnifiedLifecycleProgressModal
+      :visible="lifecycleModalVisible"
+      :task="activeLifecycleTask"
+      @close="closeLifecycleModal"
+      @cancel="handleCancelLifecycle"
+      @retry="handleRetryLifecycle"
+      @done="handleLifecycleDone"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { X } from 'lucide-vue-next'
 import { computed } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useRouter, useRoute, RouterView } from 'vue-router'
 import { useI18n } from '@/composables/useI18n'
 import { resolveFullscreenBackTarget } from '@/app/router/deepLink'
+import { usePluginStore } from '@/features/plugin/store'
+import UnifiedLifecycleProgressModal from '@/features/plugin/components/UnifiedLifecycleProgressModal.vue'
 
 const router = useRouter()
 const route = useRoute()
 const { t } = useI18n()
+const pluginStore = usePluginStore()
+const { closeLifecycleModal, cancelLifecycleTask, retryLifecycleTaskAndHandle, finalizeActiveLifecycleTask } = pluginStore
+const { activeLifecycleTask, lifecycleModalVisible } = storeToRefs(pluginStore)
 const showCloseButton = computed(() => route.name !== 'plugin-dev-workbench')
 
 const handleClose = () => {
   const target = resolveFullscreenBackTarget(route.query.from)
   router.replace(target)
+}
+
+const handleCancelLifecycle = async () => {
+  await cancelLifecycleTask()
+}
+
+const handleRetryLifecycle = async () => {
+  await retryLifecycleTaskAndHandle({
+    from: String(route.fullPath || ''),
+    completionMessage: '启动完成，打开中...',
+    uiMode: 'modal',
+  })
+}
+
+const handleLifecycleDone = () => {
+  finalizeActiveLifecycleTask()
 }
 </script>
 

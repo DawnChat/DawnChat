@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 import { useBuildHubCreationFlow } from '@/features/plugin/composables/useBuildHubCreationFlow'
-import { AI_ASSISTANT_TEMPLATE_ID } from '@/config/appTemplates'
+import {
+  AI_ASSISTANT_TEMPLATE_ID,
+  WEB_AI_ASSISTANT_TEMPLATE_ID
+} from '@/config/appTemplates'
 
 vi.mock('@/composables/useI18n', () => ({
   useI18n: () => ({
@@ -19,6 +22,86 @@ vi.mock('@/composables/useI18n', () => ({
 }))
 
 describe('useBuildHubCreationFlow', () => {
+  it('打开 assistant 新建弹窗时会预填下一个名称', () => {
+    const flow = useBuildHubCreationFlow({
+      user: ref({ id: 'uid_1', email: 'demo@example.com' }),
+      installedApps: ref([
+        { id: 'com.demo.a1', name: '我的 AI 助手' },
+        { id: 'com.demo.a2', name: '我的 AI 助手 2' },
+      ] as any),
+      openCreateWizard: vi.fn(),
+      closeCreateWizard: vi.fn(),
+      createDevSession: vi.fn(async () => ({ task_id: 'task_1' })),
+      openAppDevWorkbench: vi.fn(async () => {}),
+      startAppDevSession: vi.fn(async () => {}),
+      ensureTemplateCache: vi.fn(async () => ({})),
+    })
+
+    flow.openCreateAssistantDialog()
+
+    expect(flow.createAssistantDialogVisible.value).toBe(true)
+    expect(flow.createAssistantDraftName.value).toBe('我的 AI 助手 3')
+    expect(flow.createAssistantDraftPlatform.value).toBe('desktop')
+  })
+
+  it('从首页创建 assistant 时会创建桌面 assistant 实例', async () => {
+    const createDevSession = vi.fn(async () => ({ task_id: 'task_1' }))
+    const ensureTemplateCache = vi.fn(async () => ({}))
+    const flow = useBuildHubCreationFlow({
+      user: ref({ id: 'uid_1', email: 'demo@example.com' }),
+      installedApps: ref([]),
+      openCreateWizard: vi.fn(),
+      closeCreateWizard: vi.fn(),
+      createDevSession,
+      openAppDevWorkbench: vi.fn(async () => {}),
+      startAppDevSession: vi.fn(async () => {}),
+      ensureTemplateCache,
+    })
+
+    flow.openCreateAssistantDialog()
+    await flow.createAssistant('新的助手')
+
+    expect(flow.createAssistantDialogVisible.value).toBe(false)
+    expect(createDevSession).toHaveBeenCalledTimes(1)
+    expect(createDevSession).toHaveBeenCalledWith(expect.objectContaining({
+      template_id: AI_ASSISTANT_TEMPLATE_ID,
+      app_type: 'desktop',
+      name: '新的助手',
+      owner_email: 'demo@example.com',
+      owner_user_id: 'uid_1',
+      is_main_assistant: false,
+    }))
+    expect(ensureTemplateCache).toHaveBeenCalledWith(AI_ASSISTANT_TEMPLATE_ID, false)
+  })
+
+  it('从首页创建 web assistant 时会使用 web assistant 模板', async () => {
+    const createDevSession = vi.fn(async () => ({ task_id: 'task_1' }))
+    const ensureTemplateCache = vi.fn(async () => ({}))
+    const flow = useBuildHubCreationFlow({
+      user: ref({ id: 'uid_1', email: 'demo@example.com' }),
+      installedApps: ref([]),
+      openCreateWizard: vi.fn(),
+      closeCreateWizard: vi.fn(),
+      createDevSession,
+      openAppDevWorkbench: vi.fn(async () => {}),
+      startAppDevSession: vi.fn(async () => {}),
+      ensureTemplateCache,
+    })
+
+    flow.openCreateAssistantDialog()
+    await flow.createAssistant('新的 Web 助手', 'web')
+
+    expect(createDevSession).toHaveBeenCalledWith(expect.objectContaining({
+      template_id: WEB_AI_ASSISTANT_TEMPLATE_ID,
+      app_type: 'web',
+      name: '新的 Web 助手',
+      owner_email: 'demo@example.com',
+      owner_user_id: 'uid_1',
+      is_main_assistant: false,
+    }))
+    expect(ensureTemplateCache).toHaveBeenCalledWith(WEB_AI_ASSISTANT_TEMPLATE_ID, false)
+  })
+
   it('主 assistant 不存在时自动创建官方主实例', async () => {
     const createDevSession = vi.fn(async () => ({ task_id: 'task_1' }))
     const openAppDevWorkbench = vi.fn(async () => {})

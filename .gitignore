@@ -129,7 +129,9 @@ apps/dawnchat-ios/ios/App/App/config.xml
 cloud/
 assets/
 docs/internal/
+# It has its own .gitignore and is a standalone git repository
 dawnchat-plugins/
+# It has its own .gitignore and is a standalone git repository
 DawnChatWeb/
 CLAUDE.md
 worktree-manager.sh

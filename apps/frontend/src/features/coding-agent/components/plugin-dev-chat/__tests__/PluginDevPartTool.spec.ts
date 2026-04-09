@@ -25,7 +25,7 @@ describe('PluginDevPartTool', () => {
 
     expect(wrapper.find('.tool-line').exists()).toBe(true)
     expect(wrapper.find('.tool-toggle').exists()).toBe(false)
-    expect(wrapper.find('.tool-name').text()).toBe('read')
+    expect(wrapper.find('.tool-name').text()).toBe('read App.vue')
     expect(wrapper.find('.tool-args').text()).toContain('App.vue')
     expect(wrapper.find('.tool-pre').exists()).toBe(false)
   })
@@ -55,7 +55,7 @@ describe('PluginDevPartTool', () => {
     expect(wrapper.find('.tool-details').exists()).toBe(false)
     await wrapper.find('.tool-toggle').trigger('click')
     expect(wrapper.find('.tool-details').exists()).toBe(true)
-    expect(wrapper.find('.tool-name').text()).toBe('glob')
+    expect(wrapper.find('.tool-name').text()).toBe('glob 匹配文件')
     expect(wrapper.find('.tool-args').text()).toContain('**/*.spec.ts apps/frontend/src')
     expect(wrapper.text()).toContain('a.spec.ts')
     expect(wrapper.find('.tool-summary').exists()).toBe(false)
@@ -140,6 +140,7 @@ describe('PluginDevPartTool', () => {
     const popover = document.body.querySelector('.tool-input-popover')
     const pre = document.body.querySelector('.tool-input-pre')
     expect(popover).not.toBeNull()
+    expect(popover?.textContent || '').toContain('Tool: search')
     expect(pre?.textContent || '').toContain('"query": "keyword"')
 
     document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))

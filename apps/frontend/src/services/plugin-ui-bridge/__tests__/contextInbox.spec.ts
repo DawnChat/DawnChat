@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { contextPayloadToComposerText, contextPayloadToComposerToken } from '../contextInbox'
+import {
+  contextPayloadToComposerText,
+  contextPayloadToComposerToken
+} from '@dawnchat/host-orchestration-sdk/assistant-client'
 
 describe('contextPayloadToComposerText', () => {
   it('会优先拼接 metadata.preview，再拼接 text/image 项', () => {

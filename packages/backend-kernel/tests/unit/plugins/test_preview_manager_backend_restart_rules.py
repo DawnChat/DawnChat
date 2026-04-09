@@ -24,6 +24,30 @@ def _build_bun_session() -> SimpleNamespace:
     )
 
 
+def _create_dist_ready_sdk_package(path: Path, name: str) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+    (path / "package.json").write_text(
+        (
+            "{\n"
+            f'  "name": "{name}",\n'
+            '  "main": "./dist/index.js",\n'
+            '  "types": "./dist/index.d.ts",\n'
+            '  "exports": {\n'
+            '    ".": {\n'
+            '      "types": "./dist/index.d.ts",\n'
+            '      "import": "./dist/index.js"\n'
+            "    }\n"
+            "  }\n"
+            "}\n"
+        ),
+        encoding="utf-8",
+    )
+    dist_dir = path / "dist"
+    dist_dir.mkdir(parents=True, exist_ok=True)
+    (dist_dir / "index.js").write_text("export {};\n", encoding="utf-8")
+    (dist_dir / "index.d.ts").write_text("export {};\n", encoding="utf-8")
+
+
 def test_should_restart_backend_for_bun_backend_code_change() -> None:
     plugin = _build_plugin()
     session = _build_bun_session()
@@ -246,3 +270,58 @@ def test_apply_preview_runtime_fields_syncs_frontend_probe_state_with_namespace(
 
     assert plugin.preview.frontend_reachable is False
     assert plugin.preview.frontend_last_probe_at == "2026-04-03T06:54:27Z"
+
+
+def test_validate_assistant_sdk_dependencies_rejects_workspace_specifier(tmp_path: Path) -> None:
+    package_json = tmp_path / "package.json"
+    package_json.write_text(
+        """
+        {
+          "dependencies": {
+            "@dawnchat/assistant-core": "workspace:*"
+          }
+        }
+        """.strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError, match="not rewritten before preview install"):
+        PluginPreviewManager._validate_assistant_sdk_dependencies(package_json)
+
+
+def test_validate_assistant_sdk_dependencies_rejects_missing_file_target(tmp_path: Path) -> None:
+    package_json = tmp_path / "package.json"
+    package_json.write_text(
+        """
+        {
+          "dependencies": {
+            "@dawnchat/assistant-core": "file:../vendor/assistant-sdk/assistant-core"
+          }
+        }
+        """.strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError, match="missing or incomplete dist bundles"):
+        PluginPreviewManager._validate_assistant_sdk_dependencies(package_json)
+
+
+def test_validate_assistant_sdk_dependencies_rejects_incomplete_dist_bundle(tmp_path: Path) -> None:
+    sdk_dir = tmp_path / "vendor" / "assistant-sdk" / "assistant-core"
+    _create_dist_ready_sdk_package(sdk_dir, "@dawnchat/assistant-core")
+    (sdk_dir / "dist" / "index.js").unlink()
+
+    package_json = tmp_path / "package.json"
+    package_json.write_text(
+        """
+        {
+          "dependencies": {
+            "@dawnchat/assistant-core": "file:./vendor/assistant-sdk/assistant-core"
+          }
+        }
+        """.strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError, match="dist incomplete"):
+        PluginPreviewManager._validate_assistant_sdk_dependencies(package_json)

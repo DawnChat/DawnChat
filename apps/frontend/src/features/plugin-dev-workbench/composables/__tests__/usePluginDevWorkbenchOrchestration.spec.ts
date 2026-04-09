@@ -40,6 +40,28 @@ const activeAppRef = ref({
 const loadFileList = vi.fn(async () => {})
 const routerReplace = vi.fn(async () => {})
 const routerPush = vi.fn(async () => {})
+const facadeLoadApps = vi.fn(async () => {})
+const facadeRefreshPreviewStatus = vi.fn(async () => {})
+const lifecycleRunMock = vi.fn(async () => ({
+  task_id: 'task-1',
+  operation_type: 'create_dev_session',
+  plugin_id: 'com.test.created-assistant',
+  app_type: 'desktop',
+  status: 'completed',
+  created_at: '',
+  updated_at: '',
+  elapsed_seconds: 0,
+  progress: {
+    stage: 'completed',
+    stage_label: 'completed',
+    progress: 100,
+    message: 'done',
+  },
+  result: { plugin_id: 'com.test.created-assistant' },
+  error: null,
+}))
+const openLifecycleModalMock = vi.fn()
+const finalizeActiveLifecycleTaskMock = vi.fn()
 
 vi.mock('vue-router', () => ({
   useRoute: () => routeRef.value,
@@ -56,6 +78,12 @@ vi.mock('@/features/plugin-dev-workbench/services/devWorkbenchFacade', () => ({
     rememberBuildHubRecentSession,
     closeApp,
     updateAppDisplayName: vi.fn(async () => null),
+    loadApps: facadeLoadApps,
+    refreshPreviewStatus: facadeRefreshPreviewStatus,
+    activeLifecycleTask: ref(null),
+    openLifecycleModal: openLifecycleModalMock,
+    finalizeActiveLifecycleTask: finalizeActiveLifecycleTaskMock,
+    runLifecycleOperation: lifecycleRunMock,
   }),
 }))
 
@@ -177,6 +205,7 @@ vi.mock('@/composables/useI18n', () => ({
         workbenchRenameNameRequired: '名称不能为空',
         workbenchCloseRunningWarning: '运行中',
         workbenchCloseSaveFailed: '保存失败',
+        quickCreateAssistantName: '我的 AI 助手',
       },
     }),
     locale: ref('zh-CN'),
@@ -269,6 +298,11 @@ describe('usePluginDevWorkbenchOrchestration', () => {
     ]
     shouldPollPreviewStatusRef.value = false
     routeRef.value.query = { from: '/app/apps' }
+    facadeLoadApps.mockClear()
+    facadeRefreshPreviewStatus.mockClear()
+    lifecycleRunMock.mockClear()
+    openLifecycleModalMock.mockClear()
+    finalizeActiveLifecycleTaskMock.mockClear()
     activeAppRef.value = {
       id: 'com.test.plugin',
       name: 'Demo',
@@ -461,5 +495,48 @@ describe('usePluginDevWorkbenchOrchestration', () => {
         surface: expect.anything(),
       }),
     }))
+  })
+
+  it('切换到新的 pluginId 时会重新初始化预览链路', async () => {
+    const Harness = defineComponent({
+      setup() {
+        return usePluginDevWorkbenchOrchestration()
+      },
+      template: '<div />',
+    })
+    mount(Harness)
+    await vi.waitFor(() => {
+      expect(ensurePreviewRunning).toHaveBeenCalled()
+    })
+
+    ensurePreviewRunning.mockClear()
+    rememberBuildHubRecentSession.mockClear()
+
+    routeRef.value.params.pluginId = 'com.test.next-plugin'
+    routeRef.value.query = { from: '/app/apps' }
+    activeAppRef.value = {
+      id: 'com.test.next-plugin',
+      name: 'Next Demo',
+      app_type: 'web',
+      preview: {
+        url: 'http://127.0.0.1:5174',
+        log_session_id: 'log-2',
+        install_status: 'idle',
+        workbench_layout: 'default',
+        has_iwp_requirements: false,
+      },
+    }
+    installedAppsRef.value = [
+      {
+        id: 'com.test.next-plugin',
+        preview: { workbench_layout: 'default', has_iwp_requirements: false },
+      },
+    ] as any
+    await nextTick()
+
+    await vi.waitFor(() => {
+      expect(ensurePreviewRunning.mock.calls.length).toBeGreaterThan(0)
+    })
+    expect(rememberBuildHubRecentSession).toHaveBeenCalledWith('com.test.next-plugin')
   })
 })

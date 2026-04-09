@@ -15,6 +15,9 @@ class _RulesServiceStub:
 
 
 class _ManagerFailStub:
+    workspace_path = "/tmp/demo"
+    startup_context = {"workspace_kind": "plugin-dev", "plugin_id": "com.demo.app"}
+
     @property
     def last_start_failure(self):
         return {
@@ -40,6 +43,28 @@ class _ManagerDiagStub:
             "health": {"status": "running", "healthy": True},
             "summary": {"suspected_blocker": "lsp"},
             "runtime_tail": [],
+        }
+
+
+class _ManagerWorkspaceStub:
+    workspace_path = "/tmp/plugins/com.demo.current"
+    status = SimpleNamespace(value="running")
+
+    @property
+    def startup_context(self):
+        return {
+            "workspace_kind": "plugin-dev",
+            "plugin_id": "com.demo.current",
+        }
+
+    async def get_health_payload(self):
+        return {
+            "status": "running",
+            "healthy": True,
+            "base_url": "http://127.0.0.1:55123",
+            "port": 55123,
+            "workspace_path": self.workspace_path,
+            "pid": 2468,
         }
 
 
@@ -77,3 +102,33 @@ async def test_opencode_diagnostics_success(monkeypatch: pytest.MonkeyPatch):
 
     assert payload["status"] == "success"
     assert payload["data"]["summary"]["suspected_blocker"] == "lsp"
+
+
+@pytest.mark.asyncio
+async def test_opencode_health_returns_dynamic_base_url(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(routes, "get_opencode_manager", lambda: _ManagerWorkspaceStub())
+
+    payload = await routes.opencode_health()
+
+    assert payload["status"] == "success"
+    assert payload["data"]["base_url"] == "http://127.0.0.1:55123"
+    assert payload["data"]["port"] == 55123
+
+
+@pytest.mark.asyncio
+async def test_opencode_workspace_returns_startup_context(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(routes, "get_opencode_manager", lambda: _ManagerWorkspaceStub())
+
+    payload = await routes.opencode_workspace()
+
+    assert payload == {
+        "status": "success",
+        "data": {
+            "workspace_path": "/tmp/plugins/com.demo.current",
+            "state": "running",
+            "startup_context": {
+                "workspace_kind": "plugin-dev",
+                "plugin_id": "com.demo.current",
+            },
+        },
+    }

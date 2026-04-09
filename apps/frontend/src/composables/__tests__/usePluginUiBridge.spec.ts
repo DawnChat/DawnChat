@@ -1,8 +1,8 @@
 import { defineComponent, ref } from 'vue'
 import { mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { IFRAME_UI_AGENT_MESSAGE } from '@dawnchat/host-orchestration-sdk/assistant-client'
 
-import { IFRAME_UI_AGENT_MESSAGE } from '../../services/plugin-ui-bridge/constants'
 import { usePluginUiBridge } from '../usePluginUiBridge'
 
 type BridgeHandlers = {

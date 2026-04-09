@@ -580,6 +580,12 @@ export function createRuntimeOrchestrator(input: {
     const workspaceId = workspaceTarget.id
 
     if (isReady.value && boundWorkspaceId.value === workspaceId && activeSessionId.value) {
+      logger.info('[codingAgentStore] ensureReadyWithWorkspace_short_circuit', {
+        workspaceId,
+        pluginId: String(workspaceTarget.pluginId || ''),
+        workspacePath: String(workspaceTarget.workspacePath || ''),
+        activeSessionId: String(activeSessionId.value || '')
+      })
       await ensureEventSubscription({ reason: 'ready_short_circuit' })
       return
     }
@@ -587,12 +593,27 @@ export function createRuntimeOrchestrator(input: {
     if (ensureReadyPromise.value) {
       await ensureReadyPromise.value
       if (isReady.value && boundWorkspaceId.value === workspaceId && activeSessionId.value) {
+        logger.info('[codingAgentStore] ensureReadyWithWorkspace_after_inflight', {
+          workspaceId,
+          pluginId: String(workspaceTarget.pluginId || ''),
+          workspacePath: String(workspaceTarget.workspacePath || ''),
+          activeSessionId: String(activeSessionId.value || '')
+        })
         await ensureEventSubscription({ reason: 'ready_after_inflight' })
         return
       }
     }
 
     if (isReady.value && boundWorkspaceId.value && boundWorkspaceId.value !== workspaceId) {
+      logger.info('[codingAgentStore] ensureReadyWithWorkspace_switch_workspace', {
+        fromWorkspaceId: String(boundWorkspaceId.value || ''),
+        fromPluginId: String(boundWorkspaceTarget.value?.pluginId || ''),
+        fromWorkspacePath: String(boundWorkspaceTarget.value?.workspacePath || ''),
+        toWorkspaceId: workspaceId,
+        toPluginId: String(workspaceTarget.pluginId || ''),
+        toWorkspacePath: String(workspaceTarget.workspacePath || ''),
+        previousActiveSessionId: String(activeSessionId.value || '')
+      })
       dispose()
       clearRuntimeState()
     }
@@ -652,6 +673,16 @@ export function createRuntimeOrchestrator(input: {
         } else {
           await createSession(DEFAULT_SESSION_TITLE, true)
         }
+
+        logger.info('[codingAgentStore] ensureReadyWithWorkspace_session_selected', {
+          workspaceId,
+          pluginId: String(workspaceTarget.pluginId || ''),
+          workspacePath: String(workspaceTarget.workspacePath || ''),
+          preferredSession,
+          fallbackSession,
+          selectedSessionId: String(activeSessionId.value || ''),
+          sessionIds: sessions.value.map((item) => item.id)
+        })
 
         if (activeSessionId.value) {
           await reconcileMessages(activeSessionId.value)

@@ -47,6 +47,13 @@ class PluginTemplateApplicationService:
         force_refresh: bool = True,
     ) -> dict[str, Any]:
         local_template = self._resolve_local_template_source(template_id)
+        if local_template and Config.get_runtime_distribution_mode() == "dev":
+            logger.info(
+                "Using bundled local template for %s in dev runtime: %s",
+                template_id,
+                local_template.get("source_dir"),
+            )
+            return local_template
         market_service = get_plugin_market_service()
         market_plugins = await market_service.list_plugins(force_refresh=force_refresh)
         candidates = [item for item in market_plugins if str(item.get("id") or "") == template_id]

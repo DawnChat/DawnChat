@@ -1,43 +1,27 @@
 import { onMounted, onUnmounted, type ComputedRef, type Ref } from 'vue'
-import { logger } from '../utils/logger'
-import { PluginUiBridgeClient } from '../services/plugin-ui-bridge/bridgeClient'
 import {
   BRIDGE_EVENT,
   IFRAME_UI_AGENT_MESSAGE,
   UI_AGENT_RESPONSE_TYPES
-} from '../services/plugin-ui-bridge/constants'
+} from '@dawnchat/host-orchestration-sdk/assistant-client'
 import type {
   AssistantRuntimeEventPayload,
   BridgeRequestMessage,
+  CapabilityInvokeExecutionContext,
+  CapabilityInvokeRequest,
   ContextPushPayload,
+  HostInvokeExecutionContext,
+  HostInvokeRequest,
   TtsSpeakAcceptedPayload,
   TtsStoppedPayload
-} from '../services/plugin-ui-bridge/messageProtocol'
-
-export interface CapabilityInvokeRequest {
-  functionName: string
-  payload: Record<string, unknown>
-  options: Record<string, unknown>
-}
-
-export interface CapabilityInvokeExecutionContext {
-  requestId: string
-  pluginId: string
-  invoke: CapabilityInvokeRequest
-  executePluginCapability: (invoke: CapabilityInvokeRequest) => Promise<Record<string, unknown>>
-}
-
-export interface HostInvokeRequest {
-  functionName: string
-  payload: Record<string, unknown>
-  options: Record<string, unknown>
-}
-
-export interface HostInvokeExecutionContext {
-  requestId: string
-  pluginId: string
-  invoke: HostInvokeRequest
-}
+} from '@dawnchat/host-orchestration-sdk/assistant-client'
+import {
+  createBridgeRequestTimeoutStrategy,
+  createPendingBridgeRequestTracker,
+  type PendingBridgeRequestSource
+} from '@dawnchat/host-orchestration-sdk/transport'
+import { logger } from '../utils/logger'
+import { PluginUiBridgeClient } from '../services/plugin-ui-bridge/bridgeClient'
 
 interface UiBridgeOptions {
   pluginId: ComputedRef<string>
@@ -105,12 +89,6 @@ const REQUEST_TYPE_MAP: Record<string, string> = {
   runtime_refresh: IFRAME_UI_AGENT_MESSAGE.RUNTIME_REFRESH_REQUEST
 }
 
-interface PendingRequest {
-  timer: number
-  source: 'bridge' | 'local'
-  resolve?: (result: Record<string, unknown>) => void
-}
-
 function readEnvTimeoutMs(name: string, fallback: number): number {
   const rawValue = import.meta.env[name]
   if (rawValue === undefined) {
@@ -158,7 +136,6 @@ function parseHostInvoke(payload: unknown): HostInvokeRequest | null {
 
 export function usePluginUiBridge(options: UiBridgeOptions) {
   let bridge: PluginUiBridgeClient | null = null
-  const pendingRequests = new Map<string, PendingRequest>()
   const REQUEST_TIMEOUT_DEFAULT_MS = readEnvTimeoutMs('VITE_PLUGIN_UI_BRIDGE_REQUEST_TIMEOUT_MS', 20_000)
   const REQUEST_TIMEOUT_SESSION_INVOKE_MS = readEnvTimeoutMs(
     'VITE_PLUGIN_UI_BRIDGE_SESSION_INVOKE_TIMEOUT_MS',
@@ -169,31 +146,11 @@ export function usePluginUiBridge(options: UiBridgeOptions) {
     5_000
   )
   let localRequestSeq = 0
-
-  const resolveRequestTimeoutMs = (op: string, payload: Record<string, unknown>): number => {
-    if (op !== 'capability_invoke') {
-      return REQUEST_TIMEOUT_DEFAULT_MS
-    }
-    const functionName = String(payload.function || '').trim()
-    if (functionName === 'assistant.event.wait' || functionName === 'assistant.session.wait_for_end') {
-      const waitPayload = toRecord(payload.payload)
-      const requestedTimeoutMs = typeof waitPayload.timeout_ms === 'number' && Number.isFinite(waitPayload.timeout_ms)
-        ? waitPayload.timeout_ms
-        : REQUEST_TIMEOUT_SESSION_INVOKE_MS
-      return Math.max(
-        REQUEST_TIMEOUT_SESSION_INVOKE_MS,
-        requestedTimeoutMs + REQUEST_TIMEOUT_SESSION_WAIT_BUFFER_MS
-      )
-    }
-    if (
-      functionName.startsWith('assistant.session')
-      || functionName.startsWith('assistant.session_')
-      || functionName === 'assistant.event.wait'
-    ) {
-      return REQUEST_TIMEOUT_SESSION_INVOKE_MS
-    }
-    return REQUEST_TIMEOUT_DEFAULT_MS
-  }
+  const requestTimeoutStrategy = createBridgeRequestTimeoutStrategy({
+    defaultTimeoutMs: REQUEST_TIMEOUT_DEFAULT_MS,
+    sessionInvokeTimeoutMs: REQUEST_TIMEOUT_SESSION_INVOKE_MS,
+    sessionWaitTimeoutBufferMs: REQUEST_TIMEOUT_SESSION_WAIT_BUFFER_MS
+  })
 
   const postToIframe = (message: Record<string, unknown>) => {
     const frame = options.iframeRef.value?.contentWindow
@@ -202,53 +159,36 @@ export function usePluginUiBridge(options: UiBridgeOptions) {
     frame.postMessage(message, targetOrigin)
     return true
   }
-
-  const finalizePending = (requestId: string): PendingRequest | undefined => {
-    const pending = pendingRequests.get(requestId)
-    if (!pending) {
-      return undefined
-    }
-    window.clearTimeout(pending.timer)
-    pendingRequests.delete(requestId)
-    return pending
-  }
-
-  const schedulePendingTimeout = (
-    requestId: string,
-    source: PendingRequest['source'],
-    timeoutMs: number,
-    resolve?: (result: Record<string, unknown>) => void
-  ) => {
-    const existing = finalizePending(requestId)
-    if (existing?.source === 'local' && existing.resolve) {
-      existing.resolve({
-        ok: false,
-        error_code: 'iframe_cancelled',
-        message: 'iframe request cancelled by newer request'
-      })
-    }
-    const timer = window.setTimeout(() => {
-      pendingRequests.delete(requestId)
+  const pendingRequests = createPendingBridgeRequestTracker<Record<string, unknown>>({
+    onTimeout: (requestId, pending) => {
       const timeoutResult = {
         ok: false,
         error_code: 'iframe_timeout',
         message: 'plugin iframe response timeout'
       }
-      if (source === 'bridge') {
+      if (pending.source === 'bridge') {
         bridge?.sendResult(requestId, timeoutResult)
         return
       }
-      resolve?.(timeoutResult)
-    }, timeoutMs)
-    pendingRequests.set(requestId, { timer, source, resolve })
-  }
+      pending.resolve?.(timeoutResult)
+    },
+    onReplaced: (_requestId, pending) => {
+      if (pending.source === 'local') {
+        pending.resolve?.({
+          ok: false,
+          error_code: 'iframe_cancelled',
+          message: 'iframe request cancelled by newer request'
+        })
+      }
+    }
+  })
 
   const sendRequestToIframe = (
     requestId: string,
     op: string,
     payload: Record<string, unknown>,
     pluginId: string,
-    source: PendingRequest['source'],
+    source: PendingBridgeRequestSource,
     resolve?: (result: Record<string, unknown>) => void
   ) => {
     const type = REQUEST_TYPE_MAP[op]
@@ -265,8 +205,13 @@ export function usePluginUiBridge(options: UiBridgeOptions) {
       }
       return false
     }
-    const timeoutMs = resolveRequestTimeoutMs(op, payload)
-    schedulePendingTimeout(requestId, source, timeoutMs, resolve)
+    const timeoutMs = requestTimeoutStrategy.resolveTimeoutMs(op, payload)
+    pendingRequests.schedule({
+      requestId,
+      source,
+      timeoutMs,
+      resolve
+    })
     const success = postToIframe({
       type,
       pluginId,
@@ -274,7 +219,7 @@ export function usePluginUiBridge(options: UiBridgeOptions) {
       payload
     })
     if (!success) {
-      const pending = finalizePending(requestId)
+      const pending = pendingRequests.finalize(requestId)
       const notReadyResult = {
         ok: false,
         error_code: 'iframe_not_ready',
@@ -358,7 +303,7 @@ export function usePluginUiBridge(options: UiBridgeOptions) {
     const requestId = String(event.data.requestId || '')
     if (UI_AGENT_RESPONSE_TYPES.has(type)) {
       if (!requestId) return
-      const pending = finalizePending(requestId)
+      const pending = pendingRequests.finalize(requestId)
       if (!pending) return
       const result =
         (event.data.result as Record<string, unknown>) ||
@@ -444,8 +389,7 @@ export function usePluginUiBridge(options: UiBridgeOptions) {
         void handleBridgeRequest(msg)
       },
       onDisconnect: () => {
-        for (const [requestId, pending] of pendingRequests.entries()) {
-          finalizePending(requestId)
+        pendingRequests.failAll((pending, requestId) => {
           const disconnectResult = {
             ok: false,
             error_code: 'bridge_disconnected',
@@ -453,10 +397,10 @@ export function usePluginUiBridge(options: UiBridgeOptions) {
           }
           if (pending.source === 'bridge') {
             bridge?.sendResult(requestId, disconnectResult)
-          } else {
-            pending.resolve?.(disconnectResult)
+            return null
           }
-        }
+          return disconnectResult
+        })
       },
       onEvent: (msg) => {
         if (msg.event === BRIDGE_EVENT.CONTEXT_PUSH) {
@@ -507,15 +451,15 @@ export function usePluginUiBridge(options: UiBridgeOptions) {
     window.removeEventListener('message', handleWindowMessage)
     bridge?.disconnect()
     bridge = null
-    for (const [requestId, pending] of pendingRequests.entries()) {
-      finalizePending(requestId)
+    pendingRequests.failAll((pending) => {
       if (pending.source === 'local') {
-        pending.resolve?.({
+        return {
           ok: false,
           error_code: 'bridge_unmounted',
           message: 'plugin iframe bridge unmounted'
-        })
+        }
       }
-    }
+      return null
+    })
   })
 }

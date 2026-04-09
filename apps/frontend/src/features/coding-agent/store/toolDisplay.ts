@@ -60,6 +60,36 @@ function stringifyUnknown(value: unknown): string {
   }
 }
 
+function parseJsonObject(text: string): Record<string, unknown> | null {
+  const raw = String(text || '').trim()
+  if (!raw || raw[0] !== '{') return null
+  try {
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null
+  } catch {
+    return null
+  }
+}
+
+function extractDisplayTitleFromOutput(output: string): string {
+  const parsed = parseJsonObject(output)
+  if (!parsed) return ''
+  const display = parsed.display
+  if (display && typeof display === 'object') {
+    const displayTitle = String((display as Record<string, unknown>).title || '').trim()
+    if (displayTitle) return displayTitle
+  }
+  const data = parsed.data
+  if (data && typeof data === 'object') {
+    const nestedDisplay = (data as Record<string, unknown>).display
+    if (nestedDisplay && typeof nestedDisplay === 'object') {
+      const nestedTitle = String((nestedDisplay as Record<string, unknown>).title || '').trim()
+      if (nestedTitle) return nestedTitle
+    }
+  }
+  return ''
+}
+
 function resolveToolRenderMode(input: {
   kind: ToolDisplayMeta['kind']
   hasDetails: boolean
@@ -197,9 +227,11 @@ export function summarizeToolPart(part: CodingAgentPart): ToolDisplayMeta {
   const toolName = String(part.tool || 'tool').trim() || 'tool'
   const lowerTool = toolName.toLowerCase()
   const state = (part.state || {}) as Record<string, unknown>
+  const stateTitle = String(state.title || '').trim()
   const status = String(state.status || '').toLowerCase()
   const input = (state.input || parseToolRawArguments(String(state.rawArguments || state.raw || ''))) as Record<string, unknown>
   const outputText = String(state.output || '')
+  const outputDisplayTitle = extractDisplayTitleFromOutput(outputText)
   const errorText = stringifyUnknown(state.error || '')
   const rawArgsText = String(state.rawArguments || state.raw || '').trim()
   const command = String(input.command || input.cmd || '').trim()
@@ -296,6 +328,7 @@ export function summarizeToolPart(part: CodingAgentPart): ToolDisplayMeta {
   const renderMode = resolveToolRenderMode({ kind, hasDetails, status })
   const argsPreview = oneLinePreview(argsText, 92)
   const hiddenLineCount = Math.max(0, codeLines.length - previewLineCount)
+  const displayTitle = stateTitle || outputDisplayTitle || summary || toolName
 
   return {
     kind,
@@ -310,7 +343,7 @@ export function summarizeToolPart(part: CodingAgentPart): ToolDisplayMeta {
     hasOutput,
     hasError,
     hasDetails,
-    title: summary || toolName,
+    title: displayTitle,
     summary,
     detailBody: detailsText,
     detailsText,

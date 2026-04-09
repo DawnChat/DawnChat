@@ -12,6 +12,7 @@ import asyncio
 import contextlib
 from datetime import datetime
 import hashlib
+import json
 import os
 from pathlib import Path
 import shutil
@@ -66,6 +67,61 @@ class PluginPreviewManager:
     def _new_preview_log_session_id() -> str:
         stamp = datetime.now().strftime("%Y%m%dT%H%M%S")
         return f"{stamp}-{uuid.uuid4().hex[:8]}"
+
+    @staticmethod
+    def _validate_assistant_sdk_dependencies(package_json_path: Path) -> None:
+        try:
+            payload = json.loads(package_json_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            raise RuntimeError(
+                f"Preview package.json is unreadable: {package_json_path}"
+            ) from exc
+
+        assistant_deps: dict[str, str] = {}
+        for section in ("dependencies", "devDependencies"):
+            deps = payload.get(section)
+            if not isinstance(deps, dict):
+                continue
+            for package_name in Config.ASSISTANT_SDK_PACKAGE_DIRS:
+                version = str(deps.get(package_name) or "").strip()
+                if version:
+                    assistant_deps[package_name] = version
+
+        unresolved = [
+            f"{package_name}={version}"
+            for package_name, version in assistant_deps.items()
+            if version == "workspace:*"
+        ]
+        if unresolved:
+            raise RuntimeError(
+                "Assistant SDK dependencies were not rewritten before preview install: "
+                + ", ".join(unresolved)
+                + ". runtime bundle missing or scaffold rewrite not applied."
+            )
+
+        missing_targets: list[str] = []
+        for package_name, version in assistant_deps.items():
+            if not version.startswith("file:"):
+                continue
+            raw_target = version[5:].strip()
+            if not raw_target:
+                missing_targets.append(f"{package_name}=<empty>")
+                continue
+            target_path = Path(raw_target)
+            if not target_path.is_absolute():
+                target_path = (package_json_path.parent / target_path).resolve()
+            if not target_path.exists():
+                missing_targets.append(f"{package_name} -> {target_path}")
+                continue
+            missing_files = Config.get_assistant_sdk_missing_files(target_path)
+            if missing_files:
+                formatted = ", ".join(str(path) for path in missing_files)
+                missing_targets.append(f"{package_name} dist incomplete -> {formatted}")
+        if missing_targets:
+            raise RuntimeError(
+                "Assistant SDK file dependencies point to missing or incomplete dist bundles: "
+                + ", ".join(missing_targets)
+            )
 
     async def start_preview(self, plugin: PluginInfo) -> bool:
         if not Config.PLUGIN_PREVIEW_ENABLED:
@@ -989,6 +1045,7 @@ class PluginPreviewManager:
         if not package_json.exists():
             return
 
+        self._validate_assistant_sdk_dependencies(package_json)
         self._validate_vue_sfc_files(web_src)
         lock_hash = self._calculate_web_lock_hash(web_src)
         stamp_dir = web_src / ".dawnchat-preview"

@@ -110,7 +110,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { ArrowUp, CircleOff, LoaderCircle, Square } from 'lucide-vue-next'
-import { parseContextTokens } from '@/services/plugin-ui-bridge/contextToken'
+import { parseContextTokens } from '@dawnchat/host-orchestration-sdk/assistant-client'
 import PluginDevInlineSelect, { type PluginDevInlineSelectOption } from '@/features/coding-agent/components/plugin-dev-chat/PluginDevInlineSelect.vue'
 import PluginDevComposerFileTags, {
   type ComposerPendingFileTag

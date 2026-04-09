@@ -14,6 +14,8 @@ export interface DevWorkbenchFacade {
   activeMode: Ref<PluginRunMode>
   installedApps: Ref<Plugin[]>
   activeLifecycleTask: Ref<LifecycleTask | null>
+  openLifecycleModal: () => void
+  finalizeActiveLifecycleTask: () => void
   loadApps: (silent?: boolean) => Promise<void>
   updateAppDisplayName: (pluginId: string, name: string) => Promise<Plugin | null>
   openApp: (app: Plugin, mode: PluginRunMode) => void
@@ -41,6 +43,8 @@ export const useDevWorkbenchFacade = (): DevWorkbenchFacade => {
     activeMode,
     installedApps,
     activeLifecycleTask,
+    openLifecycleModal: pluginStore.openLifecycleModal,
+    finalizeActiveLifecycleTask: pluginStore.finalizeActiveLifecycleTask,
     loadApps: pluginStore.loadApps,
     updateAppDisplayName: pluginStore.updateAppDisplayName,
     openApp: pluginStore.openApp,

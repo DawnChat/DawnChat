@@ -18,6 +18,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import socket
 import subprocess
 from typing import Any, Dict, List, Optional
 
@@ -53,6 +54,13 @@ class OpenCodeStats:
     restart_count: int = 0
 
 
+@dataclass
+class OpenCodeReadyResult:
+    ready: bool
+    reason: str = ""
+    listener_pid: Optional[int] = None
+
+
 class OpenCodeManager:
     def __init__(self) -> None:
         self._process: Optional[asyncio.subprocess.Process] = None
@@ -68,6 +76,7 @@ class OpenCodeManager:
         self._instruction_policy: Dict[str, Any] = {}
         self._baseline_config_composer = OpenCodeBaselineConfigComposer()
         self._last_start_failure: Optional[Dict[str, Any]] = None
+        self._runtime_port: Optional[int] = None
 
     @property
     def status(self) -> OpenCodeStatus:
@@ -83,10 +92,12 @@ class OpenCodeManager:
 
     @property
     def port(self) -> int:
-        return Config.OPENCODE_PORT
+        return int(self._runtime_port or Config.OPENCODE_PORT)
 
     @property
     def base_url(self) -> str:
+        if self._runtime_port is None:
+            return ""
         return f"http://{self.host}:{self.port}"
 
     @property
@@ -121,6 +132,17 @@ class OpenCodeManager:
             instruction_policy_changed = bool(next_instruction_policy) and (
                 next_instruction_policy != self._instruction_policy
             )
+            logger.info(
+                "OpenCode start request: status=%s current_workspace=%s target_workspace=%s force_restart=%s workspace_changed=%s startup_context_changed=%s instruction_policy_changed=%s startup_context=%s",
+                self._status.value,
+                self._workspace_path,
+                target_workspace,
+                force_restart,
+                workspace_changed,
+                startup_context_changed,
+                instruction_policy_changed,
+                next_startup_context,
+            )
             if self._status == OpenCodeStatus.RUNNING and not (
                 force_restart
                 or workspace_changed
@@ -130,6 +152,12 @@ class OpenCodeManager:
                 self._startup_context = next_startup_context or dict(self._startup_context)
                 if next_instruction_policy:
                     self._instruction_policy = next_instruction_policy
+                logger.info(
+                    "OpenCode start reused existing process: workspace=%s pid=%s startup_context=%s",
+                    self._workspace_path,
+                    self._process.pid if self._process else None,
+                    self._startup_context,
+                )
                 return True
             if self._status == OpenCodeStatus.STARTING and not (
                 force_restart
@@ -144,6 +172,12 @@ class OpenCodeManager:
                     self._status = OpenCodeStatus.RUNNING
                     if not self._stats.started_at:
                         self._stats.started_at = datetime.now()
+                    logger.info(
+                        "OpenCode start joined in-flight process: workspace=%s pid=%s startup_context=%s",
+                        self._workspace_path,
+                        self._process.pid if self._process else None,
+                        self._startup_context,
+                    )
                     return True
                 logger.warning("OpenCode 处于 STARTING 但健康检查失败，准备强制重启恢复")
                 await self._stop_locked()
@@ -166,6 +200,7 @@ class OpenCodeManager:
                 self._workspace_path = target_workspace
                 self._startup_context = next_startup_context
                 self._instruction_policy = next_instruction_policy
+                self._runtime_port = self._allocate_runtime_port()
                 binary = Config.get_opencode_binary()
                 if not binary or not binary.exists():
                     raise FileNotFoundError("未找到 opencode 可执行文件")
@@ -205,7 +240,13 @@ class OpenCodeManager:
                     "--cors",
                     "https://tauri.localhost",
                 ]
-                logger.info("启动 OpenCode: %s", " ".join(cmd))
+                logger.info(
+                    "启动 OpenCode: cmd=%s cwd=%s port=%s startup_context=%s",
+                    " ".join(cmd),
+                    self._workspace_path,
+                    self.port,
+                    self._startup_context,
+                )
 
                 self._process = await asyncio.create_subprocess_exec(
                     *cmd,
@@ -216,17 +257,25 @@ class OpenCodeManager:
                 )
 
                 ready = await self._wait_until_ready(timeout=Config.OPENCODE_START_TIMEOUT)
-                if not ready:
+                if not ready.ready:
                     process_returncode = self._process.returncode if self._process else None
-                    logger.error("OpenCode 启动后健康检查超时，进程返回码: %s", process_returncode)
+                    logger.error(
+                        "OpenCode 启动失败: reason=%s process_returncode=%s listener_pid=%s port=%s",
+                        ready.reason or "health_timeout",
+                        process_returncode,
+                        ready.listener_pid,
+                        self.port,
+                    )
                     err_hint = self._read_startup_error_hint()
                     if err_hint:
                         logger.error("OpenCode 启动失败详情(最近 stderr):\n%s", err_hint)
                     self._last_start_failure = {
-                        "reason": "health_timeout",
+                        "reason": ready.reason or "health_timeout",
                         "hint": err_hint,
                         "workspace_path": str(target_workspace),
+                        "port": self.port,
                         "pid": self._process.pid if self._process else None,
+                        "listener_pid": ready.listener_pid,
                         "process_returncode": process_returncode,
                     }
                     await self._terminate_process()
@@ -238,7 +287,12 @@ class OpenCodeManager:
                 self._stats.health_check_failures = 0
                 self._last_start_failure = None
                 self._ensure_health_loop()
-                logger.info("OpenCode 启动成功: %s", self.base_url)
+                logger.info(
+                    "OpenCode 启动成功: base_url=%s pid=%s port=%s",
+                    self.base_url,
+                    self._process.pid if self._process else None,
+                    self.port,
+                )
                 return True
             except Exception as e:
                 process_returncode = self._process.returncode if self._process else None
@@ -258,6 +312,7 @@ class OpenCodeManager:
                     "error_message": str(e),
                     "hint": err_hint,
                     "workspace_path": str(target_workspace),
+                    "port": self.port,
                     "pid": self._process.pid if self._process else None,
                     "process_returncode": process_returncode,
                 }
@@ -284,6 +339,10 @@ class OpenCodeManager:
         )
 
     async def health_check(self) -> bool:
+        if not self.base_url:
+            self._stats.last_health_check = datetime.now()
+            self._stats.health_check_failures += 1
+            return False
         if not self._health_client:
             trust_env = await self._resolve_httpx_trust_env()
             self._health_client = httpx.AsyncClient(
@@ -312,6 +371,7 @@ class OpenCodeManager:
             "status": self._status.value,
             "healthy": healthy,
             "base_url": self.base_url,
+            "port": self._runtime_port,
             "workspace_path": self.workspace_path,
             "pid": self._process.pid if self._process else None,
             "last_start_failure": self.last_start_failure,
@@ -429,18 +489,40 @@ class OpenCodeManager:
         if self._health_client:
             await self._health_client.aclose()
             self._health_client = None
+        self._runtime_port = None
         self._status = OpenCodeStatus.STOPPED
         logger.info("OpenCode 已停止")
 
-    async def _wait_until_ready(self, timeout: float) -> bool:
+    async def _wait_until_ready(self, timeout: float) -> OpenCodeReadyResult:
         start = asyncio.get_running_loop().time()
         while (asyncio.get_running_loop().time() - start) < timeout:
             if self._process and self._process.returncode is not None:
-                return False
+                return OpenCodeReadyResult(ready=False, reason="process_exited")
             if await self.health_check():
-                return True
+                expected_pid = self._process.pid if self._process else None
+                listener_pid = await asyncio.to_thread(self._resolve_listener_pid, self.port)
+                if expected_pid and listener_pid and listener_pid != expected_pid:
+                    logger.error(
+                        "OpenCode listener ownership mismatch: expected_pid=%s listener_pid=%s port=%s base_url=%s",
+                        expected_pid,
+                        listener_pid,
+                        self.port,
+                        self.base_url,
+                    )
+                    return OpenCodeReadyResult(
+                        ready=False,
+                        reason="listener_pid_mismatch",
+                        listener_pid=listener_pid,
+                    )
+                if expected_pid and listener_pid is None:
+                    logger.warning(
+                        "OpenCode listener PID verification skipped: expected_pid=%s port=%s",
+                        expected_pid,
+                        self.port,
+                    )
+                return OpenCodeReadyResult(ready=True, listener_pid=listener_pid)
             await asyncio.sleep(0.4)
-        return False
+        return OpenCodeReadyResult(ready=False, reason="health_timeout")
 
     async def _ensure_service_ready(self) -> None:
         if self._status not in (OpenCodeStatus.RUNNING, OpenCodeStatus.STARTING):
@@ -621,8 +703,9 @@ class OpenCodeManager:
             startup_context=self._startup_context,
         )
         logger.info(
-            "OpenCode baseline config prepared: workspace=%s providers=%s default_model=%s instructions=%s startup_context=%s mcp_keys=%s",
+            "OpenCode baseline config prepared: workspace=%s port=%s providers=%s default_model=%s instructions=%s startup_context=%s mcp_keys=%s",
             self._workspace_path,
+            self.port,
             result.configured_providers,
             result.config["model"],
             result.merged_instructions,
@@ -630,6 +713,51 @@ class OpenCodeManager:
             sorted((result.config.get("mcp") or {}).keys()),
         )
         return result.config
+
+    def _allocate_runtime_port(self) -> int:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                sock.bind((self.host, 0))
+                return int(sock.getsockname()[1])
+        except OSError as err:
+            logger.warning(
+                "OpenCode 动态端口分配失败，回退到配置端口: host=%s port=%s err=%s",
+                self.host,
+                Config.OPENCODE_PORT,
+                err,
+            )
+            return int(Config.OPENCODE_PORT)
+
+    @staticmethod
+    def _resolve_listener_pid(port: int) -> Optional[int]:
+        try:
+            result = subprocess.run(
+                ["lsof", "-nP", f"-iTCP:{int(port)}", "-sTCP:LISTEN", "-t"],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        except FileNotFoundError:
+            return None
+        except Exception as err:
+            logger.warning("读取 OpenCode 监听 PID 失败: port=%s err=%r", port, err)
+            return None
+
+        if result.returncode not in (0, 1):
+            logger.warning(
+                "读取 OpenCode 监听 PID 命令失败: port=%s returncode=%s stderr=%s",
+                port,
+                result.returncode,
+                (result.stderr or "").strip(),
+            )
+            return None
+
+        for line in (result.stdout or "").splitlines():
+            text = str(line or "").strip()
+            if text.isdigit():
+                return int(text)
+        return None
 
 
 _opencode_manager: Optional[OpenCodeManager] = None

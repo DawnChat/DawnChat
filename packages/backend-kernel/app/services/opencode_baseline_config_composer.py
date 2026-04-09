@@ -13,6 +13,11 @@ from app.utils.logger import get_logger
 
 logger = get_logger("opencode_baseline_config_composer")
 
+MCP_DESCRIPTION_INSTRUCTION = (
+    "When calling DawnChat MCP tools (for example dawnchat_ui_bridge_*), "
+    "always provide a concise 'description' argument in 5-12 words that states the user-facing intent."
+)
+
 
 @dataclass
 class BaselineComposeResult:
@@ -100,6 +105,8 @@ class OpenCodeBaselineConfigComposer:
             include_shared_rules=include_shared_rules,
             include_workspace_rules=include_workspace_rules,
         )
+        if MCP_DESCRIPTION_INSTRUCTION not in merged_instructions:
+            merged_instructions.append(MCP_DESCRIPTION_INSTRUCTION)
         provider_cfg: Dict[str, Any] = {}
         default_model: Optional[str] = None
         available_models: set[str] = set()

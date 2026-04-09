@@ -1,11 +1,11 @@
 import { getBackendUrl } from '../../utils/backendUrl'
 import { logger } from '../../utils/logger'
-import { BRIDGE_MESSAGE_TYPE } from './constants'
+import { BRIDGE_MESSAGE_TYPE } from '@dawnchat/host-orchestration-sdk/assistant-client'
 import type {
   BridgeEventMessage,
   BridgeRequestMessage,
   BridgeResultOutbound
-} from './messageProtocol'
+} from '@dawnchat/host-orchestration-sdk/assistant-client'
 
 type Handlers = {
   onRequest: (msg: BridgeRequestMessage) => void

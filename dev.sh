@@ -28,7 +28,8 @@
 #   3. 同步代码到 PBS 环境:
 #      - 后端源码: packages/backend-kernel/app → sidecar/app
 #      - 官方插件: dawnchat-plugins/official-plugins → sidecar/official-plugins
-#      - SDK: dawnchat-plugins/sdk → PBS site-packages（可编辑模式）
+#      - Python SDK: dawnchat-plugins/sdk → PBS site-packages（可编辑模式）
+#      - Assistant SDK: dawnchat-plugins/assistant-sdk → sidecar/dawnchat-plugins/assistant-sdk
 #   4. 启动 Python 后端（优先使用 PBS，回退到系统 Python）
 #   5. 启动 Vue 开发服务器
 #
@@ -36,7 +37,8 @@
 #   - 后端代码: 修改 packages/backend-kernel/app 后自动重载
 #   - 前端代码: 修改 apps/frontend/src 后自动热更新
 #   - 插件代码: 修改 dawnchat-plugins/official-plugins 后需要运行 ./dev.sh --sync
-#   - SDK 代码: 可编辑模式安装，修改后立即生效（需重启插件）
+#   - Python SDK 代码: 可编辑模式安装，修改后立即生效（需重启插件）
+#   - Assistant SDK 代码: 运行 `./dev.sh --sync` 后同步到 sidecar runtime
 #
 # ============================================================================
 
@@ -80,6 +82,8 @@ BUILD_SIDECAR_DIR="$TAURI_DIR/sidecars/dawnchat-backend"
 DEV_RUNTIME_DIR="${DAWNCHAT_DEV_RUNTIME_DIR:-$PROJECT_ROOT/.dev-runtime/dawnchat-backend}"
 SIDECAR_DIR="$DEV_RUNTIME_DIR"
 SDK_DIR="$PROJECT_ROOT/dawnchat-plugins/sdk"
+ASSISTANT_SDK_DIR="$PROJECT_ROOT/dawnchat-plugins/assistant-sdk"
+ASSISTANT_WORKSPACE_DIR="$PROJECT_ROOT/dawnchat-plugins/assistant-workspace"
 PLUGINS_DIR="$PROJECT_ROOT/dawnchat-plugins/official-plugins"
 WEB_AUTH_DIR="$PROJECT_ROOT/DawnChatWeb"
 CACHE_DIR="$PROJECT_ROOT/.cache/pbs"

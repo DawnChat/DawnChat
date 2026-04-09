@@ -52,17 +52,15 @@
 <script setup lang="ts">
 import PluginPreviewPane from '@/features/plugin/components/PluginPreviewPane.vue'
 import AssistantCompactShell from '@/features/plugin-dev-workbench/components/AssistantCompactShell.vue'
-import type { InspectorSelectPayload } from '@/types/inspector'
-import type {
-  CapabilityInvokeExecutionContext,
-  HostInvokeExecutionContext
-} from '@/composables/usePluginUiBridge'
 import type {
   AssistantRuntimeEventPayload,
+  CapabilityInvokeExecutionContext,
   ContextPushPayload,
+  HostInvokeExecutionContext,
   TtsSpeakAcceptedPayload,
   TtsStoppedPayload
-} from '@/services/plugin-ui-bridge/messageProtocol'
+} from '@dawnchat/host-orchestration-sdk/assistant-client'
+import type { InspectorSelectPayload } from '@/types/inspector'
 import type { LifecycleTask } from '@/features/plugin/store'
 import type { TtsPlaybackState } from '@/services/tts/ttsPlaybackQueue'
 

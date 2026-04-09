@@ -63,10 +63,10 @@
 import { computed, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from '@/composables/useI18n'
+import { expandContextTokens } from '@dawnchat/host-orchestration-sdk/assistant-client'
 import { logger } from '@/utils/logger'
 import CodingChatShell from '@/features/coding-agent/components/CodingChatShell.vue'
 import { useCodingAgentStore } from '@/features/coding-agent/store/codingAgentStore'
-import { expandContextTokens } from '@/services/plugin-ui-bridge/contextToken'
 import type { TtsPlaybackState } from '@/services/tts/ttsPlaybackQueue'
 
 const props = withDefaults(defineProps<{

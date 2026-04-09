@@ -13,17 +13,25 @@ export async function initDeepLinkBootstrap(router: Router): Promise<() => void>
       for (const url of urls) {
         const parsed = parseDeepLink(url)
         if (parsed.status === 'valid' && parsed.route) {
-          if (parsed.route.name === 'plugin-fullscreen') {
-            const pluginId = String((parsed.route.params as Record<string, unknown> | undefined)?.pluginId || '').trim()
+          const route = parsed.route
+          const isNamedFullscreen =
+            typeof route === 'object' &&
+            route !== null &&
+            'name' in route &&
+            route.name === 'plugin-fullscreen'
+          if (isNamedFullscreen) {
+            const pluginId = String(
+              ('params' in route ? (route.params as Record<string, unknown> | undefined) : undefined)?.pluginId || ''
+            ).trim()
             if (pluginId) {
               await openPluginFullscreen(router, pluginId)
             } else {
-              await router.push(parsed.route)
+              await router.push(route)
             }
           } else {
-            await router.push(parsed.route)
+            await router.push(route)
           }
-          logger.info('✅ Deep Link 已路由跳转', { url, target: parsed.route })
+          logger.info('✅ Deep Link 已路由跳转', { url, target: route })
           break
         }
         if (parsed.status === 'unsupported') {

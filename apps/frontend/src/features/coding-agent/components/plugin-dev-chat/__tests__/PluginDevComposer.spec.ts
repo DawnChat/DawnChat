@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { encodeContextToken } from '@dawnchat/host-orchestration-sdk/assistant-client'
 import PluginDevComposer from '@/features/coding-agent/components/plugin-dev-chat/PluginDevComposer.vue'
-import { encodeContextToken } from '@/services/plugin-ui-bridge/contextToken'
 
 describe('PluginDevComposer', () => {
   it('切换引擎会触发 select-engine 事件', async () => {
