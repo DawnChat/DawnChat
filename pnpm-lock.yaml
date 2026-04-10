@@ -200,6 +200,9 @@ importers:
 
   apps/frontend:
     dependencies:
+      '@dawnchat/assistant-chat-ui':
+        specifier: workspace:*
+        version: link:../../dawnchat-plugins/assistant-sdk/assistant-chat-ui
       '@dawnchat/auth-bridge':
         specifier: npm:@dawnchat/auth-bridge@^0.2.0
         version: 0.2.0
@@ -315,6 +318,55 @@ importers:
       vue-tsc:
         specifier: ^3.1.0
         version: 3.1.3(typescript@5.9.3)
+
+  dawnchat-plugins/assistant-sdk/assistant-chat-ui:
+    dependencies:
+      dompurify:
+        specifier: ^3.2.6
+        version: 3.3.1
+      highlight.js:
+        specifier: ^11.11.1
+        version: 11.11.1
+      lucide-vue-next:
+        specifier: ^0.562.0
+        version: 0.562.0(vue@3.5.24(typescript@5.9.3))
+      markdown-it:
+        specifier: ^14.1.0
+        version: 14.1.1
+      vue:
+        specifier: ^3.5.24
+        version: 3.5.24(typescript@5.9.3)
+    devDependencies:
+      '@types/markdown-it':
+        specifier: ^14.1.2
+        version: 14.1.2
+      '@types/node':
+        specifier: ^24.6.1
+        version: 24.10.0
+      '@vitejs/plugin-vue':
+        specifier: ^6.0.1
+        version: 6.0.1(vite@7.3.1(@types/node@24.10.0)(lightningcss@1.32.0)(terser@5.46.0)(yaml@2.8.2))(vue@3.5.24(typescript@5.9.3))
+      '@vue/test-utils':
+        specifier: ^2.4.6
+        version: 2.4.6
+      jsdom:
+        specifier: ^26.1.0
+        version: 26.1.0
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vite:
+        specifier: ^7.3.1
+        version: 7.3.1(@types/node@24.10.0)(lightningcss@1.32.0)(terser@5.46.0)(yaml@2.8.2)
+      vite-plugin-dts:
+        specifier: ^4.5.4
+        version: 4.5.4(@types/node@24.10.0)(rollup@4.53.1)(typescript@5.9.3)(vite@7.3.1(@types/node@24.10.0)(lightningcss@1.32.0)(terser@5.46.0)(yaml@2.8.2))
+      vitest:
+        specifier: ^4.1.4
+        version: 4.1.4(@opentelemetry/api@1.9.0)(@types/node@24.10.0)(happy-dom@20.0.10)(jsdom@26.1.0)(vite@7.3.1(@types/node@24.10.0)(lightningcss@1.32.0)(terser@5.46.0)(yaml@2.8.2))
+      vue-tsc:
+        specifier: ^3.2.5
+        version: 3.2.5(typescript@5.9.3)
 
   dawnchat-plugins/assistant-sdk/assistant-core:
     dependencies:

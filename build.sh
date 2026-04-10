@@ -1156,7 +1156,7 @@ for section in ("dependencies", "devDependencies"):
     deps = payload.get(section)
     if not isinstance(deps, dict):
         continue
-    for package_name in ("@dawnchat/assistant-core", "@dawnchat/host-orchestration-sdk"):
+    for package_name in ("@dawnchat/assistant-chat-ui", "@dawnchat/assistant-core", "@dawnchat/host-orchestration-sdk"):
         if str(deps.get(package_name) or "").strip() == "workspace:*":
             raise SystemExit(0)
 raise SystemExit(1)
@@ -1288,7 +1288,7 @@ copy_assistant_sdk_bundle() {
     local package_name=""
     local package_src=""
     local package_dest=""
-    for package_name in assistant-core host-orchestration-sdk; do
+    for package_name in assistant-chat-ui assistant-core host-orchestration-sdk; do
         package_src="$ASSISTANT_SDK_DIR/$package_name"
         package_dest="$dest_dir/$package_name"
         copy_dist_ready_assistant_sdk_package "$package_src" "$package_dest"
