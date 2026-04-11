@@ -1072,6 +1072,9 @@ export default {
     publishVisibilityUnlisted: '不公开列表',
     publishVisibilityLocked: '首次发布后，可见性只能在官网后台修改。',
     publishVisibilityEditable: '首次发布时可设置默认可见性，后续请到官网后台调整。',
+    publishPublicSlugGlobalUnique:
+      '选择公开或不公开列表时，站点 slug 会作为全网唯一的公开路径（/sites/:slug）；若与他人重复将无法发布。',
+    publishErrorPublicSlugConflict: '公开地址已被占用，请更换站点 slug 后重试。',
     publishVersion: '发布版本',
     publishDescription: '网页描述',
     publishDescriptionPlaceholder: '可选，用于官网个人中心展示',
@@ -1162,6 +1165,9 @@ export default {
     workbenchCreateAssistantPlatformDesktopDescription: '适合本地工具调用、Bun 运行时以及桌面集成开发工作流。',
     workbenchCreateAssistantPlatformWeb: 'Web Assistant',
     workbenchCreateAssistantPlatformWebDescription: '适合基于 Vue、Vite 与浏览器宿主能力的网页 Assistant 体验。',
+    workbenchCreateAssistantPlatformMobile: '移动端 Assistant',
+    workbenchCreateAssistantPlatformMobileDescription:
+      '适合 Ionic Vue + Capacitor 壳，复用与 Web 相同的 Assistant SDK、聊天 UI 与宿主工具路由。',
     workbenchCreateAssistantOpenAfterCreate: '创建完成后立即打开',
     workbenchCreateAssistantConfirm: '创建助手',
     workbenchCreateAssistantCreating: '创建中...',

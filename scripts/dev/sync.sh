@@ -110,7 +110,7 @@ for section in ("dependencies", "devDependencies"):
     deps = payload.get(section)
     if not isinstance(deps, dict):
         continue
-    for package_name in ("@dawnchat/assistant-chat-ui", "@dawnchat/assistant-core", "@dawnchat/host-orchestration-sdk"):
+    for package_name in ("@dawnchat/assistant-app-sdk", "@dawnchat/assistant-chat-ui", "@dawnchat/assistant-core", "@dawnchat/host-orchestration-sdk"):
         if str(deps.get(package_name) or "").strip() == "workspace:*":
             raise SystemExit(0)
 raise SystemExit(1)
@@ -332,6 +332,93 @@ for path in missing:
 PY
 }
 
+write_sanitized_assistant_sdk_package_json() {
+    local src_dir="$1"
+    local dest_dir="$2"
+    python3 - "$src_dir" "$dest_dir" <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+src_dir = Path(sys.argv[1])
+dest_dir = Path(sys.argv[2])
+src_package_json_path = src_dir / "package.json"
+dest_package_json_path = dest_dir / "package.json"
+
+payload = json.loads(src_package_json_path.read_text(encoding="utf-8"))
+sanitized = json.loads(json.dumps(payload))
+sibling_root = src_dir.parent
+internal_package_map: dict[str, str] = {}
+
+for child in sibling_root.iterdir():
+    if not child.is_dir():
+        continue
+    child_package_json_path = child / "package.json"
+    if not child_package_json_path.exists():
+        continue
+    try:
+        child_payload = json.loads(child_package_json_path.read_text(encoding="utf-8"))
+    except Exception:
+        continue
+    package_name = child_payload.get("name")
+    if isinstance(package_name, str) and package_name.strip():
+        internal_package_map[package_name.strip()] = child.name
+
+sanitized.pop("scripts", None)
+sanitized.pop("devDependencies", None)
+
+runtime_dependencies = sanitized.get("dependencies")
+if not isinstance(runtime_dependencies, dict):
+    runtime_dependencies = {}
+sanitized["dependencies"] = runtime_dependencies
+
+for section in ("dependencies", "peerDependencies", "optionalDependencies", "devDependencies"):
+    deps = payload.get(section)
+    if not isinstance(deps, dict):
+        continue
+    for package_name in deps:
+        package_dirname = internal_package_map.get(package_name)
+        if not package_dirname:
+            continue
+        target_dir = dest_dir.parent / package_dirname
+        relative_target = Path(os.path.relpath(target_dir, dest_dir))
+        runtime_dependencies[package_name] = f"file:{relative_target.as_posix()}"
+
+for section in ("peerDependencies", "optionalDependencies"):
+    deps = sanitized.get(section)
+    if not isinstance(deps, dict):
+        continue
+    for package_name in list(deps):
+        if package_name in internal_package_map:
+            deps.pop(package_name, None)
+    if not deps:
+        sanitized.pop(section, None)
+
+errors: list[str] = []
+for section in ("dependencies", "peerDependencies", "optionalDependencies"):
+    deps = sanitized.get(section)
+    if not isinstance(deps, dict):
+        continue
+    for package_name, version in deps.items():
+        normalized = str(version or "").strip()
+        if normalized == "workspace:*":
+            errors.append(f"workspace dependency leaked: {package_name}")
+        if normalized.startswith("file:") and package_name not in internal_package_map:
+            errors.append(f"unsupported local dependency leaked: {package_name} -> {normalized}")
+
+if errors:
+    for error in errors:
+        print(error)
+    raise SystemExit(1)
+
+dest_package_json_path.write_text(
+    json.dumps(sanitized, ensure_ascii=False, indent=2),
+    encoding="utf-8",
+)
+PY
+}
+
 build_assistant_sdk_packages() {
     print_step "构建 Assistant SDK dist 包"
 
@@ -343,7 +430,7 @@ build_assistant_sdk_packages() {
     local package_name=""
     local package_dir=""
     local needs_build=false
-    for package_name in assistant-chat-ui assistant-core host-orchestration-sdk; do
+    for package_name in assistant-app-sdk assistant-chat-ui assistant-core host-orchestration-sdk; do
         package_dir="$ASSISTANT_SDK_DIR/$package_name"
         if [[ ! -f "$package_dir/package.json" ]]; then
             print_error "Assistant SDK 包不存在: $package_dir"
@@ -376,7 +463,7 @@ copy_dist_ready_assistant_sdk_package() {
 
     rm -rf "$dest_dir"
     mkdir -p "$dest_dir"
-    cp "$src_dir/package.json" "$dest_dir/package.json"
+    write_sanitized_assistant_sdk_package_json "$src_dir" "$dest_dir" || return 1
     if [[ -f "$src_dir/README.md" ]]; then
         cp "$src_dir/README.md" "$dest_dir/README.md"
     fi
@@ -404,7 +491,7 @@ sync_assistant_sdk_bundle() {
     local package_name=""
     local package_src=""
     local package_dest=""
-    for package_name in assistant-chat-ui assistant-core host-orchestration-sdk; do
+    for package_name in assistant-app-sdk assistant-chat-ui assistant-core host-orchestration-sdk; do
         package_src="$ASSISTANT_SDK_DIR/$package_name"
         package_dest="$dest_root/$package_name"
         copy_dist_ready_assistant_sdk_package "$package_src" "$package_dest"
@@ -423,7 +510,7 @@ sync_builtin_desktop_template() {
     local web_src=""
     local bun_bin
     bun_bin="$(resolve_bun_binary || true)"
-    local template_ids=("desktop-starter" "desktop-hello-world" "desktop-ai-assistant" "web-starter-vue" "web-ai-assistant" "mobile-starter-ionic")
+    local template_ids=("desktop-starter" "desktop-hello-world" "desktop-ai-assistant" "web-starter-vue" "web-ai-assistant" "mobile-starter-ionic" "mobile-ai-assistant")
 
     for template_id in "${template_ids[@]}"; do
         template_src="$PLUGINS_DIR/$template_id"

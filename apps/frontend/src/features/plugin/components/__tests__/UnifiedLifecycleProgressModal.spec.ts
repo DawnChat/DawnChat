@@ -32,7 +32,7 @@ describe('UnifiedLifecycleProgressModal', () => {
     })
 
     expect(wrapper.text()).toContain('100%')
-    expect(wrapper.text()).toContain('创建完成')
+    expect(wrapper.text()).toContain('完成')
     expect(wrapper.text()).not.toContain('完成 · 100%')
     await wrapper.get('.btn-primary').trigger('click')
     expect(wrapper.emitted('done')).toBeTruthy()

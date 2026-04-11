@@ -93,7 +93,12 @@ class TemplateScaffolder(ABC):
             shutil.rmtree(target_dir)
         target_dir.mkdir(parents=True, exist_ok=True)
 
-        shutil.copy2(source_dir / "package.json", target_dir / "package.json")
+        package_json = TemplateScaffolder.load_json(source_dir / "package.json")
+        sanitized_package_json = TemplateScaffolder._sanitize_dist_package_json(
+            package_json,
+            target_dir=target_dir,
+        )
+        TemplateScaffolder.write_json(target_dir / "package.json", sanitized_package_json)
         readme_path = source_dir / "README.md"
         if readme_path.exists():
             shutil.copy2(readme_path, target_dir / "README.md")
@@ -107,6 +112,105 @@ class TemplateScaffolder(ABC):
             relative_path = Path(os.path.relpath(target_dir, relative_to))
             return f"file:{relative_path.as_posix()}"
         return f"file:{target_dir.resolve().as_posix()}"
+
+    @classmethod
+    def _iter_assistant_sdk_dependency_sections(cls) -> tuple[str, ...]:
+        return ("dependencies", "peerDependencies", "optionalDependencies", "devDependencies")
+
+    @classmethod
+    def _collect_internal_assistant_sdk_dependencies(cls, package_json: dict[str, Any]) -> set[str]:
+        internal_dependencies: set[str] = set()
+        for section in cls._iter_assistant_sdk_dependency_sections():
+            deps = package_json.get(section)
+            if not isinstance(deps, dict):
+                continue
+            for package_name in deps:
+                if package_name in Config.ASSISTANT_SDK_PACKAGE_DIRS:
+                    internal_dependencies.add(package_name)
+        return internal_dependencies
+
+    @classmethod
+    def _sanitize_dist_package_json(
+        cls,
+        package_json: dict[str, Any],
+        *,
+        target_dir: Path,
+    ) -> dict[str, Any]:
+        sanitized = json.loads(json.dumps(package_json))
+        sanitized.pop("scripts", None)
+        sanitized.pop("devDependencies", None)
+
+        runtime_dependencies = sanitized.get("dependencies")
+        if not isinstance(runtime_dependencies, dict):
+            runtime_dependencies = {}
+        sanitized["dependencies"] = runtime_dependencies
+
+        for section in cls._iter_assistant_sdk_dependency_sections():
+            deps = package_json.get(section)
+            if not isinstance(deps, dict):
+                continue
+            for package_name in cls._collect_internal_assistant_sdk_dependencies({section: deps}):
+                package_dirname = Config.ASSISTANT_SDK_PACKAGE_DIRS[package_name]
+                runtime_dependencies[package_name] = cls._format_file_dependency_target(
+                    target_dir.parent / package_dirname,
+                    relative_to=target_dir,
+                )
+
+        for section in ("peerDependencies", "optionalDependencies"):
+            deps = sanitized.get(section)
+            if not isinstance(deps, dict):
+                continue
+            for package_name in list(deps):
+                if package_name in Config.ASSISTANT_SDK_PACKAGE_DIRS:
+                    deps.pop(package_name, None)
+            if not deps:
+                sanitized.pop(section, None)
+
+        cls._validate_sanitized_dist_package_json(sanitized)
+        return sanitized
+
+    @classmethod
+    def _validate_sanitized_dist_package_json(cls, package_json: dict[str, Any]) -> None:
+        for section in ("dependencies", "peerDependencies", "optionalDependencies"):
+            deps = package_json.get(section)
+            if not isinstance(deps, dict):
+                continue
+            for package_name, version in deps.items():
+                normalized = str(version or "").strip()
+                if normalized == "workspace:*":
+                    raise RuntimeError(
+                        f"Assistant SDK dist package still contains workspace dependency: {package_name}"
+                    )
+                if normalized.startswith("file:") and package_name not in Config.ASSISTANT_SDK_PACKAGE_DIRS:
+                    raise RuntimeError(
+                        f"Assistant SDK dist package contains unsupported local dependency: {package_name} -> {normalized}"
+                    )
+
+    @classmethod
+    def _collect_transitive_assistant_sdk_packages(
+        cls,
+        root_packages: set[str],
+        *,
+        sdk_mapping: dict[str, Path],
+    ) -> set[str]:
+        collected = set(root_packages)
+        pending = list(root_packages)
+        while pending:
+            package_name = pending.pop()
+            package_dir = sdk_mapping.get(package_name)
+            if package_dir is None:
+                continue
+            package_json_path = package_dir / "package.json"
+            if not package_json_path.exists():
+                continue
+            internal_dependencies = cls._collect_internal_assistant_sdk_dependencies(
+                cls.load_json(package_json_path)
+            )
+            for dependency_name in internal_dependencies:
+                if dependency_name not in collected:
+                    collected.add(dependency_name)
+                    pending.append(dependency_name)
+        return collected
 
     @classmethod
     def _is_source_assistant_sdk_dependency(
@@ -179,18 +283,23 @@ class TemplateScaffolder(ABC):
         relative_base = package_json_path.parent
         if runtime_mode == "release":
             vendor_root = plugin_root / "vendor" / Config.ASSISTANT_SDK_DIRNAME
+            packages_to_vendor = cls._collect_transitive_assistant_sdk_packages(
+                set(matched),
+                sdk_mapping=sdk_mapping,
+            )
             for package_name, package_dirname in Config.ASSISTANT_SDK_PACKAGE_DIRS.items():
-                if package_name not in matched:
+                if package_name not in packages_to_vendor:
                     continue
                 vendor_dir = vendor_root / package_dirname
                 cls._copy_dist_ready_package(sdk_mapping[package_name], vendor_dir)
-                section = matched[package_name]
-                deps = package_json.get(section)
-                if isinstance(deps, dict):
-                    deps[package_name] = cls._format_file_dependency_target(
-                        vendor_dir,
-                        relative_to=relative_base,
-                    )
+                section = matched.get(package_name)
+                if section is not None:
+                    deps = package_json.get(section)
+                    if isinstance(deps, dict):
+                        deps[package_name] = cls._format_file_dependency_target(
+                            vendor_dir,
+                            relative_to=relative_base,
+                        )
         else:
             for package_name, section in matched.items():
                 deps = package_json.get(section)

@@ -42,6 +42,7 @@
           @update:model-value="(value) => { form.initialVisibility = value as 'private' | 'public' | 'unlisted' }"
         />
         <div class="hint">{{ visibilityHint }}</div>
+        <div v-if="publicSlugGlobalUniqueHint" class="hint">{{ publicSlugGlobalUniqueHint }}</div>
 
         <label class="label">{{ labels.version }}</label>
         <input v-model.trim="form.version" class="input" :placeholder="localVersionText" />
@@ -120,6 +121,8 @@ const labels = computed(() => ({
   visibilityUnlisted: appsLabels.value.publishVisibilityUnlisted,
   visibilityLocked: appsLabels.value.publishVisibilityLocked,
   visibilityEditable: appsLabels.value.publishVisibilityEditable,
+  publishPublicSlugGlobalUnique: appsLabels.value.publishPublicSlugGlobalUnique,
+  publishErrorPublicSlugConflict: appsLabels.value.publishErrorPublicSlugConflict,
   version: appsLabels.value.publishVersion,
   description: appsLabels.value.publishDescription,
   descriptionPlaceholder: appsLabels.value.publishDescriptionPlaceholder,
@@ -245,6 +248,12 @@ const versionHintClass = computed(() => (versionValidation.value.valid ? 'hint s
 const visibilityLocked = computed(() => Boolean(props.status?.current_slug))
 const visibilityHint = computed(() => (visibilityLocked.value ? labels.value.visibilityLocked : labels.value.visibilityEditable))
 
+const publicSlugGlobalUniqueHint = computed(() => {
+  if (visibilityLocked.value) return ''
+  if (form.initialVisibility === 'private') return ''
+  return labels.value.publishPublicSlugGlobalUnique
+})
+
 const disabledConfirm = computed(() => {
   return !form.slug || !form.title || !form.version || props.loading || !versionValidation.value.valid
 })
@@ -291,10 +300,16 @@ const successSummary = computed(() => {
 })
 
 const displayError = computed(() => {
+  let raw = ''
   if (props.task?.status === 'failed') {
-    return props.task.error?.message || props.task.message || props.error || ''
+    raw = String(props.task.error?.message || props.task.message || props.error || '')
+  } else {
+    raw = String(props.error || '')
   }
-  return props.error || ''
+  if (raw.includes('public_slug_conflict')) {
+    return labels.value.publishErrorPublicSlugConflict
+  }
+  return raw
 })
 
 const submit = () => {

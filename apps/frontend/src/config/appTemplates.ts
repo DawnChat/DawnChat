@@ -1,5 +1,5 @@
 export type CreateAppType = 'desktop' | 'web' | 'mobile'
-export type CreateAssistantPlatformType = 'desktop' | 'web'
+export type CreateAssistantPlatformType = 'desktop' | 'web' | 'mobile'
 export type AppTemplateDescriptionKey =
   | 'desktopTemplateDescription'
   | 'webTemplateDescription'
@@ -15,6 +15,7 @@ export interface AppTemplateCatalogItem {
 
 export const DESKTOP_AI_ASSISTANT_TEMPLATE_ID = 'com.dawnchat.desktop-ai-assistant'
 export const WEB_AI_ASSISTANT_TEMPLATE_ID = 'com.dawnchat.web-ai-assistant'
+export const MOBILE_AI_ASSISTANT_TEMPLATE_ID = 'com.dawnchat.mobile-ai-assistant'
 export const AI_ASSISTANT_TEMPLATE_ID = DESKTOP_AI_ASSISTANT_TEMPLATE_ID
 export const MAIN_AI_ASSISTANT_ID_SUFFIX = 'dawnchat-ai-assistant'
 
@@ -60,6 +61,13 @@ export const ASSISTANT_TEMPLATE_CATALOG: Record<CreateAssistantPlatformType, App
     templateName: 'web-ai-assistant',
     stack: 'Vue 3 + TypeScript + Vite',
     descriptionKey: 'webTemplateDescription'
+  },
+  mobile: {
+    appType: 'mobile',
+    templateId: MOBILE_AI_ASSISTANT_TEMPLATE_ID,
+    templateName: 'mobile-ai-assistant',
+    stack: 'Ionic Vue + Capacitor + Vite + Assistant SDK',
+    descriptionKey: 'mobileTemplateDescription'
   }
 }
 

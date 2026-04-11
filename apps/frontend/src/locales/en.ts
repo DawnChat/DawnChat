@@ -882,6 +882,9 @@ export default {
     publishVisibilityUnlisted: 'Unlisted',
     publishVisibilityLocked: 'After the first publish, visibility can only be changed in DawnChatWeb.',
     publishVisibilityEditable: 'You can set the default visibility for the first publish. Change it later in DawnChatWeb.',
+    publishPublicSlugGlobalUnique:
+      'For public or unlisted sites, the slug becomes a globally unique public path (/sites/:slug). Publish fails if it is already taken.',
+    publishErrorPublicSlugConflict: 'This public URL slug is already taken. Choose a different slug and try again.',
     publishVersion: 'Release Version',
     publishDescription: 'Site Description',
     publishDescriptionPlaceholder: 'Optional, shown in the personal center',
@@ -972,6 +975,9 @@ export default {
     workbenchCreateAssistantPlatformDesktopDescription: 'Best for local tooling, Bun runtime, and desktop-integrated development workflows.',
     workbenchCreateAssistantPlatformWeb: 'Web Assistant',
     workbenchCreateAssistantPlatformWebDescription: 'Best for browser-hosted assistant experiences powered by Vue, Vite, and web runtime glue.',
+    workbenchCreateAssistantPlatformMobile: 'Mobile Assistant',
+    workbenchCreateAssistantPlatformMobileDescription:
+      'Best for Ionic Vue + Capacitor shells with the same Assistant SDK, chat UI, and host tool routing as web.',
     workbenchCreateAssistantOpenAfterCreate: 'Open immediately after creation',
     workbenchCreateAssistantConfirm: 'Create Assistant',
     workbenchCreateAssistantCreating: 'Creating...',

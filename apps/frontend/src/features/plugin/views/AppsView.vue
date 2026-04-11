@@ -265,6 +265,11 @@ const assistantPlatformOptions = computed(() => [
     value: 'web',
     label: t.value.apps.workbenchCreateAssistantPlatformWeb,
     description: t.value.apps.workbenchCreateAssistantPlatformWebDescription
+  },
+  {
+    value: 'mobile',
+    label: t.value.apps.workbenchCreateAssistantPlatformMobile,
+    description: t.value.apps.workbenchCreateAssistantPlatformMobileDescription
   }
 ])
 
@@ -308,7 +313,9 @@ const handleCreateAssistantClick = () => {
 const handleCreateAssistantConfirm = (
   payload: { name: string; openAfterCreate: boolean; platform: string }
 ) => {
-  const platform = payload.platform === 'web' ? 'web' : 'desktop'
+  const raw = payload.platform
+  const platform =
+    raw === 'web' || raw === 'mobile' ? raw : 'desktop'
   void createAssistant(payload.name, platform)
 }
 

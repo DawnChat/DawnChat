@@ -318,6 +318,7 @@ class Config:
     PLUGIN_OPENCODE_RULES_CACHE_DIR = PLUGIN_DOWNLOAD_DIR / "opencode-rules"
     ASSISTANT_SDK_DIRNAME = "assistant-sdk"
     ASSISTANT_SDK_PACKAGE_DIRS = {
+        "@dawnchat/assistant-app-sdk": "assistant-app-sdk",
         "@dawnchat/assistant-chat-ui": "assistant-chat-ui",
         "@dawnchat/assistant-core": "assistant-core",
         "@dawnchat/host-orchestration-sdk": "host-orchestration-sdk",

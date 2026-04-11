@@ -4,7 +4,6 @@
       <div class="header">
         <div class="header-copy">
           <h3>{{ title }}</h3>
-          <p class="sub">{{ progress.message || '-' }}</p>
         </div>
         <div class="header-right">
           <span class="progress-pill">{{ progressLabel }}</span>
@@ -127,14 +126,6 @@ const onClose = () => emit('close')
   font-weight: 620;
   line-height: 1.3;
   color: var(--color-text-primary);
-}
-
-.sub {
-  margin: 0.16rem 0 0;
-  font-size: 0.74rem;
-  color: var(--color-text-secondary);
-  line-height: 1.35;
-  max-width: 340px;
 }
 
 .header-right {
@@ -268,10 +259,6 @@ const onClose = () => emit('close')
 
   .footer {
     padding: 0.74rem 0.9rem 0.9rem;
-  }
-
-  .sub {
-    max-width: 100%;
   }
 }
 </style>

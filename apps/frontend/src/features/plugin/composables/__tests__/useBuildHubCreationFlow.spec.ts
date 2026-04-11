@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useBuildHubCreationFlow } from '@/features/plugin/composables/useBuildHubCreationFlow'
 import {
   AI_ASSISTANT_TEMPLATE_ID,
+  MOBILE_AI_ASSISTANT_TEMPLATE_ID,
   WEB_AI_ASSISTANT_TEMPLATE_ID
 } from '@/config/appTemplates'
 
@@ -100,6 +101,34 @@ describe('useBuildHubCreationFlow', () => {
       is_main_assistant: false,
     }))
     expect(ensureTemplateCache).toHaveBeenCalledWith(WEB_AI_ASSISTANT_TEMPLATE_ID, false)
+  })
+
+  it('从首页创建 mobile assistant 时会使用 mobile assistant 模板', async () => {
+    const createDevSession = vi.fn(async () => ({ task_id: 'task_1' }))
+    const ensureTemplateCache = vi.fn(async () => ({}))
+    const flow = useBuildHubCreationFlow({
+      user: ref({ id: 'uid_1', email: 'demo@example.com' }),
+      installedApps: ref([]),
+      openCreateWizard: vi.fn(),
+      closeCreateWizard: vi.fn(),
+      createDevSession,
+      openAppDevWorkbench: vi.fn(async () => {}),
+      startAppDevSession: vi.fn(async () => {}),
+      ensureTemplateCache,
+    })
+
+    flow.openCreateAssistantDialog()
+    await flow.createAssistant('新的 Mobile 助手', 'mobile')
+
+    expect(createDevSession).toHaveBeenCalledWith(expect.objectContaining({
+      template_id: MOBILE_AI_ASSISTANT_TEMPLATE_ID,
+      app_type: 'mobile',
+      name: '新的 Mobile 助手',
+      owner_email: 'demo@example.com',
+      owner_user_id: 'uid_1',
+      is_main_assistant: false,
+    }))
+    expect(ensureTemplateCache).toHaveBeenCalledWith(MOBILE_AI_ASSISTANT_TEMPLATE_ID, false)
   })
 
   it('主 assistant 不存在时自动创建官方主实例', async () => {
