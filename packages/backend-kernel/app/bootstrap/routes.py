@@ -23,6 +23,7 @@ def include_api_routers(app: FastAPI) -> None:
     from app.api.routes import router
     from app.api.scoring_routes import router as scoring_router
     from app.api.storage_routes import router as storage_router
+    from app.api.supabase_session_routes import router as supabase_session_router
     from app.api.tts_routes import router as tts_router
     from app.api.web_publish_routes import router as web_publish_router
     from app.api.workbench_projects_routes import router as workbench_projects_router
@@ -47,6 +48,7 @@ def include_api_routers(app: FastAPI) -> None:
     app.include_router(scoring_router, prefix="/api")
     app.include_router(web_publish_router, prefix="/api")
     app.include_router(mobile_publish_router, prefix="/api")
+    app.include_router(supabase_session_router, prefix="/api")
     app.include_router(tts_router, prefix="/api")
     app.include_router(plugin_ui_bridge_router)
     app.include_router(sdk_routes.router)

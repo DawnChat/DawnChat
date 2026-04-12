@@ -20,6 +20,10 @@ import {
   type AuthUser
 } from '@/shared/auth/userStorage'
 import { resolveSafeRedirectPath } from '@/shared/auth/redirect'
+import {
+  clearSupabaseSessionOnKernel,
+  syncSupabaseSessionToKernel
+} from '@/services/syncSupabaseSessionToKernel'
 
 interface Session {
   access_token: string
@@ -130,6 +134,12 @@ export function useAuth() {
     ])
     hasHydratedFromStorage = true
     error.value = null
+    void syncSupabaseSessionToKernel({
+      access_token: supabaseSession.access_token,
+      refresh_token: supabaseSession.refresh_token,
+      expires_at: supabaseSession.expires_at ?? undefined,
+      supabase_user_id: supabaseSession.user?.id
+    })
   }
 
   const finalizeSignIn = async (context: FinalizeSignInContext): Promise<{ redirectPath: string }> => {
@@ -228,6 +238,7 @@ export function useAuth() {
         session.value = null
         await deleteSupabaseSession()
         await clearUserFromStorage()
+        void clearSupabaseSessionOnKernel()
       }
     })
     hasBoundAuthStateListener = true
@@ -325,6 +336,7 @@ export function useAuth() {
           deleteSupabaseSession(),
           clearUserFromStorage()
         ])
+        void clearSupabaseSessionOnKernel()
 
         logger.info('本地会话已清除')
         signOutSupabaseInBackground()
@@ -336,6 +348,7 @@ export function useAuth() {
           deleteSupabaseSession(),
           clearUserFromStorage()
         ])
+        void clearSupabaseSessionOnKernel()
         signOutSupabaseInBackground()
       } finally {
         logoutInFlight = null
@@ -363,6 +376,7 @@ export function useAuth() {
         user.value = null
         session.value = null
         await deleteSupabaseSession()
+        void clearSupabaseSessionOnKernel()
       }
 
     } catch (err) {

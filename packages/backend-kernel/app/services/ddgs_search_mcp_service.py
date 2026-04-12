@@ -6,10 +6,13 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
 import json
-from typing import Any, Dict, Iterable, List, Optional
+import re
+from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 from app.config import Config
+from app.services.supabase_session_store import get_supabase_session_store
+from app.services.unsplash_image_search_client import UnsplashImageSearchError, search_images_via_edge
 from app.utils.logger import get_logger
 
 try:
@@ -18,6 +21,18 @@ except Exception:  # pragma: no cover - runtime dependency fallback
     DDGS = None  # type: ignore[assignment]
 
 logger = get_logger("ddgs_search_mcp_service")
+
+_MVP_IMAGE_KEYWORD_RE = re.compile(r"^[a-z][a-z0-9-]{0,63}$")
+_INVALID_IMAGE_QUERY_MESSAGE = (
+    "query must be a single English keyword: lowercase letters, digits, hyphens; "
+    "must start with a letter (max 64 characters)."
+)
+_IMAGE_TOOL_DESCRIPTION = (
+    "Search images. When logged in, results may come from Unsplash—retain and display "
+    "photographer attribution and links as required by Unsplash guidelines "
+    "(https://unsplash.com/api-terms). "
+    "MVP: `query` must be a single English keyword (see tool schema)."
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,7 +79,7 @@ class DdgsSearchMcpService:
             ),
             DdgsToolDefinition(
                 name="dawnchat.search.image",
-                description="Search image results from web search engines",
+                description=_IMAGE_TOOL_DESCRIPTION,
                 input_schema=search_schema,
             ),
             DdgsToolDefinition(
@@ -99,16 +114,36 @@ class DdgsSearchMcpService:
             "dawnchat.search.extract",
         }:
             return {"ok": False, "error_code": "tool_not_found", "message": f"unknown tool: {tool_name}"}
-        if DDGS is None:
+
+        raw_arguments: Dict[str, Any] = dict(arguments) if isinstance(arguments, dict) else {}
+
+        if tool_name == "dawnchat.search.image":
+            raw_q = str(raw_arguments.get("query") or "").strip()
+            if not raw_q:
+                return {"ok": False, "error_code": "invalid_arguments", "message": "query is required"}
+            mvp_keyword = self._normalize_mvp_image_keyword(raw_q)
+            if mvp_keyword is None:
+                return {
+                    "ok": False,
+                    "error_code": "invalid_image_query",
+                    "message": _INVALID_IMAGE_QUERY_MESSAGE,
+                }
+            raw_arguments = {**raw_arguments, "query": mvp_keyword}
+
+        if DDGS is None and tool_name != "dawnchat.search.image":
             return {
                 "ok": False,
                 "error_code": "ddgs_unavailable",
                 "message": "ddgs package is not available",
             }
+
         try:
-            normalized = self._validate_arguments(tool_name, arguments)
+            normalized = self._validate_arguments(tool_name, raw_arguments)
         except ValueError as err:
             return {"ok": False, "error_code": "invalid_arguments", "message": str(err)}
+
+        if tool_name == "dawnchat.search.image":
+            return await self._execute_image_search(normalized)
 
         ttl_seconds = self._resolve_ttl(tool_name)
         cache_key = self._build_cache_key(tool_name, normalized)
@@ -118,12 +153,18 @@ class DdgsSearchMcpService:
             payload["cache_hit"] = True
             return {"ok": True, "data": payload}
 
+        if DDGS is None:
+            return {
+                "ok": False,
+                "error_code": "ddgs_unavailable",
+                "message": "ddgs package is not available",
+            }
+
         try:
             result_payload = await asyncio.to_thread(self._execute_ddgs_call, tool_name, normalized)
         except Exception as err:
             if self._is_no_results_error(err) and tool_name in {
                 "dawnchat.search.text",
-                "dawnchat.search.image",
                 "dawnchat.search.video",
             }:
                 logger.info("ddgs search no results tool=%s query=%s", tool_name, normalized.get("query"))
@@ -137,6 +178,105 @@ class DdgsSearchMcpService:
         result_payload["cache_hit"] = False
         await self._write_cache(cache_key, result_payload, ttl_seconds)
         return {"ok": True, "data": result_payload}
+
+    @staticmethod
+    def _normalize_mvp_image_keyword(raw: str) -> Optional[str]:
+        normalized = str(raw or "").strip().lower()
+        if not normalized:
+            return None
+        if _MVP_IMAGE_KEYWORD_RE.fullmatch(normalized):
+            return normalized
+        return None
+
+    async def _execute_image_search(self, normalized: Dict[str, Any]) -> Dict[str, Any]:
+        ttl_seconds = self._resolve_ttl("dawnchat.search.image")
+        token = await get_supabase_session_store().get_usable_access_token()
+
+        if token:
+            cache_args_u = {**normalized, "_cache_provider": "unsplash"}
+            cache_key_u = self._build_cache_key("dawnchat.search.image", cache_args_u)
+            cached_u = await self._read_cache(cache_key_u, ttl_seconds)
+            if cached_u is not None:
+                payload_u = dict(cached_u)
+                payload_u["cache_hit"] = True
+                return {"ok": True, "data": payload_u}
+            try:
+                edge = await search_images_via_edge(
+                    access_token=token,
+                    keyword=str(normalized["query"]),
+                    max_results=int(normalized["max_results"]),
+                )
+            except UnsplashImageSearchError as err:
+                logger.info(
+                    "image search unsplash path skipped code=%s msg=%s",
+                    err.code,
+                    err,
+                )
+            else:
+                items_raw = edge.get("items") if isinstance(edge.get("items"), list) else []
+                items = [self._merge_unsplash_image_item(row) for row in items_raw if isinstance(row, dict)]
+                result_payload: Dict[str, Any] = {
+                    "tool": "dawnchat.search.image",
+                    "query": normalized["query"],
+                    "region": normalized["region"],
+                    "requested_region": normalized["region"],
+                    "safesearch": normalized["safesearch"],
+                    "requested_safesearch": normalized["safesearch"],
+                    "max_results": normalized["max_results"],
+                    "items": items,
+                    "provider": "unsplash",
+                    "edge_cache_hit": bool(edge.get("cache_hit")),
+                    "fallback_used": False,
+                }
+                result_payload["cache_hit"] = False
+                await self._write_cache(cache_key_u, result_payload, ttl_seconds)
+                return {"ok": True, "data": result_payload}
+
+        if DDGS is None:
+            return {
+                "ok": False,
+                "error_code": "ddgs_unavailable",
+                "message": "ddgs package is not available",
+            }
+
+        cache_args_d = {**normalized, "_cache_provider": "ddgs"}
+        cache_key_d = self._build_cache_key("dawnchat.search.image", cache_args_d)
+        cached_d = await self._read_cache(cache_key_d, ttl_seconds)
+        if cached_d is not None:
+            payload_d = dict(cached_d)
+            payload_d["cache_hit"] = True
+            return {"ok": True, "data": payload_d}
+
+        try:
+            result_payload = await asyncio.to_thread(self._execute_ddgs_call, "dawnchat.search.image", normalized)
+        except Exception as err:
+            if self._is_no_results_error(err):
+                logger.info("ddgs image search no results query=%s", normalized.get("query"))
+                empty = self._build_empty_search_payload(
+                    tool_name="dawnchat.search.image",
+                    arguments=normalized,
+                )
+                empty["provider"] = "ddgs"
+                return {"ok": True, "data": empty}
+            logger.warning("ddgs image search failed error=%s", err)
+            return {"ok": False, "error_code": "ddgs_request_failed", "message": str(err)}
+
+        result_payload["provider"] = "ddgs"
+        result_payload["cache_hit"] = False
+        await self._write_cache(cache_key_d, result_payload, ttl_seconds)
+        return {"ok": True, "data": result_payload}
+
+    def _merge_unsplash_image_item(self, row: Dict[str, Any]) -> Dict[str, Any]:
+        normalized_rows = self._normalize_image_items([row])
+        item: Dict[str, Any] = (
+            dict(normalized_rows[0])
+            if normalized_rows
+            else {"title": "", "url": "", "thumbnail": "", "source": ""}
+        )
+        for key in ("links", "user", "unsplash_id"):
+            if key in row:
+                item[key] = row[key]
+        return item
 
     def _execute_ddgs_call(self, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         if DDGS is None:

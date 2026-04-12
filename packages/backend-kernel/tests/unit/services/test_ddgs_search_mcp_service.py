@@ -1,7 +1,10 @@
+import time
+
 import pytest
 
 from app.services import ddgs_search_mcp_service as service_module
 from app.services.ddgs_search_mcp_service import DdgsSearchMcpService
+from app.services.unsplash_image_search_client import UnsplashImageSearchError
 
 
 class _FakeDdgsClient:
@@ -113,3 +116,101 @@ async def test_execute_image_fallback_retry_can_recover_results(monkeypatch: pyt
     assert result["data"]["requested_region"] == "us-en"
     assert result["data"]["region"] == "wt-wt"
     assert len(result["data"]["items"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_execute_image_rejects_multi_word_query() -> None:
+    service = DdgsSearchMcpService()
+    result = await service.execute("dawnchat.search.image", {"query": "cute cat"})
+    assert result["ok"] is False
+    assert result["error_code"] == "invalid_image_query"
+
+
+@pytest.mark.asyncio
+async def test_execute_image_unsplash_path_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(service_module, "DDGS", _FakeDdgsClient)
+
+    class _FakeStore:
+        async def get_usable_access_token(self) -> str:
+            return "test-access-token"
+
+    async def _fake_edge(**_kwargs: object) -> dict:
+        return {
+            "ok": True,
+            "cache_hit": False,
+            "items": [
+                {
+                    "title": "Photo",
+                    "url": "https://images.unsplash.com/photo-1",
+                    "thumbnail": "https://images.unsplash.com/thumb-1",
+                    "source": "Unsplash",
+                    "unsplash_id": "abc",
+                    "links": {"html": "https://unsplash.com/photos/abc"},
+                    "user": {"name": "Artist"},
+                }
+            ],
+        }
+
+    monkeypatch.setattr(service_module, "get_supabase_session_store", lambda: _FakeStore())
+    monkeypatch.setattr(service_module, "search_images_via_edge", _fake_edge)
+    monkeypatch.setattr(service_module.Config, "DDGS_CACHE_ENABLED", False)
+
+    service = DdgsSearchMcpService()
+    result = await service.execute("dawnchat.search.image", {"query": "Cat"})
+    assert result["ok"] is True
+    assert result["data"]["provider"] == "unsplash"
+    assert result["data"]["items"][0]["url"].startswith("https://")
+    assert result["data"]["items"][0]["links"]["html"]
+
+
+@pytest.mark.asyncio
+async def test_execute_image_unsplash_429_falls_back_to_ddgs(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(service_module, "DDGS", _FakeDdgsClient)
+
+    class _FakeStore:
+        async def get_usable_access_token(self) -> str:
+            return "test-access-token"
+
+    async def _fake_edge(**_kwargs: object) -> dict:
+        raise UnsplashImageSearchError("rate_limited", "too many", status_code=429)
+
+    monkeypatch.setattr(service_module, "get_supabase_session_store", lambda: _FakeStore())
+    monkeypatch.setattr(service_module, "search_images_via_edge", _fake_edge)
+    monkeypatch.setattr(service_module.Config, "DDGS_CACHE_ENABLED", False)
+
+    service = DdgsSearchMcpService()
+    result = await service.execute("dawnchat.search.image", {"query": "cat"})
+    assert result["ok"] is True
+    assert result["data"]["provider"] == "ddgs"
+    assert len(result["data"]["items"]) >= 1
+
+
+@pytest.mark.asyncio
+async def test_supabase_session_store_expired_token_returns_none(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    from app.services import supabase_session_store as store_module
+    from app.services.supabase_session_store import SupabaseSessionStore
+
+    monkeypatch.setattr(store_module.Config, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(store_module.Config, "SUPABASE_ACCESS_SKEW_SECONDS", 60.0)
+    store_module._store = None
+
+    store = SupabaseSessionStore()
+    past = float(int(time.time()) - 3600)
+    await store.save(
+        {
+            "access_token": "x.y.z",
+            "refresh_token": "r",
+            "expires_at": past,
+        }
+    )
+    assert await store.get_usable_access_token() is None
+
+    future = float(int(time.time()) + 3600)
+    await store.save(
+        {
+            "access_token": "valid.token.here",
+            "refresh_token": "r",
+            "expires_at": future,
+        }
+    )
+    assert await store.get_usable_access_token() == "valid.token.here"
