@@ -27,7 +27,7 @@ The host owns:
 - async execution scheduling,
 - status reporting,
 - cancellation propagation,
-- bridge transport between the backend, host frontend, and plugin iframe.
+- **transport between the backend, host frontend, and the plugin UI** (see §2.1 for deployment shapes).
 
 The plugin owns:
 
@@ -42,6 +42,17 @@ In other words:
 
 > The host manages the session. The plugin owns the meaning of the work.
 
+### 2.1 Deployment surfaces (current DawnChat)
+
+The **same session contract** (opaque steps, `assistant.session_step_execute` / `assistant.session_step_cancel`) applies whenever a DawnChat-class host orchestrates a plugin. **Transport** depends on how the plugin UI is hosted:
+
+| Surface | Typical packaging | Transport notes |
+|---------|-------------------|-----------------|
+| **Desktop plugin preview / dev workbench** | Plugin UI in an **iframe** inside the DawnChat Electron/web host | Host frontend uses the plugin UI bridge (e.g. WebSocket path such as `/ws/plugin-ui-bridge`) to post messages to the iframe; optional `DAWNCHAT_HOST_INVOKE_*` for host services (TTS, etc.). This is the **reference** stack illustrated in §3. |
+| **Official Web / Mobile assistant** | Standalone SPA (Vite) or Ionic + Capacitor | Runtime logic lives in **`@dawnchat/assistant-core`** (same step executor semantics as desktop). When that UI is **not** embedded in the DawnChat iframe host, there is **no** iframe bridge—session orchestration may be local to the app or wired through a different host adapter. The protocol in this document still describes the **shape** of host tools and step execution when a full DawnChat host is in the loop. |
+
+Plugins should not assume an iframe exists; they should assume the host will invoke the registered `assistant.session_step_execute` / `assistant.session_step_cancel` capabilities when integrated with DawnChat tooling.
+
 ---
 
 ## 3. Architecture Overview
@@ -49,12 +60,12 @@ In other words:
 ```mermaid
 flowchart LR
   A["External controller<br/>developer tool / agent / automation"] --> B["Python host tools<br/>dawnchat.ui.session.*"]
-  B --> C["/ws/plugin-ui-bridge"]
+  B --> C["Host transport<br/>e.g. /ws/plugin-ui-bridge"]
   C --> D["Host frontend bridge"]
   D --> E["Assistant Session Orchestrator"]
   E --> F["Plugin capability<br/>assistant.session_step_execute"]
   E --> G["Plugin capability<br/>assistant.session_step_cancel"]
-  F --> H["Plugin runtime"]
+  F --> H["Plugin runtime<br/>typically @dawnchat/assistant-core"]
   G --> H
   H --> I["Optional host invoke channel<br/>DAWNCHAT_HOST_INVOKE_*"]
 ```
@@ -79,7 +90,7 @@ The public host-managed tools are:
 - `dawnchat.ui.event.wait`
 - `dawnchat.ui.session.wait_for_end`
 
-These tools are defined in [ui_tool_service.py](file:///Users/zhutao/Cursor/DawnChat/packages/backend-kernel/app/plugin_ui_bridge/ui_tool_service.py#L402-L466).
+These tools are defined in `packages/backend-kernel/app/plugin_ui_bridge/ui_tool_service.py` (search for `dawnchat.ui.session` / `dawnchat.ui.event.wait`).
 
 Their role is to provide a stable control-plane contract for any external caller.
 
@@ -90,18 +101,24 @@ The host executes plugin work through:
 - `assistant.session_step_execute`
 - `assistant.session_step_cancel`
 
-These capabilities are implemented by the plugin runtime, not by the host. See [sessionStepExecutor.ts](file:///Users/zhutao/Cursor/DawnChat/dawnchat-plugins/official-plugins/desktop-ai-assistant/_ir/frontend/web-src/src/runtime/sessionStepExecutor.ts#L151-L344).
+These capabilities are implemented by the **plugin runtime**. In official assistants, step dispatch is centralized in **`@dawnchat/assistant-core`**:
+
+- `dawnchat-plugins/assistant-sdk/assistant-core/src/runtime/session/stepExecutor.ts`
+
+The desktop AI assistant IR frontend re-exports this module for bundle convenience (`desktop-ai-assistant/.../src/runtime/session/stepExecutor.ts` → `@dawnchat/assistant-core/session`); treat **assistant-core** as the canonical source.
 
 ### 4.3 Optional host invoke channel
 
-Plugins may also call host-owned functions through the iframe message bridge:
+When the plugin runs inside the **DawnChat host iframe**, it may call host-owned functions through the iframe message bridge:
 
 - `DAWNCHAT_HOST_INVOKE_REQUEST`
 - `DAWNCHAT_HOST_INVOKE_RESULT`
 
-This channel is generic. It is not limited to voice, TTS, or any single service. See [constants.ts](file:///Users/zhutao/Cursor/DawnChat/apps/frontend/src/services/plugin-ui-bridge/constants.ts#L9-L28) and [usePluginUiBridge.ts](file:///Users/zhutao/Cursor/DawnChat/apps/frontend/src/composables/usePluginUiBridge.ts#L291-L357).
+This channel is generic. It is not limited to voice, TTS, or any single service. See `apps/frontend/src/services/plugin-ui-bridge/constants.ts` and `apps/frontend/src/composables/usePluginUiBridge.ts` (host invoke handling).
 
 Any specific host service exposed over this channel should be treated as an extension, not as part of the core session protocol.
+
+**Narration / TTS:** `guide.narrate` inside assistant-core may call `AssistantHostAdapter.voice` (`speak` / `stop` / `status`). Desktop plugins often bridge that to the host via `__DAWNCHAT_HOST_VOICE__` or host invoke; mobile official assistant may use Capacitor TTS; a standalone web bundle may omit `voice` until a host adapter is provided. None of that changes the session envelope contract in §6.
 
 ---
 
@@ -132,9 +149,9 @@ The current status values are:
 - `failed`
 - `cancelled`
 
-See [useAssistantSessionOrchestrator.ts](file:///Users/zhutao/Cursor/DawnChat/apps/frontend/src/features/plugin-dev-workbench/composables/useAssistantSessionOrchestrator.ts#L18-L32) and [the session status builder](file:///Users/zhutao/Cursor/DawnChat/apps/frontend/src/features/plugin-dev-workbench/composables/useAssistantSessionOrchestrator.ts#L67-L88).
+See `apps/frontend/src/features/plugin-dev-workbench/composables/useAssistantSessionOrchestrator.ts` (session shape and status builder).
 
-The host currently enforces a single active session per plugin. A new `session.start` request is rejected while another session is still running for the same plugin. See [active session admission](file:///Users/zhutao/Cursor/DawnChat/apps/frontend/src/features/plugin-dev-workbench/composables/useAssistantSessionOrchestrator.ts#L230-L247).
+The host currently enforces a single active session per plugin. A new `session.start` request is rejected while another session is still running for the same plugin (see active-session admission logic in the same orchestrator composable).
 
 ---
 
@@ -160,7 +177,7 @@ Example:
       "action": {
         "type": "view.open",
         "payload": {
-          "view_id": "paper.main"
+          "view_id": "tictactoe.main"
         }
       },
       "timeout_ms": 30000
@@ -170,7 +187,7 @@ Example:
 ```
 
 The host treats `action.payload` as opaque data.
-It validates the outer envelope, but it does not interpret plugin business meaning. See [tool schema](file:///Users/zhutao/Cursor/DawnChat/packages/backend-kernel/app/plugin_ui_bridge/ui_tool_service.py#L402-L435) and [step normalization](file:///Users/zhutao/Cursor/DawnChat/apps/frontend/src/features/plugin-dev-workbench/composables/useAssistantSessionOrchestrator.ts#L45-L65).
+It validates the outer envelope, but it does not interpret plugin business meaning. See `ui_tool_service.py` (session start schema) and `useAssistantSessionOrchestrator.ts` (step normalization).
 
 ---
 
@@ -179,7 +196,7 @@ It validates the outer envelope, but it does not interpret plugin business meani
 ### 7.1 Fast acceptance, async execution
 
 `dawnchat.ui.session.start` returns quickly with an accepted session record.
-The host then executes steps asynchronously in order. See [session start](file:///Users/zhutao/Cursor/DawnChat/apps/frontend/src/features/plugin-dev-workbench/composables/useAssistantSessionOrchestrator.ts#L230-L293) and [ordered execution](file:///Users/zhutao/Cursor/DawnChat/apps/frontend/src/features/plugin-dev-workbench/composables/useAssistantSessionOrchestrator.ts#L167-L212).
+The host then executes steps asynchronously in order. See `useAssistantSessionOrchestrator.ts` (session start and ordered execution).
 
 ### 7.2 Plugin-owned step completion
 
@@ -189,7 +206,7 @@ If it returns `ok: false` or throws, the host marks the session as failed.
 
 ### 7.3 Host-propagated cancellation
 
-`dawnchat.ui.session.stop` marks the host session as cancelled and attempts to propagate the stop request into the plugin through `assistant.session_step_cancel`. See [stop handling](file:///Users/zhutao/Cursor/DawnChat/apps/frontend/src/features/plugin-dev-workbench/composables/useAssistantSessionOrchestrator.ts#L319-L377).
+`dawnchat.ui.session.stop` marks the host session as cancelled and attempts to propagate the stop request into the plugin through `assistant.session_step_cancel`. See stop handling in `useAssistantSessionOrchestrator.ts`.
 
 ### 7.4 Pull-based observation
 
@@ -214,7 +231,7 @@ It is a pure realtime wait:
 - it does not require `session_id`,
 - it may match events emitted while some session is still running,
 - it only waits for events emitted after the wait is established,
-- refresh or iframe reload may drop an in-flight wait, and callers should simply start a new wait if still needed.
+- refresh, **iframe reload (desktop)**, or WebView reload may drop an in-flight wait, and callers should simply start a new wait if still needed.
 
 `dawnchat.ui.session.wait_for_end` accepts:
 
@@ -284,9 +301,10 @@ This protocol does not prescribe:
 - how a plugin interprets `guide.*`, `view.*`, `session.*`, or `flow.*`,
 - how a plugin structures its internal view state or runtime observation state,
 - whether a plugin uses narration, TTS, overlays, cards, or any other UI idiom,
-- which optional host services a plugin invokes.
+- which optional host services a plugin invokes,
+- whether the plugin UI is iframe-hosted or a standalone SPA, as long as the host can invoke the same capabilities.
 
-For example, the official AI Assistant currently uses namespaced actions such as `guide.*` and `view.*`, but those are plugin runtime conventions rather than host protocol requirements. See [runtime namespace dispatch](file:///Users/zhutao/Cursor/DawnChat/dawnchat-plugins/official-plugins/desktop-ai-assistant/_ir/frontend/web-src/src/runtime/sessionStepExecutor.ts#L155-L203).
+For example, the official AI Assistant uses namespaced actions such as `guide.*` and `view.*`; dispatch is implemented in **`@dawnchat/assistant-core`** (`dawnchat-plugins/assistant-sdk/assistant-core/src/runtime/session/stepExecutor.ts` and related runtimes). Those are plugin runtime conventions rather than host protocol requirements.
 
 ---
 
@@ -299,7 +317,8 @@ That means:
 - the host keeps a narrow lifecycle contract,
 - plugins evolve action namespaces independently,
 - optional host services stay out of the core session contract,
-- new plugin runtimes can be introduced without redesigning session lifecycle semantics.
+- new plugin runtimes can be introduced without redesigning session lifecycle semantics,
+- shared runtime logic can live in **`@dawnchat/assistant-core`** and be reused across desktop, web, and mobile assistant bundles.
 
 This is the main reason the protocol remains useful even as plugin behavior becomes more sophisticated.
 
@@ -307,13 +326,23 @@ This is the main reason the protocol remains useful even as plugin behavior beco
 
 ## 10. Reference Implementation
 
-The current reference implementation lives in these files:
+**Host (DawnChat app + workbench)**
 
-- Host tool definitions: [ui_tool_service.py](file:///Users/zhutao/Cursor/DawnChat/packages/backend-kernel/app/plugin_ui_bridge/ui_tool_service.py#L402-L466)
-- Host bridge and iframe dispatch: [usePluginUiBridge.ts](file:///Users/zhutao/Cursor/DawnChat/apps/frontend/src/composables/usePluginUiBridge.ts#L117-L357)
-- Host session orchestration: [useAssistantSessionOrchestrator.ts](file:///Users/zhutao/Cursor/DawnChat/apps/frontend/src/features/plugin-dev-workbench/composables/useAssistantSessionOrchestrator.ts#L90-L397)
-- Plugin step execution and cancellation: [sessionStepExecutor.ts](file:///Users/zhutao/Cursor/DawnChat/dawnchat-plugins/official-plugins/desktop-ai-assistant/_ir/frontend/web-src/src/runtime/sessionStepExecutor.ts#L151-L344)
-- Plugin runtime event bus and recent-window persistence: [createAssistantEventBus.ts](file:///Users/zhutao/Cursor/DawnChat/dawnchat-plugins/official-plugins/desktop-ai-assistant/_ir/frontend/web-src/src/runtime/events/createAssistantEventBus.ts)
-- Plugin `flow.wait` execution: [flowRuntime.ts](file:///Users/zhutao/Cursor/DawnChat/dawnchat-plugins/official-plugins/desktop-ai-assistant/_ir/frontend/web-src/src/runtime/flowRuntime.ts)
+- Host tool definitions: `packages/backend-kernel/app/plugin_ui_bridge/ui_tool_service.py`
+- Host bridge and iframe dispatch: `apps/frontend/src/composables/usePluginUiBridge.ts`
+- Host session orchestration: `apps/frontend/src/features/plugin-dev-workbench/composables/useAssistantSessionOrchestrator.ts`
 
-The official AI Assistant uses this protocol as a reference app, but the protocol itself is host–plugin infrastructure and should be understood independently from any one assistant behavior model.
+**Plugin runtime (canonical)**
+
+- Step execution and cancellation: `dawnchat-plugins/assistant-sdk/assistant-core/src/runtime/session/stepExecutor.ts`
+- Runtime event bus: `dawnchat-plugins/assistant-sdk/assistant-core/src/runtime/events/createAssistantEventBus.ts`
+- `flow.wait` execution: `dawnchat-plugins/assistant-sdk/assistant-core/src/runtime/flowRuntime.ts`
+- Core runtime assembly: `dawnchat-plugins/assistant-sdk/assistant-core/src/runtime/bootstrap/composeRuntime.ts`
+
+**Official assistant shells** (thin compose + host adapter; import assistant-core):
+
+- Desktop IR: `dawnchat-plugins/official-plugins/desktop-ai-assistant/_ir/frontend/web-src/src/runtime/bootstrap/composeRuntime.ts`
+- Web: `dawnchat-plugins/official-plugins/web-ai-assistant/web-src/src/runtime/bootstrap/composeWebAssistantRuntime.ts`
+- Mobile: `dawnchat-plugins/official-plugins/mobile-ai-assistant/web-src/src/runtime/bootstrap/composeMobileAssistantRuntime.ts`
+
+The official AI Assistant uses this protocol as a reference app when driven by the DawnChat host; the protocol itself is host–plugin infrastructure and should be understood independently from any one assistant behavior model.
