@@ -48,7 +48,7 @@ export interface CodingAgentEvent {
   messageID?: string | null
   eventID?: number
   seq?: number
-  properties?: Record<string, any>
+  properties?: Record<string, unknown>
 }
 
 export type PermissionDecision = 'once' | 'always' | 'reject' | string

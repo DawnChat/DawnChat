@@ -595,7 +595,7 @@ describe('usePluginUiBridge', () => {
             ts_ms: 123,
             source: 'view',
             payload: {
-              resource_id: 'tictactoe:neon-grid',
+              binding_label: 'tictactoe:neon-grid',
               move_index: 12,
               row: 2,
               col: 2,
@@ -611,7 +611,7 @@ describe('usePluginUiBridge', () => {
       ts_ms: 123,
       source: 'view',
       payload: {
-        resource_id: 'tictactoe:neon-grid',
+        binding_label: 'tictactoe:neon-grid',
         move_index: 12,
         row: 2,
         col: 2,

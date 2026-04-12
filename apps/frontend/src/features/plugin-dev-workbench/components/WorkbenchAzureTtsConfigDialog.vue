@@ -7,26 +7,28 @@
             <h3 class="dialog-title">{{ title }}</h3>
           </div>
           <div class="dialog-content">
-            <label class="field">
-              <span class="field-label">API Key</span>
-              <input
-                class="field-input"
-                type="password"
-                :value="apiKey"
-                :placeholder="apiKeyConfigured ? '留空表示继续使用已保存 Key' : '请输入 Azure API Key'"
-                @input="emit('update:apiKey', ($event.target as HTMLInputElement).value)"
-              >
-            </label>
-            <label class="field">
-              <span class="field-label">Region</span>
-              <input
-                class="field-input"
-                type="text"
-                :value="region"
-                placeholder="例如 eastasia / japaneast"
-                @input="emit('update:region', ($event.target as HTMLInputElement).value)"
-              >
-            </label>
+            <template v-if="configMode === 'azure'">
+              <label class="field">
+                <span class="field-label">API Key</span>
+                <input
+                  class="field-input"
+                  type="password"
+                  :value="apiKey"
+                  :placeholder="apiKeyConfigured ? '留空表示继续使用已保存 Key' : '请输入 Azure API Key'"
+                  @input="emit('update:apiKey', ($event.target as HTMLInputElement).value)"
+                >
+              </label>
+              <label class="field">
+                <span class="field-label">Region</span>
+                <input
+                  class="field-input"
+                  type="text"
+                  :value="region"
+                  placeholder="例如 eastasia / japaneast"
+                  @input="emit('update:region', ($event.target as HTMLInputElement).value)"
+                >
+              </label>
+            </template>
             <label class="field">
               <span class="field-label">中文默认音色</span>
               <select
@@ -52,7 +54,7 @@
           <div class="dialog-footer">
             <button class="dialog-btn dialog-btn-cancel" :disabled="busy" @click="emit('cancel')">取消</button>
             <button class="dialog-btn dialog-btn-confirm" :disabled="busy" @click="emit('submit')">
-              {{ busy ? '校验中...' : '校验并保存' }}
+              {{ busy ? (configMode === 'dawn' ? '保存中...' : '校验中...') : (configMode === 'dawn' ? '保存' : '校验并保存') }}
             </button>
           </div>
         </div>
@@ -62,19 +64,23 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{
-  visible: boolean
-  busy: boolean
-  title: string
-  apiKey: string
-  region: string
-  defaultVoiceZh: string
-  defaultVoiceEn: string
-  zhVoiceOptions: Array<{ value: string; label: string }>
-  enVoiceOptions: Array<{ value: string; label: string }>
-  apiKeyConfigured: boolean
-  errorMessage: string
-}>()
+withDefaults(
+  defineProps<{
+    visible: boolean
+    busy: boolean
+    title: string
+    configMode?: 'azure' | 'dawn'
+    apiKey: string
+    region: string
+    defaultVoiceZh: string
+    defaultVoiceEn: string
+    zhVoiceOptions: Array<{ value: string; label: string }>
+    enVoiceOptions: Array<{ value: string; label: string }>
+    apiKeyConfigured: boolean
+    errorMessage: string
+  }>(),
+  { configMode: 'azure' },
+)
 
 const emit = defineEmits<{
   'update:apiKey': [value: string]

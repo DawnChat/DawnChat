@@ -43,15 +43,19 @@ const {
   isPreviewStarting: vi.fn(() => false),
 }))
 
-vi.mock('pinia', () => ({
-  storeToRefs: () => ({
-    installedApps,
-    filteredMarketApps,
-    loading,
-    marketLoading,
-    buildHubFilter,
-  }),
-}))
+vi.mock('pinia', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('pinia')>()
+  return {
+    ...actual,
+    storeToRefs: () => ({
+      installedApps,
+      filteredMarketApps,
+      loading,
+      marketLoading,
+      buildHubFilter,
+    }),
+  }
+})
 
 vi.mock('vue-router', () => ({
   useRoute: () => routeRef.value,
@@ -60,7 +64,7 @@ vi.mock('vue-router', () => ({
   }),
 }))
 
-vi.mock('@/features/plugin/store', () => ({
+vi.mock('@/stores/plugin', () => ({
   usePluginStore: () => ({
     hydrateBuildHubRecentSession,
     startStatusPolling,

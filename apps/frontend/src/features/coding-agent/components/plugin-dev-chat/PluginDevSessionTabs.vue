@@ -77,6 +77,15 @@
               >
                 <Pencil class="settings-icon" aria-hidden="true" />
               </button>
+              <button
+                v-else-if="selectedTtsEngine === 'dawn-tts'"
+                class="icon-btn icon-btn-azure-config-label"
+                type="button"
+                title="配置 Dawn TTS 音色"
+                @click="emit('open-dawn-tts-settings')"
+              >
+                <Pencil class="settings-icon" aria-hidden="true" />
+              </button>
             </div>
             <div class="tts-engine-row">
               <PluginDevInlineSelect
@@ -170,6 +179,7 @@ const emit = defineEmits<{
   'select-agent': [value: string]
   'select-tts-engine': [value: string]
   'open-azure-tts-settings': []
+  'open-dawn-tts-settings': []
   'toggle-tts-enabled': []
 }>()
 

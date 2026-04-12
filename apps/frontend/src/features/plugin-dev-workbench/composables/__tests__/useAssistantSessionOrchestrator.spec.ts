@@ -167,8 +167,8 @@ describe('useAssistantSessionOrchestrator', () => {
                 type: 'view.open',
                 payload: {
                   view_id: 'word.main',
-                  resource: {
-                    resource_type: 'word',
+                  state_binding: {
+                    binding_type: 'word',
                     data: {
                       word: 'sync',
                     },
@@ -782,7 +782,7 @@ describe('useAssistantSessionOrchestrator', () => {
       ts_ms: 456,
       source: 'view',
       payload: {
-        resource_id: 'tictactoe:neon-grid',
+        binding_label: 'tictactoe:neon-grid',
         move_index: 12,
         row: 2,
         col: 2,

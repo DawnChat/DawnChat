@@ -28,6 +28,7 @@
       @select-agent="handleAgentChange"
       @select-tts-engine="(value) => emit('select-tts-engine', value)"
       @open-azure-tts-settings="emit('open-azure-tts-settings')"
+      @open-dawn-tts-settings="emit('open-dawn-tts-settings')"
       @toggle-tts-enabled="emit('toggle-tts-enabled')"
     />
 
@@ -204,6 +205,7 @@ const emit = defineEmits<{
   'stop-tts': []
   'select-tts-engine': [value: string]
   'open-azure-tts-settings': []
+  'open-dawn-tts-settings': []
 }>()
 
 const { t } = useI18n()

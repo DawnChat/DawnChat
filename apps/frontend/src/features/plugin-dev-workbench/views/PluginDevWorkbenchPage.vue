@@ -116,6 +116,7 @@
         @stop-tts="stopTtsPlayback"
         @select-tts-engine="selectTtsEngine"
         @open-azure-tts-settings="openAzureTtsSettings"
+        @open-dawn-tts-settings="openDawnTtsSettings"
         @toggle-file-tree="toggleFileTree"
         @open-file="openFile"
       />
@@ -181,6 +182,7 @@
         @stop-tts="stopTtsPlayback"
         @select-tts-engine="selectTtsEngine"
         @open-azure-tts-settings="openAzureTtsSettings"
+        @open-dawn-tts-settings="openDawnTtsSettings"
       />
     </template>
     <WorkbenchPreviewSection
@@ -257,7 +259,8 @@
     <WorkbenchAzureTtsConfigDialog
       :visible="azureTtsDialogVisible"
       :busy="azureTtsSaving"
-      title="Azure TTS 配置"
+      :title="ttsVoiceDialogTitle"
+      :config-mode="ttsVoiceConfigMode"
       :api-key="azureTtsApiKey"
       :region="azureTtsRegion"
       :default-voice-zh="azureTtsDefaultVoiceZh"
@@ -271,12 +274,13 @@
       @update:default-voice-zh="handleAzureDefaultVoiceZhChange"
       @update:default-voice-en="handleAzureDefaultVoiceEnChange"
       @cancel="closeAzureTtsDialog"
-      @submit="submitAzureTtsDialog"
+      @submit="submitTtsVoiceConfigDialog"
     />
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import WorkbenchHeaderBar from '@/features/plugin-dev-workbench/components/WorkbenchHeaderBar.vue'
 import WorkbenchPreviewSection from '@/features/plugin-dev-workbench/components/WorkbenchPreviewSection.vue'
 import WorkbenchPublishOverlays from '@/features/plugin-dev-workbench/components/WorkbenchPublishOverlays.vue'
@@ -386,6 +390,7 @@ const {
   ttsEnabled,
   selectedTtsEngine,
   ttsEngineOptions,
+  ttsVoiceConfigMode,
   azureTtsDialogVisible,
   azureTtsSaving,
   azureTtsErrorMessage,
@@ -401,13 +406,18 @@ const {
   toggleTtsEnabled,
   selectTtsEngine,
   openAzureTtsSettings,
+  openDawnTtsSettings,
   closeAzureTtsDialog,
-  submitAzureTtsDialog,
+  submitTtsVoiceConfigDialog,
   stopTtsPlayback,
   handleCapabilityInvokeRequest,
   handleAssistantRuntimeEvent,
   handleHostInvokeRequest,
 } = usePluginDevWorkbenchOrchestration()
+
+const ttsVoiceDialogTitle = computed(() =>
+  ttsVoiceConfigMode.value === 'dawn' ? 'Dawn TTS 音色' : 'Azure TTS 配置',
+)
 
 const handleAzureApiKeyChange = (value: string) => {
   azureTtsApiKey.value = value

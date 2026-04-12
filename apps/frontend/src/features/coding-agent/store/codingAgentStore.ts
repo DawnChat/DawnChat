@@ -26,7 +26,7 @@ import { createChatProjectionService } from '@/features/coding-agent/store/chatP
 import { createEngineConfigBridge } from '@/features/coding-agent/store/engineConfigBridge'
 import { createRuntimeOrchestrator } from '@/features/coding-agent/store/runtimeOrchestrator'
 import { createPermissionStateService } from '@/features/coding-agent/store/permissionStateService'
-import type { PromptPart } from '@/services/coding-agent/engineAdapter'
+import type { CodingAgentEvent, EngineAdapter, PromptPart } from '@/services/coding-agent/engineAdapter'
 
 interface EngineOption {
   id: EngineId
@@ -104,7 +104,7 @@ export const useCodingAgentStore = defineStore('codingAgent', () => {
     return availableAgentOptions.value
   })
 
-  function getActiveAdapter() {
+  function getActiveAdapter(): EngineAdapter {
     return getEngineAdapter(selectedEngine.value)
   }
 
@@ -303,7 +303,7 @@ export const useCodingAgentStore = defineStore('codingAgent', () => {
     tryRenameDefaultSessionAfterSend
   } = sessionCrud
 
-  let applyEventImpl = (_evt: any) => {}
+  let applyEventImpl = (_evt: CodingAgentEvent) => {}
   runtimeOrchestrator = createRuntimeOrchestrator({
     selectedEngine,
     selectedAgent,
@@ -340,7 +340,7 @@ export const useCodingAgentStore = defineStore('codingAgent', () => {
     updateSessionTouch,
     pushLocalUserEcho,
     clearPendingLocalUserEchoes,
-    applyEvent: (evt: any) => applyEventImpl(evt)
+    applyEvent: (evt: CodingAgentEvent) => applyEventImpl(evt)
   })
 
   const { applyEvent } = createEventDispatcher({

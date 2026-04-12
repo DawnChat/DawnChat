@@ -220,7 +220,7 @@ To see available options:
 # Backend
 ./dev.sh --pytest
 ./dev.sh --pytest unit
-./dev.sh --pytest-file tests/unit/test_agentv3_api.py
+./dev.sh --pytest-file tests/unit/agentv3
 
 # Frontend
 ./dev.sh --vitest run

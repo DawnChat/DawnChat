@@ -2,9 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   getAzureTtsConfigStatus,
+  getDawnTtsStatus,
   getTtsCapability,
   getTtsTaskStatus,
   saveAzureTtsConfig,
+  saveDawnTtsVoiceConfig,
   speakTts,
   stopTts,
   validateAzureTtsConfig,
@@ -90,6 +92,41 @@ describe("ttsClient", () => {
       }))
     );
     const payload = await validateAzureTtsConfig({ api_key: "k", region: "eastasia", voice: "zh-CN-XiaoxiaoNeural" });
+    expect(payload.ok).toBe(true);
+  });
+
+  it("queries dawn tts status", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          status: "success",
+          data: {
+            available: true,
+            reason: "",
+            default_voice_zh: "zh-CN-XiaoxiaoNeural",
+            default_voice_en: "en-US-JennyNeural",
+          },
+        }),
+      }))
+    );
+    const payload = await getDawnTtsStatus();
+    expect(payload.data.available).toBe(true);
+  });
+
+  it("saves dawn tts voice config", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ status: "success", data: { ok: true } }),
+      }))
+    );
+    const payload = await saveDawnTtsVoiceConfig({
+      default_voice_zh: "zh-CN-YunxiNeural",
+      default_voice_en: "en-US-GuyNeural",
+    });
     expect(payload.ok).toBe(true);
   });
 

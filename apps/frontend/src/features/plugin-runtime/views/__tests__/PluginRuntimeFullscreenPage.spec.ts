@@ -42,7 +42,7 @@ vi.mock('vue-router', () => ({
   }),
 }))
 
-vi.mock('@/features/plugin/store', () => ({
+vi.mock('@/stores/plugin', () => ({
   usePluginStore: () => pluginStoreMock,
 }))
 

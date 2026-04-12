@@ -130,7 +130,7 @@ class VoiceMcpService:
                         "voice": {"type": "string"},
                         "sid": {"type": "integer", "minimum": 0},
                         "mode": {"type": "string", "enum": ["manual"], "default": "manual"},
-                        "engine": {"type": "string", "enum": ["python", "azure"], "default": "python"},
+                        "engine": {"type": "string", "enum": ["python", "azure", "dawn-tts"], "default": "python"},
                         "interrupt": {"type": "boolean", "default": False},
                     },
                     "required": ["plugin_id", "text"],

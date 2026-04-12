@@ -36,6 +36,7 @@
       @stop-tts="emit('stop-tts')"
       @select-tts-engine="(value) => emit('select-tts-engine', value)"
       @open-azure-tts-settings="emit('open-azure-tts-settings')"
+      @open-dawn-tts-settings="emit('open-dawn-tts-settings')"
     />
   </div>
 </template>
@@ -87,6 +88,7 @@ const emit = defineEmits<{
   'stop-tts': []
   'select-tts-engine': [value: string]
   'open-azure-tts-settings': []
+  'open-dawn-tts-settings': []
 }>()
 
 const { t } = useI18n()

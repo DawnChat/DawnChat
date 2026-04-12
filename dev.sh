@@ -171,8 +171,8 @@ DawnChat 开发环境启动脚本
     $0 --pytest v2-all      # 运行所有 V2 测试（包括 API 集成测试）
     $0 --pytest api-integration  # 运行 V2 API 集成测试
     $0 --pytest golden      # 运行 Golden Scenario 测试（核心语义验证）
-    $0 --pytest-file tests/unit/test_agentv3_api.py
-                           # 只跑指定后端测试文件
+    $0 --pytest-file tests/unit/agentv3
+                           # 只跑 AgentV3 单元测试目录（含 conftest）
     $0 --pytest unit -- -k stream -x
                            # pytest 透传参数：按关键字筛选并失败即停
     $0 --pytest --coverage  # 运行测试并生成覆盖率报告

@@ -255,6 +255,18 @@ vi.mock('@/features/coding-agent/tts/useHostTtsPlayback', () => ({
   }),
 }))
 
+const ttsClientMocks = vi.hoisted(() => ({
+  getDawnTtsStatus: vi.fn(async () => ({
+    status: 'success',
+    data: {
+      available: true,
+      reason: '',
+      default_voice_zh: 'zh-CN-XiaoxiaoNeural',
+      default_voice_en: 'en-US-JennyNeural',
+    },
+  })),
+}))
+
 vi.mock('@/services/tts/ttsClient', () => ({
   getAzureTtsConfigStatus: vi.fn(async () => ({
     status: 'success',
@@ -267,6 +279,9 @@ vi.mock('@/services/tts/ttsClient', () => ({
       default_voice_en: 'en-US-JennyNeural',
     },
   })),
+  getDawnTtsStatus: ttsClientMocks.getDawnTtsStatus,
+  validateDawnTtsVoiceConfig: vi.fn(async () => ({ ok: true })),
+  saveDawnTtsVoiceConfig: vi.fn(async () => ({ ok: true })),
   validateAzureTtsConfig: vi.fn(async () => ({ ok: true })),
   saveAzureTtsConfig: vi.fn(async () => ({ ok: true })),
   getTtsCapability: vi.fn(async () => ({
@@ -444,7 +459,25 @@ describe('usePluginDevWorkbenchOrchestration', () => {
     expect((wrapper.vm as any).isAssistantCompactSurface).toBe(true)
   })
 
-  it('TTS 下拉至少包含 Azure 与 System', async () => {
+  it('TTS 下拉包含 Dawn（可用时首位）、Azure 与 System', async () => {
+    const Harness = defineComponent({
+      setup() {
+        return usePluginDevWorkbenchOrchestration()
+      },
+      template: '<div />',
+    })
+    const wrapper = mount(Harness)
+    await vi.waitFor(() => {
+      expect((wrapper.vm as any).dawnTtsAvailable).toBe(true)
+    })
+    const options = (wrapper.vm as any).ttsEngineOptions.map((item: { id: string }) => item.id)
+    expect(options[0]).toBe('dawn-tts')
+    expect(options).toContain('azure')
+    expect(options).toContain('system')
+  })
+
+  it('选择 Dawn TTS 会打开音色弹窗而不是立即切换', async () => {
+    localStorage.setItem('plugin-dev-workbench.tts.engine.v1', 'python')
     const Harness = defineComponent({
       setup() {
         return usePluginDevWorkbenchOrchestration()
@@ -455,9 +488,11 @@ describe('usePluginDevWorkbenchOrchestration', () => {
     await vi.waitFor(() => {
       expect((wrapper.vm as any).ttsEngineOptions.length).toBeGreaterThan(0)
     })
-    const options = (wrapper.vm as any).ttsEngineOptions.map((item: { id: string }) => item.id)
-    expect(options).toContain('azure')
-    expect(options).toContain('system')
+    expect((wrapper.vm as any).selectedTtsEngine).toBe('python')
+    await (wrapper.vm as any).selectTtsEngine('dawn-tts')
+    expect((wrapper.vm as any).azureTtsDialogVisible).toBe(true)
+    expect((wrapper.vm as any).ttsVoiceConfigMode).toBe('dawn')
+    expect((wrapper.vm as any).selectedTtsEngine).toBe('python')
   })
 
   it('选择 Azure 会打开配置弹窗而不是立即切换', async () => {

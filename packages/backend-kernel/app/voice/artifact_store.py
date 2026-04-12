@@ -26,11 +26,12 @@ class TtsArtifactStore:
         self._tasks.setdefault(task_id, _TaskArtifacts())
         self._touch(task_id)
 
-    def write_segment(self, task_id: str, seq: int, payload: bytes) -> Path:
+    def write_segment(self, task_id: str, seq: int, payload: bytes, *, suffix: str = ".wav") -> Path:
         self.register_task(task_id)
         task_dir = self._base_dir / task_id
         task_dir.mkdir(parents=True, exist_ok=True)
-        path = task_dir / f"{seq}.wav"
+        normalized = suffix if str(suffix).startswith(".") else f".{suffix}"
+        path = task_dir / f"{seq}{normalized}"
         path.write_bytes(payload)
         self._tasks[task_id].files[int(seq)] = path
         self._touch(task_id)
@@ -38,14 +39,16 @@ class TtsArtifactStore:
 
     def resolve_segment(self, task_id: str, seq: int) -> Path | None:
         task = self._tasks.get(task_id)
-        if task is None:
-            path = self._base_dir / task_id / f"{seq}.wav"
-            return path if path.exists() else None
-        cached_path = task.files.get(int(seq))
-        if cached_path and cached_path.exists():
-            return cached_path
-        fallback = self._base_dir / task_id / f"{seq}.wav"
-        return fallback if fallback.exists() else None
+        if task is not None:
+            cached_path = task.files.get(int(seq))
+            if cached_path and cached_path.exists():
+                return cached_path
+        base = self._base_dir / task_id
+        for ext in (".wav", ".mp3"):
+            path = base / f"{seq}{ext}"
+            if path.exists():
+                return path
+        return None
 
     def mark_completed(self, task_id: str) -> None:
         task = self._tasks.get(task_id)

@@ -35,6 +35,7 @@ const {
   getAzureTtsConfigStatusMock,
   validateAzureTtsConfigMock,
   saveAzureTtsConfigMock,
+  getDawnTtsStatusMock,
 } = vi.hoisted(() => ({
   onBeforeRouteLeaveMock: vi.fn(),
   routerPushMock: vi.fn(async () => {}),
@@ -87,6 +88,15 @@ const {
   })),
   validateAzureTtsConfigMock: vi.fn(async () => ({ ok: true })),
   saveAzureTtsConfigMock: vi.fn(async () => ({ ok: true })),
+  getDawnTtsStatusMock: vi.fn(async () => ({
+    status: 'success',
+    data: {
+      available: false,
+      reason: 'not_logged_in',
+      default_voice_zh: 'zh-CN-XiaoxiaoNeural',
+      default_voice_en: 'en-US-JennyNeural',
+    },
+  })),
 }))
 
 vi.mock('vue-router', () => ({
@@ -245,6 +255,9 @@ vi.mock('@/services/tts/ttsClient', () => ({
   getAzureTtsConfigStatus: getAzureTtsConfigStatusMock,
   validateAzureTtsConfig: validateAzureTtsConfigMock,
   saveAzureTtsConfig: saveAzureTtsConfigMock,
+  getDawnTtsStatus: getDawnTtsStatusMock,
+  validateDawnTtsVoiceConfig: vi.fn(async () => ({ ok: true })),
+  saveDawnTtsVoiceConfig: vi.fn(async () => ({ ok: true })),
   getTtsCapability: getTtsCapabilityMock,
   getTtsTaskStatus: getTtsTaskStatusMock,
 }))

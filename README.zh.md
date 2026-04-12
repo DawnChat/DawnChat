@@ -237,7 +237,7 @@ export DAWNCHAT_OPENCODE_VERSION=v1.3.10
 # 后端
 ./dev.sh --pytest
 ./dev.sh --pytest unit
-./dev.sh --pytest-file tests/unit/test_agentv3_api.py
+./dev.sh --pytest-file tests/unit/agentv3
 
 # 前端
 ./dev.sh --vitest run

@@ -1,6 +1,8 @@
 import { buildBackendUrl } from '../../utils/backendUrl'
 import { logger } from '../../utils/logger'
 import { createOpencodeClient } from '@opencode-ai/sdk/client'
+
+type OpencodeSdkClient = ReturnType<typeof createOpencodeClient>
 import type {
   CodingAgentEvent,
   CodingAgentMessage,
@@ -57,7 +59,7 @@ export async function fetchOpenCodeHealthSnapshot(): Promise<OpenCodeHealthSnaps
 class OpenCodeAdapter implements EngineAdapter {
   private baseUrl = ''
   private eventController: AbortController | null = null
-  private sdkClient: any | null = null
+  private sdkClient: OpencodeSdkClient | null = null
   private sdkBaseUrl = ''
   private eventDebugBudget = 20
 
@@ -73,30 +75,41 @@ class OpenCodeAdapter implements EngineAdapter {
     }
   }
 
-  private summarizeStreamEvent(raw: any, evt: CodingAgentEvent | null): Record<string, unknown> {
-    const eventLike = evt || (raw && typeof raw?.type === 'string' ? raw : null)
-    const properties = ((eventLike as any)?.properties || {}) as Record<string, any>
-    const part = (properties?.part || {}) as Record<string, any>
-    const state = (part?.state || {}) as Record<string, any>
-    const delta = properties?.delta
-    const output = state?.output
-    const metadata = state?.metadata
+  private summarizeStreamEvent(raw: unknown, evt: CodingAgentEvent | null): Record<string, unknown> {
+    const eventLike =
+      evt ||
+      (raw && typeof raw === 'object' && raw !== null && 'type' in raw && typeof (raw as { type?: unknown }).type === 'string'
+        ? (raw as CodingAgentEvent)
+        : null)
+    const properties = (eventLike?.properties || {}) as Record<string, unknown>
+    const partRaw = properties.part
+    const part = partRaw && typeof partRaw === 'object' && partRaw !== null ? (partRaw as Record<string, unknown>) : {}
+    const stateRaw = part.state
+    const state = stateRaw && typeof stateRaw === 'object' && stateRaw !== null ? (stateRaw as Record<string, unknown>) : {}
+    const delta = properties.delta
+    const output = state.output
+    const metadata = state.metadata
+    const infoRaw = properties.info
+    const infoId =
+      infoRaw && typeof infoRaw === 'object' && infoRaw !== null && 'id' in infoRaw
+        ? String((infoRaw as { id?: unknown }).id || '')
+        : ''
     return {
-      type: String((eventLike as any)?.type || ''),
+      type: String(eventLike?.type || ''),
       sessionID: String(
-        (eventLike as any)?.sessionID ||
-          properties?.sessionID ||
-          properties?.sessionId ||
-          part?.sessionID ||
+        eventLike?.sessionID ||
+          properties.sessionID ||
+          properties.sessionId ||
+          part.sessionID ||
           ''
       ),
-      messageID: String(properties?.messageID || part?.messageID || properties?.info?.id || ''),
-      partID: String(properties?.partID || part?.id || ''),
-      tool: String(part?.tool || ''),
-      toolStatus: String(state?.status || ''),
+      messageID: String(properties.messageID || part.messageID || infoId || ''),
+      partID: String(properties.partID || part.id || ''),
+      tool: String(part.tool || ''),
+      toolStatus: String(state.status || ''),
       deltaLength: typeof delta === 'string' ? delta.length : 0,
       outputLength: typeof output === 'string' ? output.length : 0,
-      metadataKeys: metadata && typeof metadata === 'object' ? Object.keys(metadata).slice(0, 8) : []
+      metadataKeys: metadata && typeof metadata === 'object' ? Object.keys(metadata as object).slice(0, 8) : []
     }
   }
 
@@ -119,7 +132,7 @@ class OpenCodeAdapter implements EngineAdapter {
     }
   }
 
-  private getSdkClient(): any {
+  private getSdkClient(): OpencodeSdkClient {
     if (this.sdkClient && this.sdkBaseUrl === this.baseUrl) {
       return this.sdkClient
     }
@@ -131,12 +144,20 @@ class OpenCodeAdapter implements EngineAdapter {
     return this.sdkClient
   }
 
-  private static toEvent(raw: any): CodingAgentEvent | null {
-    if (raw && typeof raw.type === 'string') {
+  private static toEvent(raw: unknown): CodingAgentEvent | null {
+    if (raw && typeof raw === 'object' && raw !== null && 'type' in raw && typeof (raw as { type?: unknown }).type === 'string') {
       return raw as CodingAgentEvent
     }
-    if (raw?.data && typeof raw.data.type === 'string') {
-      return raw.data as CodingAgentEvent
+    if (
+      raw &&
+      typeof raw === 'object' &&
+      raw !== null &&
+      'data' in raw &&
+      (raw as { data?: unknown }).data &&
+      typeof (raw as { data: { type?: unknown } }).data === 'object' &&
+      typeof (raw as { data: { type?: unknown } }).data.type === 'string'
+    ) {
+      return (raw as { data: CodingAgentEvent }).data
     }
     return null
   }
@@ -373,9 +394,10 @@ class OpenCodeAdapter implements EngineAdapter {
     if (!resp.ok) {
       throw new Error(`读取权限列表失败: ${resp.status}`)
     }
-    const payload = await resp.json().catch(() => [])
-    const usedDataField = !Array.isArray(payload) && Array.isArray((payload as any)?.data)
-    const rows = Array.isArray(payload) ? payload : usedDataField ? (payload as any).data : []
+    const payload: unknown = await resp.json().catch(() => [])
+    const payloadObj = payload && typeof payload === 'object' && payload !== null ? (payload as { data?: unknown }) : null
+    const usedDataField = !Array.isArray(payload) && Array.isArray(payloadObj?.data)
+    const rows = Array.isArray(payload) ? payload : usedDataField ? (payloadObj?.data as unknown[]) : []
     if (usedDataField) {
       logger.debug('[OpenCodeAdapter] listPermissions parsed from data field')
     }
@@ -387,7 +409,11 @@ class OpenCodeAdapter implements EngineAdapter {
     return all.filter((item) => {
       const direct = String(item?.sessionID || '').trim()
       if (direct) return direct === targetSessionId
-      const toolSession = String((item as any)?.tool?.sessionID || '').trim()
+      const tool = item.tool
+      const toolSession =
+        tool && typeof tool === 'object' && tool !== null && 'sessionID' in tool
+          ? String((tool as { sessionID?: unknown }).sessionID || '').trim()
+          : ''
       return toolSession === targetSessionId
     })
   }
@@ -421,7 +447,7 @@ class OpenCodeAdapter implements EngineAdapter {
       }
       const emitStatus = (
         status: 'connecting' | 'reconnecting' | 'streaming' | 'closed',
-        extra?: Record<string, any>
+        extra?: Record<string, unknown>
       ) => {
         onEvent({
           type: 'stream.status',
@@ -474,7 +500,7 @@ class OpenCodeAdapter implements EngineAdapter {
         })
         logger.info('[OpenCodeAdapter] subscribe established')
         emitStatus('streaming')
-        for await (const raw of streamResp.stream as AsyncIterable<any>) {
+        for await (const raw of streamResp.stream as AsyncIterable<unknown>) {
           if (cancelled) break
           touchEventAt()
           const evt = OpenCodeAdapter.toEvent(raw)
@@ -486,22 +512,23 @@ class OpenCodeAdapter implements EngineAdapter {
               this.eventDebugBudget -= 1
               logger.debug('[OpenCodeAdapter] stream event', {
                 type: String(evt.type || ''),
-                sessionID: String((evt as any)?.sessionID || (evt.properties as any)?.sessionID || ''),
-                hasPart: Boolean((evt.properties as any)?.part),
-                hasDelta: typeof (evt.properties as any)?.delta === 'string'
+                sessionID: String(evt.sessionID || evt.properties?.sessionID || ''),
+                hasPart: Boolean(evt.properties?.part),
+                hasDelta: typeof evt.properties?.delta === 'string'
               })
             }
             if (String(evt.type || '') === 'message.part.delta') {
-              const delta = String((evt.properties as any)?.delta || '').toLowerCase()
+              const delta = String(evt.properties?.delta ?? '').toLowerCase()
               if (
                 delta.includes('plan mode is active') ||
                 delta.includes('operational mode has changed from plan to build') ||
                 delta.includes('a plan file exists at')
               ) {
+                const p = evt.properties || {}
                 logger.info('[OpenCodeAdapter] plan-like delta observed', {
-                  sessionID: String((evt as any)?.sessionID || (evt.properties as any)?.sessionID || ''),
-                  messageID: String((evt.properties as any)?.messageID || ''),
-                  partID: String((evt.properties as any)?.partID || '')
+                  sessionID: String(evt.sessionID || p.sessionID || ''),
+                  messageID: String(p.messageID || ''),
+                  partID: String(p.partID || '')
                 })
               }
             }

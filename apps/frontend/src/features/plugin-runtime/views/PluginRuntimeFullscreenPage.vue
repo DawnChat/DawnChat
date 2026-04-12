@@ -51,8 +51,25 @@ const pluginUrl = computed(() => {
   const runtimeUrl = activeApp.value?.runtime?.gradio_url || ''
   const baseUrl = runMode.value === 'preview' ? previewUrl : runtimeUrl
   if (!baseUrl) return ''
-  const separator = baseUrl.includes('?') ? '&' : '?'
-  return `${baseUrl}${separator}theme=${theme.value}&lang=${locale.value}`
+  try {
+    const url = new URL(baseUrl)
+    url.searchParams.set('theme', String(theme.value || ''))
+    url.searchParams.set('lang', String(locale.value || ''))
+    const id = String(pluginId.value || '').trim()
+    if (id) {
+      url.searchParams.set('plugin_id', id)
+    }
+    return url.toString()
+  } catch {
+    const separator = baseUrl.includes('?') ? '&' : '?'
+    const id = String(pluginId.value || '').trim()
+    const q = [
+      `theme=${encodeURIComponent(String(theme.value || ''))}`,
+      `lang=${encodeURIComponent(String(locale.value || ''))}`,
+      ...(id ? [`plugin_id=${encodeURIComponent(id)}`] : []),
+    ].join('&')
+    return `${baseUrl}${separator}${q}`
+  }
 })
 
 const handleStop = async (appId: string) => {

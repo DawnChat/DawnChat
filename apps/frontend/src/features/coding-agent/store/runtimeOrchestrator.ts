@@ -4,16 +4,22 @@ import { ENGINE_OPENCODE, type EngineId } from '@/services/coding-agent/adapterR
 import {
   engineSupportsWorkspacePayload,
   engineUsesRuntimeMeta,
-  engineUsesWorkspaceSystemPrompt,
-  getControlPlanePrefix
+  engineUsesWorkspaceSystemPrompt
 } from '@/services/coding-agent/engineCapabilities'
-import type { CodingAgentPart, PromptPart } from '@/services/coding-agent/engineAdapter'
+import type { CodingAgentEvent, EngineAdapter, PromptPart } from '@/services/coding-agent/engineAdapter'
 import type { ModelOption, SessionMeta, SessionState, SessionTodoItem, WorkspaceResolveOptions, WorkspaceTarget } from '@/features/coding-agent/store/types'
 import { DEFAULT_SESSION_TITLE } from '@/features/coding-agent/store/sessionHelpers'
 import { normalizeSessionTodos } from '@/features/coding-agent/store/toolDisplay'
 import { createStreamWatchdog } from '@/features/coding-agent/store/streamWatchdog'
 import { resolveWorkspaceTarget } from '@/features/coding-agent/store/workspaceTarget'
-import { buildBackendUrl } from '@/utils/backendUrl'
+import {
+  buildRunDiagnostics,
+  fetchRuntimeDiagnostics,
+  RUN_SUPERVISOR_INTERVAL_MS,
+  superviseStreamingSessionsLoop
+} from '@/features/coding-agent/store/runtimeRunSupervisor'
+import { maybeFinalizeStreamingFromSnapshot, replaceSessionMessageSnapshot } from '@/features/coding-agent/store/runtimeReconcile'
+import { createEventSubscriptionLifecycle, withTimeout } from '@/features/coding-agent/store/runtimeEventTransport'
 
 export function createRuntimeOrchestrator(input: {
   selectedEngine: Ref<EngineId>
@@ -35,7 +41,7 @@ export function createRuntimeOrchestrator(input: {
   ensureReadyPromise: Ref<Promise<void> | null>
   pendingLocalUserMessageIdsBySession: Ref<Record<string, string[]>>
   streamWatchdogs: Ref<Record<string, number>>
-  getActiveAdapter: () => any
+  getActiveAdapter: () => EngineAdapter
   loadRuntimeMeta: (options?: WorkspaceResolveOptions) => Promise<void>
   loadWorkspaceProfile: (target: WorkspaceTarget) => Promise<void>
   setAvailableAgents: (rows: unknown[]) => void
@@ -51,7 +57,7 @@ export function createRuntimeOrchestrator(input: {
   updateSessionTouch: (sessionID: string) => void
   pushLocalUserEcho: (sessionID: string, content: string) => void
   clearPendingLocalUserEchoes: (sessionID: string) => void
-  applyEvent: (evt: any) => void
+  applyEvent: (evt: CodingAgentEvent) => void
 }) {
   const {
     selectedEngine,
@@ -91,162 +97,21 @@ export function createRuntimeOrchestrator(input: {
     clearPendingLocalUserEchoes,
     applyEvent
   } = input
-  let transportInstanceSeq = 0
-  let transportReconnectTimer: number | null = null
+
+  const transportInstanceSeq = { current: 0 }
   let runSupervisorTimer: number | null = null
-  const runStallTimeoutMs = 45000
-  const runSupervisorIntervalMs = 5000
-  const runRecoverMinIntervalMs = 15000
-  const backendDiagMinIntervalMs = 20000
   const lastRunRecoverBySession: Record<string, number> = {}
   const lastBackendDiagBySession: Record<string, number> = {}
   const reconcileInFlightBySession: Record<string, Promise<void> | undefined> = {}
   let disposing = false
 
-  const { clearStreamWatchdog, startStreamWatchdog, touchStreamWatchdog } = createStreamWatchdog({
-    streamWatchdogs,
-    getOrCreateSessionState,
-    reconcileMessages,
-    onStale: (sessionID, meta) => {
-      void recoverSilentStream(sessionID, meta.staleDurationMs)
-    }
-  })
-
-  function clearReconnectTimer() {
-    if (transportReconnectTimer !== null) {
-      window.clearTimeout(transportReconnectTimer)
-      transportReconnectTimer = null
-    }
-  }
+  const fetchDiag = (sessionID: string, reason: string) =>
+    fetchRuntimeDiagnostics(sessionID, reason, { selectedEngine, lastBackendDiagBySession })
 
   function clearRunSupervisorTimer() {
     if (runSupervisorTimer !== null) {
       window.clearInterval(runSupervisorTimer)
       runSupervisorTimer = null
-    }
-  }
-
-  function computeRunWaitReason(state: SessionState): SessionState['runWaitReason'] {
-    if (!state.isStreaming) return ''
-    const hasPendingPermission = Object.values(state.permissionCardsById).some((item) => item.status === 'pending')
-    if (hasPendingPermission) return 'waiting_permission'
-    const hasPendingQuestion = Object.values(state.questionCardsById).some((item) => item.status === 'pending')
-    if (hasPendingQuestion) return 'waiting_question'
-    return 'generating'
-  }
-
-  function summarizeToolSignals(state: SessionState) {
-    let runningCount = 0
-    let latestTool = ''
-    let latestToolStatus = ''
-    let latestOrder = -1
-    for (const [messageID, parts] of Object.entries(state.partsByMessageId || {})) {
-      for (const [partID, part] of Object.entries(parts || {})) {
-        if (String((part as any)?.type || '').toLowerCase() !== 'tool') continue
-        const status = String((part as any)?.state?.status || (part as any)?.status || '').toLowerCase()
-        if (status === 'running') runningCount += 1
-        const order = Number(state.partOrderByMessageId?.[messageID]?.[partID] ?? -1)
-        if (order >= latestOrder) {
-          latestOrder = order
-          latestTool = String((part as any)?.tool || '')
-          latestToolStatus = status
-        }
-      }
-    }
-    return { runningCount, latestTool, latestToolStatus }
-  }
-
-  function buildRunDiagnostics(sessionID: string, state: SessionState, context: string, extra?: Record<string, unknown>) {
-    const toolSignals = summarizeToolSignals(state)
-    return {
-      sessionID,
-      context,
-      transport_status: String(state.transportStatus || '').toLowerCase(),
-      session_run_status: String(state.sessionRunStatus || '').toLowerCase(),
-      run_wait_reason: state.runWaitReason,
-      last_non_heartbeat_event_at: state.lastNonHeartbeatEventAt,
-      pending_permission_count: Object.values(state.permissionCardsById).filter((item) => item.status === 'pending').length,
-      pending_question_count: Object.values(state.questionCardsById).filter((item) => item.status === 'pending').length,
-      tool_running_count: toolSignals.runningCount,
-      latest_tool: toolSignals.latestTool,
-      latest_tool_status: toolSignals.latestToolStatus,
-      message_count: Object.keys(state.messagesById || {}).length,
-      ...extra
-    }
-  }
-
-  async function fetchRuntimeDiagnostics(sessionID: string, reason: string) {
-    if (!engineUsesRuntimeMeta(selectedEngine.value)) return
-    const now = Date.now()
-    const lastAt = Number(lastBackendDiagBySession[sessionID] || 0)
-    if (now - lastAt < backendDiagMinIntervalMs) return
-    lastBackendDiagBySession[sessionID] = now
-    try {
-      const resp = await fetch(buildBackendUrl(`${getControlPlanePrefix(selectedEngine.value)}/diagnostics`))
-      const payload = await resp.json().catch(() => null)
-      logger.warn('[codingAgentStore] runtime_diagnostics', {
-        sessionID,
-        reason,
-        engine: selectedEngine.value,
-        status: resp.status,
-        diagnostics: payload?.data || null
-      })
-    } catch (err) {
-      logger.warn('[codingAgentStore] runtime_diagnostics_fetch_failed', {
-        sessionID,
-        reason,
-        engine: selectedEngine.value,
-        err
-      })
-    }
-  }
-
-  function superviseStreamingSessions() {
-    const now = Date.now()
-    let hasStreaming = false
-    for (const [sessionID, state] of Object.entries(sessionStateById.value)) {
-      if (!state?.isStreaming) {
-        state.runWaitReason = ''
-        continue
-      }
-      hasStreaming = true
-      const nextReason = computeRunWaitReason(state)
-      if (nextReason === 'waiting_permission' || nextReason === 'waiting_question') {
-        state.runWaitReason = nextReason
-        continue
-      }
-      const lastBusinessAt = Number(state.lastNonHeartbeatEventAt || 0) || now
-      const stalledDurationMs = Math.max(0, now - lastBusinessAt)
-      if (stalledDurationMs < runStallTimeoutMs) {
-        state.runWaitReason = 'generating'
-        continue
-      }
-      state.runWaitReason = 'stalled'
-      const lastRecoverAt = Number(lastRunRecoverBySession[sessionID] || 0)
-      if (now - lastRecoverAt < runRecoverMinIntervalMs) {
-        continue
-      }
-      lastRunRecoverBySession[sessionID] = now
-      logger.warn(
-        '[codingAgentStore] run progress stalled, trigger reconcile',
-        buildRunDiagnostics(sessionID, state, 'run_stalled', {
-          stale_duration_ms: stalledDurationMs,
-          recover_reason: 'run_stalled'
-        })
-      )
-      void fetchRuntimeDiagnostics(sessionID, 'run_stalled')
-      const transportStatus = String(state.transportStatus || '').toLowerCase()
-      const isTransportHealthy = transportStatus === 'streaming'
-      const recoverTask = isTransportHealthy
-        ? reconcileMessages(sessionID)
-        : ensureEventSubscription({ force: true, reason: 'run_stalled' }).then(() => reconcileMessages(sessionID))
-      void recoverTask.catch((err) => {
-        logger.warn('[codingAgentStore] run stalled recover failed', { sessionID, err })
-      })
-    }
-
-    if (!hasStreaming) {
-      clearRunSupervisorTimer()
     }
   }
 
@@ -258,33 +123,57 @@ export function createRuntimeOrchestrator(input: {
         return
       }
       superviseStreamingSessions()
-    }, runSupervisorIntervalMs)
+    }, RUN_SUPERVISOR_INTERVAL_MS)
   }
 
-  function scheduleResubscribe(reason: string) {
-    if (disposing || transportReconnectTimer !== null) return
-    transportReconnectTimer = window.setTimeout(() => {
-      clearReconnectTimer()
-      void ensureEventSubscription({ force: true, reason })
-    }, 250)
-  }
-
-  async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
-    let timer: number | null = null
-    try {
-      return await Promise.race([
-        promise,
-        new Promise<T>((_, reject) => {
-          timer = window.setTimeout(() => {
-            reject(new Error(`${label}: timeout_${timeoutMs}ms`))
-          }, timeoutMs)
-        })
-      ])
-    } finally {
-      if (timer !== null) {
-        window.clearTimeout(timer)
-      }
+  async function reconcileMessages(targetSessionID?: string) {
+    const sessionID = String(targetSessionID || activeSessionId.value || '').trim()
+    if (!sessionID) return
+    if (reconcileInFlightBySession[sessionID]) {
+      await reconcileInFlightBySession[sessionID]
+      return
     }
+    const task = (async () => {
+      const adapter = getActiveAdapter()
+      const rows = await withTimeout(adapter.listMessages(sessionID), 12000, `reconcile listMessages ${sessionID}`)
+      replaceSessionMessageSnapshot(sessionID, rows, {
+        getOrCreateSessionState,
+        pendingLocalUserMessageIdsBySession
+      })
+      if (typeof adapter.getSessionTodos === 'function') {
+        const todos = await withTimeout(adapter.getSessionTodos(sessionID), 8000, `reconcile todos ${sessionID}`)
+        sessionTodosById.value[sessionID] = Array.isArray(todos) ? normalizeSessionTodos(todos) : []
+      }
+      await withTimeout(reconcileQuestions(sessionID), 8000, `reconcile questions ${sessionID}`)
+      await withTimeout(reconcilePermissions(sessionID), 8000, `reconcile permissions ${sessionID}`)
+      maybeFinalizeStreamingFromSnapshot(sessionID, {
+        getOrCreateSessionState,
+        clearStreamWatchdog
+      })
+    })()
+    reconcileInFlightBySession[sessionID] = task
+    try {
+      await task
+    } finally {
+      delete reconcileInFlightBySession[sessionID]
+    }
+  }
+
+  const eventTransport = {
+    ensureEventSubscription: async (_options?: { force?: boolean; reason?: string }) => {},
+    clearReconnectTimer: () => {}
+  }
+
+  function superviseStreamingSessions() {
+    superviseStreamingSessionsLoop({
+      sessionStateById,
+      getOrCreateSessionState,
+      reconcileMessages,
+      ensureEventSubscription: (options) => eventTransport.ensureEventSubscription(options),
+      fetchRuntimeDiagnostics: fetchDiag,
+      lastRunRecoverBySession,
+      clearRunSupervisorTimer
+    })
   }
 
   async function recoverSilentStream(sessionID: string, staleDurationMs: number) {
@@ -296,266 +185,39 @@ export function createRuntimeOrchestrator(input: {
         recover_reason: 'watchdog_stale'
       })
     )
-    void fetchRuntimeDiagnostics(sessionID, 'watchdog_stale')
-    await ensureEventSubscription({ force: true, reason: 'watchdog_stale' })
+    void fetchDiag(sessionID, 'watchdog_stale')
+    await eventTransport.ensureEventSubscription({ force: true, reason: 'watchdog_stale' })
     await reconcileMessages(sessionID).catch((err) => {
       logger.warn('[codingAgentStore] stream watchdog reconcile failed', { sessionID, err })
     })
   }
 
-  function resolveSessionIDFromEvent(evt: any): string {
-    const topLevel = String(evt?.sessionID || '').trim()
-    if (topLevel) return topLevel
-    const props = evt?.properties || {}
-    const direct = String(props?.sessionID || props?.sessionId || '').trim()
-    if (direct) return direct
-    const infoSession = String(props?.info?.sessionID || '').trim()
-    if (infoSession) return infoSession
-    return String(activeSessionId.value || '').trim()
-  }
-
-  function isTerminalEventType(type: string): boolean {
-    return ['session.idle', 'run.completed', 'run.failed', 'run.interrupted', 'session.error'].includes(type)
-  }
-
-  async function ensureEventSubscription(options?: { force?: boolean; reason?: string }) {
-    if (disposing) return
-    const force = Boolean(options?.force)
-    const reason = String(options?.reason || '').trim() || 'ensure'
-    if (force && eventUnsubscribe.value) {
-      eventUnsubscribe.value()
-      eventUnsubscribe.value = null
+  const { clearStreamWatchdog, startStreamWatchdog, touchStreamWatchdog } = createStreamWatchdog({
+    streamWatchdogs,
+    getOrCreateSessionState,
+    reconcileMessages,
+    onStale: (sessionID, meta) => {
+      void recoverSilentStream(sessionID, meta.staleDurationMs)
     }
-    if (eventUnsubscribe.value) {
-      return
-    }
-    const transportInstanceId = `${String(selectedEngine.value || 'engine')}-transport-${++transportInstanceSeq}`
-    logger.info('[codingAgentStore] creating event subscription', {
-      transport_instance_id: transportInstanceId,
-      reason
+  })
+
+  Object.assign(
+    eventTransport,
+    createEventSubscriptionLifecycle({
+      disposing: () => disposing,
+      eventUnsubscribe,
+      selectedEngine,
+      getActiveAdapter,
+      activeSessionId,
+      applyEvent,
+      getOrCreateSessionState,
+      touchStreamWatchdog,
+      clearStreamWatchdog,
+      fetchRuntimeDiagnostics: fetchDiag,
+      ensureRunSupervisorTimer,
+      transportInstanceSeq
     })
-    eventUnsubscribe.value = await getActiveAdapter().subscribeEvents((evt: any) => {
-      if (disposing) return
-      clearReconnectTimer()
-      const eventType = String(evt?.type || '')
-      const sessionID = resolveSessionIDFromEvent(evt)
-
-      if (sessionID && eventType !== 'stream.status' && eventType !== 'server.heartbeat') {
-        touchStreamWatchdog(sessionID)
-      }
-      if (sessionID && isTerminalEventType(eventType)) {
-        clearStreamWatchdog(sessionID)
-      }
-      if (eventType === 'stream.status') {
-        const status = String(evt?.properties?.status || '').toLowerCase()
-        if (status === 'reconnecting' || status === 'closed') {
-          const latestState = sessionID ? getOrCreateSessionState(sessionID) : null
-          logger.warn('[codingAgentStore] transport_status_signal', {
-            sessionID,
-            status,
-            transport_instance_id: transportInstanceId,
-            transport_error: String(evt?.properties?.error || ''),
-            run_wait_reason: latestState?.runWaitReason || ''
-          })
-          if (sessionID) {
-            void fetchRuntimeDiagnostics(sessionID, `transport_${status}`)
-          }
-        }
-        if (status === 'closed') {
-          scheduleResubscribe('stream_closed')
-        }
-      }
-
-      applyEvent(evt)
-      if (sessionID) {
-        const latestState = getOrCreateSessionState(sessionID)
-        if (latestState.isStreaming) {
-          ensureRunSupervisorTimer()
-        } else {
-          latestState.runWaitReason = ''
-        }
-      }
-    })
-  }
-
-  function readStablePartOrder(part: CodingAgentPart, existingOrder?: number): number {
-    const rawOrder = (part as any)?.order ?? (part as any)?.index ?? (part as any)?.sequence
-    const parsedOrder = Number(rawOrder)
-    if (Number.isFinite(parsedOrder)) {
-      return parsedOrder
-    }
-    if (existingOrder !== undefined) {
-      return existingOrder
-    }
-    return -1
-  }
-
-  function replaceSessionMessageSnapshot(sessionID: string, rows: Array<{ info: any; parts: CodingAgentPart[] }>) {
-    const state = getOrCreateSessionState(sessionID)
-    const pendingLocalIds = new Set(pendingLocalUserMessageIdsBySession.value[sessionID] || [])
-    const previousMessages = state.messagesById
-    const previousParts = state.partsByMessageId
-    const previousPartOrder = state.partOrderByMessageId
-    const nextMessages: SessionState['messagesById'] = {}
-    const nextParts: SessionState['partsByMessageId'] = {}
-    const nextPartOrder: SessionState['partOrderByMessageId'] = {}
-    let nextPartOrderSeq = 0
-
-    const allocateFallbackOrder = () => {
-      nextPartOrderSeq += 1
-      return nextPartOrderSeq
-    }
-
-    for (const row of rows) {
-      const messageID = String(row?.info?.id || '').trim()
-      if (!messageID) continue
-      nextMessages[messageID] = {
-        ...(previousMessages[messageID] || {}),
-        ...(row.info || {})
-      }
-      nextParts[messageID] = {}
-      nextPartOrder[messageID] = {}
-      for (const part of row.parts || []) {
-        const partID = String(part?.id || '').trim()
-        if (!partID) continue
-        const stableOrder = readStablePartOrder(part, previousPartOrder[messageID]?.[partID])
-        const finalOrder = stableOrder >= 0 ? stableOrder : allocateFallbackOrder()
-        nextPartOrderSeq = Math.max(nextPartOrderSeq, finalOrder)
-        nextPartOrder[messageID][partID] = finalOrder
-        nextParts[messageID][partID] = {
-          ...(previousParts[messageID]?.[partID] || {}),
-          ...part
-        }
-      }
-    }
-
-    // Preserve optimistic user echoes until the server emits the canonical message.
-    for (const pendingMessageID of pendingLocalIds) {
-      if (nextMessages[pendingMessageID] || !previousMessages[pendingMessageID]) continue
-      nextMessages[pendingMessageID] = previousMessages[pendingMessageID]
-      nextParts[pendingMessageID] = { ...(previousParts[pendingMessageID] || {}) }
-      nextPartOrder[pendingMessageID] = { ...(previousPartOrder[pendingMessageID] || {}) }
-      for (const order of Object.values(nextPartOrder[pendingMessageID])) {
-        nextPartOrderSeq = Math.max(nextPartOrderSeq, Number(order) || 0)
-      }
-    }
-
-    state.messagesById = nextMessages
-    state.partsByMessageId = nextParts
-    state.partOrderByMessageId = nextPartOrder
-    state.partOrderSeq = nextPartOrderSeq
-  }
-
-  function toUnixTime(value: unknown): number {
-    if (typeof value === 'number' && Number.isFinite(value)) {
-      return value
-    }
-    if (typeof value === 'string') {
-      const trimmed = value.trim()
-      if (!trimmed) return 0
-      const numeric = Number(trimmed)
-      if (Number.isFinite(numeric)) {
-        return numeric
-      }
-      const parsed = Date.parse(trimmed)
-      if (Number.isFinite(parsed)) {
-        return parsed
-      }
-    }
-    return 0
-  }
-
-  function hasPendingInteractiveCards(state: SessionState): boolean {
-    const hasPendingPermission = Object.values(state.permissionCardsById).some((item) => item.status === 'pending')
-    if (hasPendingPermission) return true
-    return Object.values(state.questionCardsById).some((item) => item.status === 'pending')
-  }
-
-  function getLatestAssistantMessage(state: SessionState): Record<string, any> | null {
-    const assistants = Object.values(state.messagesById).filter((item) => String(item?.role || '').toLowerCase() === 'assistant')
-    if (assistants.length === 0) {
-      return null
-    }
-    assistants.sort((a, b) => {
-      const ta = Math.max(toUnixTime((a as any)?.time?.created), toUnixTime((a as any)?.time?.completed))
-      const tb = Math.max(toUnixTime((b as any)?.time?.created), toUnixTime((b as any)?.time?.completed))
-      return ta - tb
-    })
-    return assistants[assistants.length - 1] as Record<string, any>
-  }
-
-  function hasRunningToolOrReasoning(state: SessionState): boolean {
-    const allParts = Object.values(state.partsByMessageId).flatMap((partsMap) => Object.values(partsMap || {}))
-    for (const part of allParts) {
-      const partType = String(part?.type || '').toLowerCase()
-      if (partType === 'tool') {
-        const toolStatus = String((part as any)?.state?.status || '').toLowerCase()
-        if (toolStatus === 'pending' || toolStatus === 'running') {
-          return true
-        }
-        continue
-      }
-      if (partType === 'reasoning') {
-        const reasoningEnd = (part as any)?.time?.end
-        if (!reasoningEnd) {
-          return true
-        }
-      }
-    }
-    return false
-  }
-
-  function maybeFinalizeStreamingFromSnapshot(sessionID: string) {
-    const state = getOrCreateSessionState(sessionID)
-    if (!state.isStreaming) return
-    if (hasPendingInteractiveCards(state)) return
-    const latestAssistant = getLatestAssistantMessage(state)
-    if (!latestAssistant) return
-    const completedAt = toUnixTime((latestAssistant as any)?.time?.completed)
-    if (!completedAt) return
-    if (hasRunningToolOrReasoning(state)) return
-
-    state.isStreaming = false
-    state.sessionRunStatus = 'idle'
-    state.runWaitReason = ''
-    clearStreamWatchdog(sessionID)
-    logger.info('[codingAgentStore] inferred terminal state from snapshot reconcile', {
-      sessionID,
-      recover_reason: 'snapshot_terminal_inference',
-      completed_at: completedAt
-    })
-  }
-
-  async function reconcileMessages(targetSessionID?: string) {
-    const sessionID = String(targetSessionID || activeSessionId.value || '').trim()
-    if (!sessionID) return
-    if (reconcileInFlightBySession[sessionID]) {
-      await reconcileInFlightBySession[sessionID]
-      return
-    }
-    const task = (async () => {
-      const adapter = getActiveAdapter() as any
-      const rows = (await withTimeout(
-        adapter.listMessages(sessionID),
-        12000,
-        `reconcile listMessages ${sessionID}`
-      )) as Array<{ info: any; parts: CodingAgentPart[] }>
-      replaceSessionMessageSnapshot(sessionID, rows)
-      if (typeof adapter.getSessionTodos === 'function') {
-        const todos = await withTimeout(adapter.getSessionTodos(sessionID), 8000, `reconcile todos ${sessionID}`)
-        sessionTodosById.value[sessionID] = Array.isArray(todos) ? normalizeSessionTodos(todos) : []
-      }
-      await withTimeout(reconcileQuestions(sessionID), 8000, `reconcile questions ${sessionID}`)
-      await withTimeout(reconcilePermissions(sessionID), 8000, `reconcile permissions ${sessionID}`)
-      maybeFinalizeStreamingFromSnapshot(sessionID)
-    })()
-    reconcileInFlightBySession[sessionID] = task
-    try {
-      await task
-    } finally {
-      delete reconcileInFlightBySession[sessionID]
-    }
-  }
+  )
 
   function clearRuntimeState() {
     sessions.value = []
@@ -586,7 +248,7 @@ export function createRuntimeOrchestrator(input: {
         workspacePath: String(workspaceTarget.workspacePath || ''),
         activeSessionId: String(activeSessionId.value || '')
       })
-      await ensureEventSubscription({ reason: 'ready_short_circuit' })
+      await eventTransport.ensureEventSubscription({ reason: 'ready_short_circuit' })
       return
     }
 
@@ -599,7 +261,7 @@ export function createRuntimeOrchestrator(input: {
           workspacePath: String(workspaceTarget.workspacePath || ''),
           activeSessionId: String(activeSessionId.value || '')
         })
-        await ensureEventSubscription({ reason: 'ready_after_inflight' })
+        await eventTransport.ensureEventSubscription({ reason: 'ready_after_inflight' })
         return
       }
     }
@@ -636,7 +298,7 @@ export function createRuntimeOrchestrator(input: {
           const nextAgents = agentsResp.status === 'fulfilled' ? agentsResp.value : []
           setAvailableAgents(nextAgents)
           if (workspaceTarget.defaultAgent) {
-            const hasDefaultAgent = nextAgents.some((item: any) => String(item?.id || '') === workspaceTarget.defaultAgent)
+            const hasDefaultAgent = nextAgents.some((item) => String(item?.id || '') === workspaceTarget.defaultAgent)
             if (hasDefaultAgent) {
               selectedAgent.value = workspaceTarget.defaultAgent
             }
@@ -656,15 +318,13 @@ export function createRuntimeOrchestrator(input: {
           ? { ...workspaceTarget, ...workspaceProfile.value }
           : workspaceTarget
 
-        await ensureEventSubscription({ reason: 'ensure_ready' })
+        await eventTransport.ensureEventSubscription({ reason: 'ensure_ready' })
 
         await loadSessions()
         await reconcileQuestions()
         const preferredSession = localStorage.getItem(activeSessionStorageKey(workspaceId)) || ''
         const fallbackSession =
-          workspaceTarget.sessionStrategy === 'single'
-            ? ''
-            : sessions.value[0]?.id || ''
+          workspaceTarget.sessionStrategy === 'single' ? '' : sessions.value[0]?.id || ''
 
         if (preferredSession && sessions.value.some((item) => item.id === preferredSession)) {
           setActiveSession(preferredSession)
@@ -863,7 +523,7 @@ export function createRuntimeOrchestrator(input: {
 
   function dispose() {
     disposing = true
-    clearReconnectTimer()
+    eventTransport.clearReconnectTimer()
     clearRunSupervisorTimer()
     if (eventUnsubscribe.value) {
       eventUnsubscribe.value()

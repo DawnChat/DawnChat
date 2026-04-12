@@ -277,7 +277,11 @@ class Config:
     DDGS_IMAGE_FALLBACK_SAFESEARCH = os.getenv("DAWNCHAT_DDGS_IMAGE_FALLBACK_SAFESEARCH", "moderate")
     # Unsplash image search (Edge Function); kernel does not refresh Supabase tokens (frontend-only refresh).
     IMAGE_SEARCH_FUNCTION_NAME = os.getenv("DAWNCHAT_IMAGE_SEARCH_FUNCTION_NAME", "image-search").strip() or "image-search"
-    IMAGE_SEARCH_EDGE_TIMEOUT_SECONDS = float(os.getenv("DAWNCHAT_IMAGE_SEARCH_EDGE_TIMEOUT_SECONDS", "25"))
+    # Edge cold start + auth.getUser + Postgres + Unsplash often exceeds 25s; stay below OpenCode search MCP read budget.
+    IMAGE_SEARCH_EDGE_TIMEOUT_SECONDS = float(os.getenv("DAWNCHAT_IMAGE_SEARCH_EDGE_TIMEOUT_SECONDS", "50"))
+    # Supabase Edge dawn-tts (desktop; JWT + anon apikey)
+    DAWN_TTS_FUNCTION_NAME = os.getenv("DAWNCHAT_DAWN_TTS_FUNCTION_NAME", "dawn-tts").strip() or "dawn-tts"
+    DAWN_TTS_EDGE_TIMEOUT_SECONDS = float(os.getenv("DAWNCHAT_DAWN_TTS_EDGE_TIMEOUT_SECONDS", "90"))
     SUPABASE_ACCESS_SKEW_SECONDS = float(os.getenv("DAWNCHAT_SUPABASE_ACCESS_SKEW_SECONDS", "90"))
     PLUGIN_UI_BRIDGE_TIMEOUT_SECONDS = float(os.getenv("DAWNCHAT_PLUGIN_UI_BRIDGE_TIMEOUT_SECONDS", "15"))
     PLUGIN_UI_BRIDGE_SESSION_WAIT_TIMEOUT_SECONDS = float(

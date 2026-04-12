@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from app.voice import get_tts_artifact_store, get_tts_runtime_service
 from app.voice.azure_tts_service import get_azure_tts_service
+from app.voice.dawn_tts_service import get_dawn_tts_service
 
 router = APIRouter(prefix="/tts", tags=["tts"])
 
@@ -42,6 +43,11 @@ class AzureTtsConfigRequest(BaseModel):
     api_key: str = ""
     region: str = ""
     voice: str = ""
+    default_voice_zh: str = ""
+    default_voice_en: str = ""
+
+
+class DawnTtsVoiceRequest(BaseModel):
     default_voice_zh: str = ""
     default_voice_en: str = ""
 
@@ -107,6 +113,36 @@ async def get_tts_capability(plugin_id: str = ""):
 async def get_azure_tts_status():
     payload = await get_azure_tts_service().get_status()
     return {"status": "success", "data": payload}
+
+
+@router.get("/providers/dawn-tts/status")
+async def get_dawn_tts_status():
+    payload = await get_dawn_tts_service().get_provider_status()
+    return {"status": "success", "data": payload}
+
+
+@router.post("/providers/dawn-tts/validate")
+async def validate_dawn_tts_voices(request: DawnTtsVoiceRequest):
+    try:
+        result = await get_dawn_tts_service().validate_voice_config(
+            default_voice_zh=request.default_voice_zh,
+            default_voice_en=request.default_voice_en,
+        )
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err)) from err
+    return {"status": "success", "data": result}
+
+
+@router.post("/providers/dawn-tts/config")
+async def save_dawn_tts_voice_config(request: DawnTtsVoiceRequest):
+    try:
+        result = await get_dawn_tts_service().save_voice_config(
+            default_voice_zh=request.default_voice_zh,
+            default_voice_en=request.default_voice_en,
+        )
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err)) from err
+    return {"status": "success", "data": result}
 
 
 @router.post("/providers/azure/validate")
@@ -196,8 +232,16 @@ async def stream_tts_task(task_id: str, request: Request):
 
 
 @router.get("/audio/{task_id}/{seq}.wav")
-async def get_tts_audio(task_id: str, seq: int):
+async def get_tts_audio_wav(task_id: str, seq: int):
     path = get_tts_artifact_store().resolve_segment(task_id, seq)
-    if not path:
+    if not path or path.suffix.lower() != ".wav":
         raise HTTPException(status_code=404, detail=f"TTS segment not found: {task_id}/{seq}")
     return FileResponse(path=path, media_type="audio/wav", filename=f"{seq}.wav")
+
+
+@router.get("/audio/{task_id}/{seq}.mp3")
+async def get_tts_audio_mp3(task_id: str, seq: int):
+    path = get_tts_artifact_store().resolve_segment(task_id, seq)
+    if not path or path.suffix.lower() != ".mp3":
+        raise HTTPException(status_code=404, detail=f"TTS segment not found: {task_id}/{seq}")
+    return FileResponse(path=path, media_type="audio/mpeg", filename=f"{seq}.mp3")

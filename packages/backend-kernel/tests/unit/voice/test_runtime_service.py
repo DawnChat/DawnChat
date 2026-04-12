@@ -70,6 +70,16 @@ class _AzureStub:
         return b"RIFF" + (b"\x00" * 96), 24000
 
 
+class _DawnStub:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str]] = []
+
+    async def synthesize_segment_mp3(self, *, text: str, voice: str = "", sid: int | None = None):
+        del sid
+        self.calls.append((text, voice))
+        return b"\xff\xfb\x90\x00" + (b"\x00" * 32)
+
+
 @pytest.mark.asyncio
 async def test_submit_speak_creates_task(tmp_path) -> None:
     synthesis = _SynthesisStub()
@@ -244,6 +254,7 @@ def test_map_error_code_refines_runtime_categories() -> None:
     assert TtsRuntimeService._map_error_code("azure_tts_auth_failed") == "TTS_AZURE_FAILED"
     assert TtsRuntimeService._map_error_code("azure_tts_timeout") == "TTS_AZURE_FAILED"
     assert TtsRuntimeService._map_error_code("azure_tts_http_5xx") == "TTS_AZURE_FAILED"
+    assert TtsRuntimeService._map_error_code("dawn_tts_timeout") == "TTS_DAWN_FAILED"
 
 
 def test_normalize_error_message_handles_blank_exception() -> None:
@@ -268,3 +279,22 @@ async def test_submit_speak_azure_engine_generates_segment(tmp_path) -> None:
     assert status is not None
     assert status["engine"] == "azure"
     assert status["completed_segments"] == 1
+
+
+@pytest.mark.asyncio
+async def test_submit_speak_dawn_tts_engine_writes_mp3(tmp_path) -> None:
+    dawn = _DawnStub()
+    service = TtsRuntimeService(
+        synthesis_service=_SynthesisStub(),
+        artifact_store=TtsArtifactStore(base_dir=tmp_path / "tts"),
+        dawn_tts_service=dawn,
+    )
+    task_id = await service.submit_speak(plugin_id="com.demo", text="hello", engine="dawn-tts")
+    await asyncio.sleep(0.08)
+    status = service.get_task(task_id)
+    assert status is not None
+    assert status["engine"] == "dawn-tts"
+    assert status["completed_segments"] == 1
+    assert len(dawn.calls) == 1
+    mp3_path = (tmp_path / "tts" / task_id / "1.mp3").resolve()
+    assert mp3_path.is_file()

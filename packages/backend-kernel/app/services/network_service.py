@@ -201,6 +201,19 @@ class NetworkService:
         }
 
     @classmethod
+    async def user_proxy_httpx_trust_env(cls) -> bool:
+        """
+        When the user enabled proxy in Network settings, httpx should honor
+        HTTP(S)_PROXY / ALL_PROXY already applied by apply_proxy_settings().
+        Same rule as OpenCodeManager._resolve_httpx_trust_env.
+        """
+        try:
+            cfg = await storage_manager.get_config(cls.PROXY_CONFIG_KEY)
+            return bool(isinstance(cfg, dict) and cfg.get("enabled"))
+        except Exception:
+            return False
+
+    @classmethod
     async def save_proxy_settings(cls, config: Dict[str, Union[str, bool]]):
         """Save and apply proxy settings"""
         await storage_manager.set_config(cls.PROXY_CONFIG_KEY, config)

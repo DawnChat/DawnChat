@@ -26,6 +26,7 @@ import httpx
 
 from app.config import Config
 from app.plugins.opencode_rules_service import get_opencode_rules_service
+from app.services.network_service import NetworkService
 from app.services.opencode_baseline_config_composer import OpenCodeBaselineConfigComposer
 from app.storage import storage_manager
 from app.utils.logger import get_logger
@@ -458,17 +459,8 @@ class OpenCodeManager:
 
     @staticmethod
     async def _resolve_httpx_trust_env() -> bool:
-        """
-        Follow user proxy setting from NetworkSettings:
-        - enabled=True  -> allow httpx to read proxy env vars.
-        - enabled=False -> ignore env proxy vars entirely.
-        """
-        try:
-            proxy_config = await storage_manager.get_config("system:network:proxy")
-            return bool(isinstance(proxy_config, dict) and proxy_config.get("enabled"))
-        except Exception:
-            # Be conservative on config read failures to avoid unexpected proxy routing.
-            return False
+        """Delegate to NetworkService (same rule as image-search Edge client)."""
+        return await NetworkService.user_proxy_httpx_trust_env()
 
     @staticmethod
     def _resolve_workspace_path(workspace_path: Optional[str]) -> Path:

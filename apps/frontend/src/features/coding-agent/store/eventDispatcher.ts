@@ -12,6 +12,10 @@ import type { PermissionCard, QuestionCard, SessionState, SessionTodoItem, Sessi
 import { normalizePermissionPayload } from '@/features/coding-agent/store/permissionNormalizer'
 import { normalizeSessionTodos, parseToolRawArgumentsSafe } from '@/features/coding-agent/store/toolDisplay'
 
+function isRecord(x: unknown): x is Record<string, unknown> {
+  return typeof x === 'object' && x !== null && !Array.isArray(x)
+}
+
 interface EventDispatcherInput {
   selectedEngine: Ref<string>
   workspaceProfile: Ref<WorkspaceTarget | null>
@@ -107,36 +111,47 @@ export function createEventDispatcher(input: EventDispatcherInput) {
   }
 
   function resolveSessionIDForEvent(evt: CodingAgentEvent): string {
-    const topLevel = String((evt as any)?.sessionID || '').trim()
+    const topLevel = String(evt.sessionID || '').trim()
     if (topLevel) return topLevel
     const props = evt.properties || {}
-    const direct = String(props.sessionID || props.sessionId || '').trim()
+    const direct = String(props.sessionID ?? props.sessionId ?? '').trim()
     if (direct) return direct
 
-    const infoSession = String((props.info as any)?.sessionID || '').trim()
-    if (infoSession) return infoSession
+    const infoRaw = props.info
+    if (isRecord(infoRaw)) {
+      const infoSession = String(infoRaw.sessionID ?? '').trim()
+      if (infoSession) return infoSession
+    }
 
-    const part = props.part as (CodingAgentPart & { sessionID?: string; sessionId?: string }) | undefined
+    const partRaw = props.part
+    const part = isRecord(partRaw)
+      ? (partRaw as CodingAgentPart & { sessionID?: string; sessionId?: string })
+      : undefined
     const partSession = String(part?.sessionID || part?.sessionId || '').trim()
     if (partSession) return partSession
 
-    const messageID = String(props.messageID || (props.info as any)?.id || part?.messageID || '').trim()
+    const infoId = isRecord(infoRaw) ? String(infoRaw.id ?? '').trim() : ''
+    const messageID = String(props.messageID || infoId || part?.messageID || '').trim()
     if (messageID && messageSessionById.value[messageID]) {
       return messageSessionById.value[messageID]
     }
 
-    const source = props.permission || props.request || props
-    const permissionSession = String(source?.sessionID || '').trim()
-    if (permissionSession) return permissionSession
-    const permissionID = String(source?.id || source?.requestID || source?.permissionID || '').trim()
-    if (permissionID) {
-      const mappedSessionID = findPermissionSessionID(permissionID)
-      if (mappedSessionID) return mappedSessionID
+    const permSource = props.permission ?? props.request ?? props
+    if (isRecord(permSource)) {
+      const permissionSession = String(permSource.sessionID ?? '').trim()
+      if (permissionSession) return permissionSession
+      const permissionID = String(permSource.id ?? permSource.requestID ?? permSource.permissionID ?? '').trim()
+      if (permissionID) {
+        const mappedSessionID = findPermissionSessionID(permissionID)
+        if (mappedSessionID) return mappedSessionID
+      }
     }
 
-    const question = props.question || props.request || props
-    const questionSession = String(question?.sessionID || '').trim()
-    if (questionSession) return questionSession
+    const questionRaw = props.question ?? props.request ?? props
+    if (isRecord(questionRaw)) {
+      const questionSession = String(questionRaw.sessionID ?? '').trim()
+      if (questionSession) return questionSession
+    }
 
     return activeSessionId.value
   }
@@ -146,7 +161,7 @@ export function createEventDispatcher(input: EventDispatcherInput) {
     const props = evt.properties || {}
     const sessionID = resolveSessionIDForEvent(evt)
     const state = sessionID ? getOrCreateSessionState(sessionID) : null
-    const eventID = Number((evt as any)?.eventID)
+    const eventID = evt.eventID !== undefined ? Number(evt.eventID) : NaN
     if (state && Number.isFinite(eventID)) {
       const key = String(eventID)
       if (state.seenEventIDs[key]) {
@@ -217,8 +232,10 @@ export function createEventDispatcher(input: EventDispatcherInput) {
     }
 
     if (type === 'session.created' || type === 'session.updated') {
-      const source = (props?.session || props?.data || props) as CodingAgentSession | undefined
-      if (source && typeof source === 'object' && String((source as any).id || '').trim()) {
+      const rawSource = props.session ?? props.data ?? props
+      const source =
+        isRecord(rawSource) && String(rawSource.id ?? '').trim() ? (rawSource as CodingAgentSession) : undefined
+      if (source) {
         if (!shouldAcceptSessionEvent(source)) {
           return
         }
@@ -230,11 +247,13 @@ export function createEventDispatcher(input: EventDispatcherInput) {
     }
 
     if (type === 'session.status') {
-      const rawStatus = props?.status
+      const rawStatus = props.status
       const status =
         typeof rawStatus === 'string'
           ? rawStatus.toLowerCase()
-          : String(rawStatus?.type || props?.legacy_status || '').toLowerCase()
+          : isRecord(rawStatus)
+            ? String(rawStatus.type ?? props.legacy_status ?? '').toLowerCase()
+            : String(props.legacy_status ?? '').toLowerCase()
       if (state) {
         state.sessionRunStatus = status
         state.isStreaming = ['running', 'streaming', 'busy', 'retry'].includes(status)
@@ -468,7 +487,7 @@ export function createEventDispatcher(input: EventDispatcherInput) {
       return
     }
     if (type === 'question.asked') {
-      const source = props as CodingAgentQuestionRequest
+      const source = props as unknown as CodingAgentQuestionRequest
       const requestID = String(source?.id || '').trim()
       if (!sessionID || !requestID) return
       upsertQuestionCard(sessionID, {
@@ -484,7 +503,7 @@ export function createEventDispatcher(input: EventDispatcherInput) {
       return
     }
     if (type === 'question.replied' || type === 'question.rejected') {
-      const requestID = String((props as any)?.requestID || '').trim()
+      const requestID = String(isRecord(props) ? (props.requestID ?? '') : '').trim()
       if (!sessionID || !requestID) return
       removeQuestionCard(sessionID, requestID)
     }

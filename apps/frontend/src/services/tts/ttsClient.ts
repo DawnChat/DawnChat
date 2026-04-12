@@ -7,7 +7,7 @@ export interface TtsSpeakRequest {
   voice?: string;
   sid?: number;
   mode?: "manual";
-  engine?: "python" | "azure";
+  engine?: "python" | "azure" | "dawn-tts";
   interrupt?: boolean;
 }
 
@@ -56,6 +56,21 @@ export interface AzureTtsConfigStatus {
     default_voice_zh: string;
     default_voice_en: string;
   };
+}
+
+export interface DawnTtsProviderStatus {
+  status: string;
+  data: {
+    available: boolean;
+    reason: string;
+    default_voice_zh: string;
+    default_voice_en: string;
+  };
+}
+
+export interface DawnTtsVoicePayload {
+  default_voice_zh?: string;
+  default_voice_en?: string;
 }
 
 const API_BASE = () => buildBackendUrl('/api/tts');
@@ -108,6 +123,46 @@ export async function getAzureTtsConfigStatus(): Promise<AzureTtsConfigStatus> {
     throw new Error(`azure tts status failed: ${response.status}`);
   }
   return (await response.json()) as AzureTtsConfigStatus;
+}
+
+export async function getDawnTtsStatus(): Promise<DawnTtsProviderStatus> {
+  const response = await fetch(`${API_BASE()}/providers/dawn-tts/status`);
+  if (!response.ok) {
+    throw new Error(`dawn tts status failed: ${response.status}`);
+  }
+  return (await response.json()) as DawnTtsProviderStatus;
+}
+
+export async function validateDawnTtsVoiceConfig(payload: DawnTtsVoicePayload): Promise<Record<string, unknown>> {
+  const response = await fetch(`${API_BASE()}/providers/dawn-tts/validate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      default_voice_zh: payload.default_voice_zh || "",
+      default_voice_en: payload.default_voice_en || "",
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`dawn tts validate failed: ${response.status}`);
+  }
+  const json = (await response.json()) as { data?: Record<string, unknown> };
+  return json.data || {};
+}
+
+export async function saveDawnTtsVoiceConfig(payload: DawnTtsVoicePayload): Promise<Record<string, unknown>> {
+  const response = await fetch(`${API_BASE()}/providers/dawn-tts/config`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      default_voice_zh: payload.default_voice_zh || "",
+      default_voice_en: payload.default_voice_en || "",
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`dawn tts config save failed: ${response.status}`);
+  }
+  const json = (await response.json()) as { data?: Record<string, unknown> };
+  return json.data || {};
 }
 
 export async function validateAzureTtsConfig(payload: AzureTtsConfigPayload): Promise<Record<string, unknown>> {

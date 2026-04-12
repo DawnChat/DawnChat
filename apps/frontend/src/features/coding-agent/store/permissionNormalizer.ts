@@ -4,10 +4,24 @@ export function normalizeEventRef(value: unknown): string {
   return String(value || '').trim()
 }
 
-export function normalizePermissionPayload(properties: Record<string, any>, eventType: string): PermissionCard | null {
-  const permissionLike = properties.permission && typeof properties.permission === 'object' ? properties.permission : null
-  const requestLike = properties.request && typeof properties.request === 'object' ? properties.request : null
+function asObjectRecord(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>
+  }
+  return null
+}
+
+export function normalizePermissionPayload(properties: Record<string, unknown>, eventType: string): PermissionCard | null {
+  const permissionLike = asObjectRecord(properties.permission)
+  const requestLike = asObjectRecord(properties.request)
   const source = permissionLike || requestLike || properties
+  const toolNested = asObjectRecord(source.tool)
+  const toolRefNested = asObjectRecord(source.toolRef)
+  const inputNested = asObjectRecord(source.input)
+  const metadata =
+    source.metadata && typeof source.metadata === 'object' && !Array.isArray(source.metadata)
+      ? (source.metadata as Record<string, unknown>)
+      : {}
   const id = String(
     source?.id || source?.requestID || source?.permissionID || properties.requestID || properties.permissionID || ''
   ).trim()
@@ -27,7 +41,6 @@ export function normalizePermissionPayload(properties: Record<string, any>, even
   const toolNameFromPermission = typeof source?.permission === 'string' ? source.permission : ''
   const toolNameFromTool = typeof source?.tool === 'string' ? source.tool : ''
   const tool = String(toolNameFromTool || toolNameFromPermission || source?.type || properties.tool || '').trim()
-  const metadata = source?.metadata && typeof source.metadata === 'object' ? source.metadata : {}
   const patterns = Array.isArray(source?.patterns)
     ? source.patterns.filter((item: unknown) => typeof item === 'string' && String(item).trim())
     : []
@@ -43,13 +56,13 @@ export function normalizePermissionPayload(properties: Record<string, any>, even
   }
   if (typeof metadata?.filepath === 'string' && metadata.filepath.trim()) {
     detailParts.push(`目标路径: ${metadata.filepath.trim()}`)
-  } else if (typeof source?.input?.filePath === 'string' && source.input.filePath.trim()) {
-    detailParts.push(`目标路径: ${source.input.filePath.trim()}`)
-  } else if (typeof source?.input?.path === 'string' && source.input.path.trim()) {
-    detailParts.push(`目标路径: ${source.input.path.trim()}`)
+  } else if (typeof inputNested?.filePath === 'string' && inputNested.filePath.trim()) {
+    detailParts.push(`目标路径: ${String(inputNested.filePath).trim()}`)
+  } else if (typeof inputNested?.path === 'string' && inputNested.path.trim()) {
+    detailParts.push(`目标路径: ${String(inputNested.path).trim()}`)
   }
-  if (typeof source?.input?.command === 'string' && source.input.command.trim()) {
-    detailParts.push(`命令: ${source.input.command.trim()}`)
+  if (typeof inputNested?.command === 'string' && inputNested.command.trim()) {
+    detailParts.push(`命令: ${String(inputNested.command).trim()}`)
   }
   if (patterns.length > 0) {
     detailParts.push(`匹配规则: ${patterns.join(', ')}`)
@@ -64,22 +77,22 @@ export function normalizePermissionPayload(properties: Record<string, any>, even
     id,
     sessionID: String(source?.sessionID || properties.sessionID || ''),
     messageID: normalizeEventRef(
-      source?.messageID ||
-        source?.messageId ||
-        source?.tool?.messageID ||
-        source?.tool?.messageId ||
-        source?.toolRef?.messageID ||
-        source?.toolRef?.messageId ||
+      source.messageID ||
+        source.messageId ||
+        toolNested?.messageID ||
+        toolNested?.messageId ||
+        toolRefNested?.messageID ||
+        toolRefNested?.messageId ||
         properties.messageID ||
         properties.messageId
     ),
     callID: normalizeEventRef(
-      source?.callID ||
-        source?.callId ||
-        source?.tool?.callID ||
-        source?.tool?.callId ||
-        source?.toolRef?.callID ||
-        source?.toolRef?.callId ||
+      source.callID ||
+        source.callId ||
+        toolNested?.callID ||
+        toolNested?.callId ||
+        toolRefNested?.callID ||
+        toolRefNested?.callId ||
         properties.callID ||
         properties.callId
     ),

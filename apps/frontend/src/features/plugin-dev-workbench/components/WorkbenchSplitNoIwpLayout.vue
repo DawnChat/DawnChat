@@ -58,6 +58,7 @@
     @stop-tts="emit('stopTts')"
     @select-tts-engine="(value) => emit('selectTtsEngine', value)"
     @open-azure-tts-settings="emit('openAzureTtsSettings')"
+    @open-dawn-tts-settings="emit('openDawnTtsSettings')"
   />
   <div
     class="column-resizer"
@@ -141,6 +142,7 @@ const emit = defineEmits<{
   stopTts: []
   selectTtsEngine: [value: string]
   openAzureTtsSettings: []
+  openDawnTtsSettings: []
 }>()
 </script>
 

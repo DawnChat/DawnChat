@@ -57,6 +57,7 @@ class TtsSegment:
     wav_bytes: bytes
     sample_rate: int
     duration_ms: int
+    audio_format: Literal["wav", "mp3"] = "wav"
 
 
 @dataclass(slots=True)

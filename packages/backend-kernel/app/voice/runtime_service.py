@@ -11,6 +11,7 @@ from app.utils.logger import get_logger
 
 from .artifact_store import TtsArtifactStore, get_tts_artifact_store
 from .azure_tts_service import AzureTtsService, get_azure_tts_service
+from .dawn_tts_service import DawnTtsService, get_dawn_tts_service
 from .synthesis_service import TtsSegment, TtsSynthesisService, get_tts_synthesis_service
 
 TaskStatus = Literal["queued", "running", "completed", "failed", "cancelled"]
@@ -60,6 +61,7 @@ class TtsRuntimeService:
         synthesis_service: TtsSynthesisService | None = None,
         artifact_store: TtsArtifactStore | None = None,
         azure_tts_service: AzureTtsService | None = None,
+        dawn_tts_service: DawnTtsService | None = None,
         event_history_ttl_seconds: int = 180,
         max_terminal_tasks: int = 128,
         watcher_queue_maxsize: int = 64,
@@ -69,6 +71,7 @@ class TtsRuntimeService:
         self._synthesis = synthesis_service or get_tts_synthesis_service()
         self._store = artifact_store or get_tts_artifact_store()
         self._azure = azure_tts_service or get_azure_tts_service()
+        self._dawn = dawn_tts_service or get_dawn_tts_service()
         self._lock = asyncio.Lock()
         self._tasks: Dict[str, TtsTask] = {}
         self._active_task_by_plugin: Dict[str, str] = {}
@@ -263,6 +266,8 @@ class TtsRuntimeService:
             )
             if task.engine == "azure":
                 await self._run_azure_task(task)
+            elif task.engine == "dawn-tts":
+                await self._run_dawn_tts_task(task)
             else:
                 iterator = iter(self._iter_task_segments(task))
                 sentinel = object()
@@ -340,7 +345,7 @@ class TtsRuntimeService:
         return self._synthesis.split_sentences(task.text)
 
     def _iter_task_segments(self, task: TtsTask) -> Iterable[TtsSegment]:
-        if task.engine == "azure":
+        if task.engine in {"azure", "dawn-tts"}:
             return self._iter_azure_segments(task)
         iter_synthesize = getattr(self._synthesis, "iter_synthesize", None)
         if callable(iter_synthesize):
@@ -371,10 +376,32 @@ class TtsRuntimeService:
             )
             await self._accept_segment(task, segment)
 
+    async def _run_dawn_tts_task(self, task: TtsTask) -> None:
+        sentences = self._synthesis.split_sentences(task.text)
+        if not sentences:
+            return
+        for seq, sentence in enumerate(sentences, start=1):
+            mp3_bytes = await self._dawn.synthesize_segment_mp3(
+                text=sentence,
+                voice=task.voice,
+                sid=task.sid,
+            )
+            duration_ms = max(1, int(len(mp3_bytes) // 16))
+            segment = TtsSegment(
+                seq=seq,
+                text=sentence,
+                wav_bytes=mp3_bytes,
+                sample_rate=0,
+                duration_ms=duration_ms,
+                audio_format="mp3",
+            )
+            await self._accept_segment(task, segment)
+
     async def _accept_segment(self, task: TtsTask, segment: TtsSegment) -> None:
         if task.cancelled:
             raise asyncio.CancelledError()
-        self._store.write_segment(task.task_id, segment.seq, segment.wav_bytes)
+        ext = ".mp3" if segment.audio_format == "mp3" else ".wav"
+        self._store.write_segment(task.task_id, segment.seq, segment.wav_bytes, suffix=ext)
         task.completed_segments = segment.seq
         task.updated_at = datetime.utcnow()
         await self._publish(
@@ -386,7 +413,7 @@ class TtsRuntimeService:
                     "plugin_id": task.plugin_id,
                     "seq": segment.seq,
                     "duration_ms": segment.duration_ms,
-                    "url": f"/api/tts/audio/{task.task_id}/{segment.seq}.wav",
+                    "url": f"/api/tts/audio/{task.task_id}/{segment.seq}{ext}",
                 },
             },
         )
@@ -417,6 +444,8 @@ class TtsRuntimeService:
         payload = str(raw_engine or "").strip().lower()
         if payload in {"python", "azure"}:
             return payload
+        if payload in {"dawn-tts", "dawn_tts"}:
+            return "dawn-tts"
         return "python"
 
     async def _cancel_active_task_locked(self, plugin_id: str) -> None:
@@ -545,6 +574,8 @@ class TtsRuntimeService:
             return "TTS_MODEL_MISSING"
         if "azure_tts_" in payload:
             return "TTS_AZURE_FAILED"
+        if "dawn_tts_" in payload:
+            return "TTS_DAWN_FAILED"
         if "text is required" in payload or "tts text invalid" in payload:
             return "TTS_TEXT_INVALID"
         if (
