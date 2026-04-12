@@ -360,9 +360,21 @@ class OpenCodeManager:
             else:
                 self._stats.health_check_failures += 1
             return healthy
-        except Exception:
+        except Exception as err:
             self._stats.last_health_check = datetime.now()
             self._stats.health_check_failures += 1
+            logger.debug(
+                "OpenCode health check failed: %s: %s",
+                type(err).__name__,
+                err,
+                exc_info=True,
+            )
+            if self._stats.health_check_failures == 1:
+                logger.warning(
+                    "OpenCode health check failed (%s: %s); 后续失败仅记 DEBUG，可调高日志级别排障",
+                    type(err).__name__,
+                    err,
+                )
             return False
 
     async def get_health_payload(self) -> Dict[str, Any]:

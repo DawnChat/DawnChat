@@ -149,7 +149,7 @@ The current status values are:
 - `failed`
 - `cancelled`
 
-See `apps/frontend/src/features/plugin-dev-workbench/composables/useAssistantSessionOrchestrator.ts` (session shape and status builder).
+See `dawnchat-plugins/assistant-sdk/host-orchestration-sdk/src/session-core/useAssistantSessionOrchestrator.ts` (session shape, status builder, and `assistant.session_step_execute` payload). The frontend workbench composes this SDK from `usePluginDevWorkbenchOrchestration.ts`.
 
 The host currently enforces a single active session per plugin. A new `session.start` request is rejected while another session is still running for the same plugin (see active-session admission logic in the same orchestrator composable).
 
@@ -188,6 +188,18 @@ Example:
 
 The host treats `action.payload` as opaque data.
 It validates the outer envelope, but it does not interpret plugin business meaning. See `ui_tool_service.py` (session start schema) and `useAssistantSessionOrchestrator.ts` (step normalization).
+
+### 6.1 `assistant.session_step_execute` and `step_index` / `total_steps`
+
+When the host dispatches an ordered step to the plugin, the **reference** DawnChat host includes:
+
+- `session_id`, `step_id`, `action`, optional `timeout_ms`
+- **`step_index`**: zero-based index of the current step in the batch
+- **`total_steps`**: `steps.length` for that session start batch
+
+Canonical implementation: `dawnchat-plugins/assistant-sdk/host-orchestration-sdk/src/session-core/useAssistantSessionOrchestrator.ts` (`executeSessionStep`). The workbench wires this package via `usePluginDevWorkbenchOrchestration.ts` (see `apps/frontend`).
+
+**Workspace snapshot note (`@dawnchat/assistant-core`):** If the plugin runtime enables `workspaceSnapshotOnSessionEnd` in `composeAssistantCoreRuntime`, the workspace layer appends a `session_completed` snapshot only after the **last** step succeeds, and only when **`step_index` and `total_steps` are both present** on the `onStepApplied` path. Custom hosts that omit these fields will not trigger that snapshot (no error; feature is skipped).
 
 ---
 

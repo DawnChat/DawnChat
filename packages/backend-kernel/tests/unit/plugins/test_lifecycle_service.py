@@ -64,9 +64,12 @@ async def test_create_dev_session_marks_main_assistant_identity(monkeypatch: pyt
             return
 
         async def submit(self, **kwargs) -> str:
+            tid = kwargs.get("task_id")
+            assert tid is not None
+            assert tid in service._operations
             loop = asyncio.get_running_loop()
             loop.call_soon(lambda: asyncio.create_task(kwargs["executor_func"]()))
-            return "task_1"
+            return str(tid)
 
     async def _ensure_template_cached(*_args, **_kwargs) -> None:
         return
@@ -108,6 +111,7 @@ async def test_create_dev_session_marks_main_assistant_identity(monkeypatch: pyt
     )
     await asyncio.sleep(0.01)
 
-    assert task_id == "task_1"
+    assert len(task_id) == 8
+    assert task_id in service._operations
     assert captured["source_type"] == "official_user_main_assistant"
     assert captured["is_main_assistant"] is True

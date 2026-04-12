@@ -217,6 +217,7 @@ class TaskManager:
         timeout: Optional[float] = None,
         idle_timeout: Optional[float] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        task_id: Optional[str] = None,
     ) -> str:
         """
         提交长时间运行任务
@@ -226,14 +227,21 @@ class TaskManager:
             arguments: 调用参数
             plugin_id: 来源插件 ID
             executor_func: 实际执行函数（异步）
+            task_id: 可选，由调用方预先分配的任务 ID（须非空且当前未占用）。
+                用于调用方在 submit 返回前与其它子系统（如 PluginLifecycleService._operations）同步登记。
         
         Returns:
             task_id: 任务 ID
         """
-        task_id = str(uuid.uuid4())[:8]
-        
+        if task_id is not None:
+            chosen_id = str(task_id).strip()
+            if not chosen_id:
+                raise ValueError("task_id must not be empty when provided")
+        else:
+            chosen_id = str(uuid.uuid4())[:8]
+
         task = TaskInfo(
-            task_id=task_id,
+            task_id=chosen_id,
             tool_name=tool_name,
             arguments=arguments,
             plugin_id=plugin_id,
@@ -241,9 +249,13 @@ class TaskManager:
             idle_timeout_seconds=idle_timeout,
             metadata=metadata or {},
         )
-        
+
         async with self._lock:
-            self._tasks[task_id] = task
+            if chosen_id in self._tasks:
+                raise ValueError(f"Task id already exists: {chosen_id}")
+            self._tasks[chosen_id] = task
+
+        task_id = chosen_id
         
         logger.info(f"[Task {task_id}] 任务已提交: {tool_name}")
         

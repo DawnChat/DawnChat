@@ -308,8 +308,3 @@ export const useLlmSelectionStore = defineStore('llmSelection', () => {
     selectModelById
   }
 })
-
-/**
- * @deprecated 请改用 useLlmSelectionStore，兼容导出将在后续清理阶段移除。
- */
-export const useModelStore = useLlmSelectionStore

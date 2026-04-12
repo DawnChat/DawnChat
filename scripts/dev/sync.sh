@@ -132,7 +132,10 @@ ensure_assistant_workspace_deps() {
         return 1
     fi
     print_info "安装 assistant workspace 依赖..."
-    (cd "$ASSISTANT_WORKSPACE_DIR" && "$bun_bin" install --frozen-lockfile) || return 1
+    if ! (cd "$ASSISTANT_WORKSPACE_DIR" && "$bun_bin" install --frozen-lockfile); then
+        print_warning "bun --frozen-lockfile 失败（多为 package.json/workspaces 与 bun.lock 不一致），回退到 bun install 以更新 lockfile；请提交 dawnchat-plugins/assistant-workspace/bun.lock"
+        (cd "$ASSISTANT_WORKSPACE_DIR" && "$bun_bin" install) || return 1
+    fi
     ASSISTANT_WORKSPACE_READY=true
 }
 

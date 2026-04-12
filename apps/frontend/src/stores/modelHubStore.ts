@@ -888,8 +888,3 @@ export const useModelHubStore = defineStore('modelHub', () => {
     REPO_DOWNLOAD_FILENAME
   }
 })
-
-/**
- * @deprecated 请改用 useModelHubStore，兼容导出将在后续清理阶段移除。
- */
-export const useModelsStore = useModelHubStore

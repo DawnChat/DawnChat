@@ -47,8 +47,12 @@ def create_app() -> FastAPI:
             logger.info("🧪 [Test Mode] E2E 测试模式已启用，将使用 ScenarioExecutor 替代真实执行器")
 
         total_duration = int((time.time() - startup_start) * 1000)
-        logger.info(f"⏱️  [{total_duration}ms] ✅ DawnChat Backend 启动完成 (总耗时: {total_duration}ms)")
-        logger.info("🌐 服务器已就绪，后台继续初始化非关键组件...")
+        logger.info(
+            f"⏱️  [{total_duration}ms] ✅ DawnChat Backend HTTP 与 API 路由已就绪 (总耗时: {total_duration}ms)"
+        )
+        logger.info(
+            "🌐 插件管理器、本地 AI、云端模型等仍在后台异步初始化；在此之前部分接口可能返回未就绪状态。"
+        )
 
         asyncio.create_task(initialize_non_critical_components(startup_start))
 

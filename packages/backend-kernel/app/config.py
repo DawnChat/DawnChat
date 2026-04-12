@@ -90,8 +90,6 @@ class Config:
     VERSION = "1.0.0"
     
     # ============ 功能开关 ============
-    # 是否启用 Agent v2 (新架构)
-    ENABLE_AGENT_V2 = os.getenv("ENABLE_AGENT_V2", "true").lower() == "true"
     AGENT_RUNTIME = os.getenv("AGENT_RUNTIME", "v3").lower()
     
     # ============ E2E 测试模式 ============

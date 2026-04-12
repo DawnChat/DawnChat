@@ -4,6 +4,7 @@ import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import time
+import uuid
 from typing import Any
 
 from app.services.task_manager import TaskStatus, get_task_manager
@@ -206,19 +207,25 @@ class PluginLifecycleService:
             op.result = result
             return result
 
-        task_id = await task_manager.submit(
-            tool_name="plugin_lifecycle_create_dev_session",
-            arguments={},
-            plugin_id=plugin_id_hint or "host",
-            executor_func=lambda: _executor(),
-            metadata={"domain": "plugin_lifecycle", "operation": LifecycleOperationType.CREATE_DEV_SESSION.value},
-        )
+        task_id = str(uuid.uuid4())[:8]
         self._operations[task_id] = LifecycleOperation(
             task_id=task_id,
             operation_type=LifecycleOperationType.CREATE_DEV_SESSION,
             plugin_id=plugin_id_hint,
             app_type=str(payload.get("app_type") or ""),
         )
+        try:
+            await task_manager.submit(
+                tool_name="plugin_lifecycle_create_dev_session",
+                arguments={},
+                plugin_id=plugin_id_hint or "host",
+                executor_func=lambda: _executor(),
+                metadata={"domain": "plugin_lifecycle", "operation": LifecycleOperationType.CREATE_DEV_SESSION.value},
+                task_id=task_id,
+            )
+        except Exception:
+            self._operations.pop(task_id, None)
+            raise
         return task_id
 
     async def submit_start_dev_session(self, plugin_id: str) -> str:
@@ -259,18 +266,24 @@ class PluginLifecycleService:
             self._operations[task_id].result = result
             return result
 
-        task_id = await task_manager.submit(
-            tool_name="plugin_lifecycle_start_dev_session",
-            arguments={},
-            plugin_id=plugin_id,
-            executor_func=lambda: _executor(),
-            metadata={"domain": "plugin_lifecycle", "operation": LifecycleOperationType.START_DEV_SESSION.value},
-        )
+        task_id = str(uuid.uuid4())[:8]
         self._operations[task_id] = LifecycleOperation(
             task_id=task_id,
             operation_type=LifecycleOperationType.START_DEV_SESSION,
             plugin_id=plugin_id,
         )
+        try:
+            await task_manager.submit(
+                tool_name="plugin_lifecycle_start_dev_session",
+                arguments={},
+                plugin_id=plugin_id,
+                executor_func=lambda: _executor(),
+                metadata={"domain": "plugin_lifecycle", "operation": LifecycleOperationType.START_DEV_SESSION.value},
+                task_id=task_id,
+            )
+        except Exception:
+            self._operations.pop(task_id, None)
+            raise
         return task_id
 
     async def submit_restart_dev_session(self, plugin_id: str) -> str:
@@ -320,18 +333,24 @@ class PluginLifecycleService:
             self._operations[task_id].result = result
             return result
 
-        task_id = await task_manager.submit(
-            tool_name="plugin_lifecycle_restart_dev_session",
-            arguments={},
-            plugin_id=plugin_id,
-            executor_func=lambda: _executor(),
-            metadata={"domain": "plugin_lifecycle", "operation": LifecycleOperationType.RESTART_DEV_SESSION.value},
-        )
+        task_id = str(uuid.uuid4())[:8]
         self._operations[task_id] = LifecycleOperation(
             task_id=task_id,
             operation_type=LifecycleOperationType.RESTART_DEV_SESSION,
             plugin_id=plugin_id,
         )
+        try:
+            await task_manager.submit(
+                tool_name="plugin_lifecycle_restart_dev_session",
+                arguments={},
+                plugin_id=plugin_id,
+                executor_func=lambda: _executor(),
+                metadata={"domain": "plugin_lifecycle", "operation": LifecycleOperationType.RESTART_DEV_SESSION.value},
+                task_id=task_id,
+            )
+        except Exception:
+            self._operations.pop(task_id, None)
+            raise
         return task_id
 
     async def submit_start_runtime(self, plugin_id: str) -> str:
@@ -358,18 +377,24 @@ class PluginLifecycleService:
             self._operations[task_id].result = result
             return result
 
-        task_id = await task_manager.submit(
-            tool_name="plugin_lifecycle_start_runtime",
-            arguments={},
-            plugin_id=plugin_id,
-            executor_func=lambda: _executor(),
-            metadata={"domain": "plugin_lifecycle", "operation": LifecycleOperationType.START_RUNTIME.value},
-        )
+        task_id = str(uuid.uuid4())[:8]
         self._operations[task_id] = LifecycleOperation(
             task_id=task_id,
             operation_type=LifecycleOperationType.START_RUNTIME,
             plugin_id=plugin_id,
         )
+        try:
+            await task_manager.submit(
+                tool_name="plugin_lifecycle_start_runtime",
+                arguments={},
+                plugin_id=plugin_id,
+                executor_func=lambda: _executor(),
+                metadata={"domain": "plugin_lifecycle", "operation": LifecycleOperationType.START_RUNTIME.value},
+                task_id=task_id,
+            )
+        except Exception:
+            self._operations.pop(task_id, None)
+            raise
         return task_id
 
     def get_operation(self, task_id: str) -> dict[str, Any] | None:
