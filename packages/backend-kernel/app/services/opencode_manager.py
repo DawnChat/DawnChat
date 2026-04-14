@@ -213,13 +213,18 @@ class OpenCodeManager:
                 Config.OPENCODE_DATA_DIR.mkdir(parents=True, exist_ok=True)
                 Config.OPENCODE_LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
-                await self._ensure_opencode_models_catalog_cache()
+                await self._ensure_opencode_models_dev_file()
 
                 baseline_config = await self._build_baseline_config()
                 env = os.environ.copy()
                 env["OPENCODE_CONFIG_CONTENT"] = json.dumps(baseline_config, ensure_ascii=False)
                 env["HOME"] = str(Path.home())
                 self._configure_runtime_env(env)
+                # OpenCode 会按 cache/version 清空 $XDG_CACHE_HOME/opencode，写在 cache 里的 models.json 会被删掉；
+                # 使用用户数据目录 + OPENCODE_MODELS_PATH，并关闭 models.dev 定时拉取（见上游 packages/opencode/src/provider/models.ts）。
+                models_dev_file = Config.OPENCODE_DATA_DIR / "opencode_models_dev_api.json"
+                env["OPENCODE_MODELS_PATH"] = str(models_dev_file.resolve())
+                env["OPENCODE_DISABLE_MODELS_FETCH"] = "true"
                 rules_dir = get_opencode_rules_service().get_current_dir()
                 if isinstance(rules_dir, str) and rules_dir.strip():
                     env["OPENCODE_CONFIG_DIR"] = rules_dir.strip()
@@ -584,39 +589,32 @@ class OpenCodeManager:
         env["OPENCODE_HOME"] = str(opencode_home)
         env["OPENCODE_DISABLE_LSP_DOWNLOAD"] = "true"
 
-    async def _ensure_opencode_models_catalog_cache(self) -> None:
-        """为 OpenCode 准备 models.dev 目录缓存，减轻正式包冷启动失败。
+    async def _ensure_opencode_models_dev_file(self) -> None:
+        """写入 OpenCode 读取的 models.dev 快照路径（OPENCODE_MODELS_PATH），避免走外网与 cache 被清空。
 
-        上游 OpenCode 启动阶段会访问 models.dev（见 anomalyco/opencode#4959 等）。本仓库将 XDG_CACHE_HOME
-        固定到用户数据目录，与 CLI 默认 ~/.cache 分离，DMG 首次启动易触发冷拉取；若超时或网络重置，
-        健康检查未就绪会表现为 start_with_workspace_failed。此处优先复用本机 CLI 缓存，否则由内核预取。
+        上游实现：packages/opencode/src/provider/models.ts（Data 优先读 OPENCODE_MODELS_PATH）、
+        packages/opencode/src/global/index.ts（CACHE_VERSION 不匹配时会清空整个 Global.Path.cache）。
+
+        此前把 models.json 放在 XDG_CACHE_HOME/opencode 下会被启动时清空，预取无效；改存 DATA_DIR 并配合
+        OPENCODE_DISABLE_MODELS_FETCH，可关闭模块加载时的 ModelsDev.refresh() 定时拉取（同文件 models.ts）。
         """
-        runtime_root = Config.OPENCODE_DATA_DIR / "runtime"
-        xdg_cache_home = runtime_root / "cache"
-        opencode_cache = xdg_cache_home / "opencode"
-        opencode_cache.mkdir(parents=True, exist_ok=True)
-        dest = opencode_cache / "models.json"
+        dest = Config.OPENCODE_DATA_DIR / "opencode_models_dev_api.json"
         min_bytes = 64
-
-        try:
-            if not dest.exists() or dest.stat().st_size < min_bytes:
-                home_models = Path.home() / ".cache" / "opencode" / "models.json"
-                if home_models.is_file() and home_models.stat().st_size >= min_bytes:
-                    shutil.copy2(home_models, dest)
-                    logger.info(
-                        "OpenCode 模型目录缓存：已从 CLI 默认路径复用 %s -> %s",
-                        home_models,
-                        dest,
-                    )
-                    return
-        except OSError as err:
-            logger.debug("复用 OpenCode CLI models 缓存失败: %s", err)
 
         try:
             if dest.exists() and dest.stat().st_size >= min_bytes:
                 return
         except OSError:
             pass
+
+        try:
+            home_models = Path.home() / ".cache" / "opencode" / "models.json"
+            if home_models.is_file() and home_models.stat().st_size >= min_bytes:
+                shutil.copy2(home_models, dest)
+                logger.info("OpenCode models.dev 快照：已从 CLI 缓存复用 %s -> %s", home_models, dest)
+                return
+        except OSError as err:
+            logger.debug("复用 OpenCode CLI models.json 失败: %s", err)
 
         trust_env = await self._resolve_httpx_trust_env()
         try:
@@ -632,15 +630,19 @@ class OpenCodeManager:
                     raise ValueError("models.dev 响应过短")
                 dest.write_bytes(body)
                 logger.info(
-                    "OpenCode 模型目录缓存：已预取 models.dev/api.json -> %s (%s bytes)",
+                    "OpenCode models.dev 快照：已下载 api.json -> %s (%s bytes)",
                     dest,
                     len(body),
                 )
+                return
         except Exception as err:
-            logger.warning(
-                "无法预取或复用 models.dev 缓存（OpenCode 将自行拉取；离线/代理环境可配置系统代理或增大 DAWNCHAT_OPENCODE_START_TIMEOUT）: %s",
-                err,
-            )
+            logger.warning("无法下载 models.dev 快照，将写入空对象占位（依赖 DawnChat 注入的 provider 配置）: %s", err)
+
+        try:
+            dest.write_text("{}", encoding="utf-8")
+            logger.info("OpenCode models.dev 快照：已写入空 JSON 占位 %s", dest)
+        except OSError as err:
+            logger.error("无法写入 OpenCode models 占位文件 %s: %s", dest, err)
 
     @staticmethod
     def _read_startup_error_hint(max_lines: int = 40) -> str:

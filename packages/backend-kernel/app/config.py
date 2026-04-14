@@ -255,7 +255,7 @@ class Config:
     CLAUDE_LOGS_DIR = LOGS_DIR / "claude"
     OPENCODE_HOST = os.getenv("DAWNCHAT_OPENCODE_HOST", "127.0.0.1")
     OPENCODE_PORT = int(os.getenv("DAWNCHAT_OPENCODE_PORT", "4096"))
-    # OpenCode 启动时会拉取 models.dev 等；正式包使用独立 XDG 缓存，冷启动常超过 20s，默认放宽到 60s
+    # OpenCode 冷启动（含 models.dev / 健康检查）；models.dev 外网问题由 OPENCODE_MODELS_PATH + DISABLE_FETCH 规避，此处略放宽默认等待
     OPENCODE_START_TIMEOUT = float(os.getenv("DAWNCHAT_OPENCODE_START_TIMEOUT", "60"))
     OPENCODE_HEALTH_CHECK_INTERVAL = float(os.getenv("DAWNCHAT_OPENCODE_HEALTH_CHECK_INTERVAL", "5"))
     OPENCODE_MAX_RESTARTS = int(os.getenv("DAWNCHAT_OPENCODE_MAX_RESTARTS", "5"))
