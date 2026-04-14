@@ -1176,10 +1176,12 @@ ensure_assistant_workspace_deps() {
         print_error "缺少 assistant workspace 配置: $ASSISTANT_WORKSPACE_DIR/package.json"
         exit 1
     fi
+    local bun_dir
+    bun_dir="$(cd "$(dirname "$bun_bin")" && pwd)"
     print_info "安装 assistant workspace 依赖..."
-    if ! (cd "$ASSISTANT_WORKSPACE_DIR" && "$bun_bin" install --frozen-lockfile); then
+    if ! (cd "$ASSISTANT_WORKSPACE_DIR" && PATH="$bun_dir:${PATH:-}" "$bun_bin" install --frozen-lockfile); then
         print_warning "bun --frozen-lockfile 失败，回退到 bun install；请提交 dawnchat-plugins/assistant-workspace/bun.lock"
-        (cd "$ASSISTANT_WORKSPACE_DIR" && "$bun_bin" install) || exit 1
+        (cd "$ASSISTANT_WORKSPACE_DIR" && PATH="$bun_dir:${PATH:-}" "$bun_bin" install) || exit 1
     fi
     ASSISTANT_WORKSPACE_READY=true
 }
@@ -1189,7 +1191,10 @@ run_assistant_workspace_script() {
     local script_name="$2"
     ensure_assistant_workspace_deps "$bun_bin"
     print_info "执行 assistant workspace 脚本: $script_name"
-    (cd "$ASSISTANT_WORKSPACE_DIR" && "$bun_bin" run "$script_name")
+    # assistant-workspace 的 package.json 脚本里会再调用裸命令 bun；仅传绝对路径时子 shell 无 PATH，需把 bun 所在目录前置
+    local bun_dir
+    bun_dir="$(cd "$(dirname "$bun_bin")" && pwd)"
+    (cd "$ASSISTANT_WORKSPACE_DIR" && PATH="$bun_dir:${PATH:-}" "$bun_bin" run "$script_name")
 }
 
 build_assistant_sdk_bundle() {
@@ -1409,6 +1414,8 @@ prepare_builtin_desktop_template() {
         print_error "缺少 bun 二进制，无法构建 starter 模板: $bun_bin"
         exit 1
     fi
+    local bun_dir
+    bun_dir="$(cd "$(dirname "$bun_bin")" && pwd)"
 
     local template_id=""
     local src_dir=""
@@ -1433,24 +1440,33 @@ prepare_builtin_desktop_template() {
                 ensure_assistant_template_dist_ready "$bun_bin"
             else
                 print_info "安装 $template_id 前端依赖..."
-                (cd "$web_src" && "$bun_bin" install)
+                (cd "$web_src" && PATH="$bun_dir:${PATH:-}" "$bun_bin" install)
                 print_info "构建 $template_id 前端产物..."
-                (cd "$web_src" && "$bun_bin" run build)
+                (cd "$web_src" && PATH="$bun_dir:${PATH:-}" "$bun_bin" run build)
             fi
         fi
 
         mkdir -p "$dest_root"
         rm -rf "$dest_dir"
         if command -v rsync >/dev/null 2>&1; then
-            rsync -a --delete \
-                --exclude "node_modules" \
-                --exclude "node_modules/***" \
-                --exclude "pnpm-lock.yaml" \
+            # 与 scripts/dev/sync.sh sync_builtin_desktop_template 排除项一致
+            rsync -av --delete --delete-excluded --force \
+                --exclude '__pycache__' \
+                --exclude '*.pyc' \
+                --exclude '.pytest_cache' \
+                --exclude 'node_modules' \
+                --exclude 'pnpm-lock.yaml' \
+                --exclude '.dawnchat-preview' \
                 "$src_dir/" "$dest_dir/"
         else
-            cp -R "$src_dir" "$dest_dir"
-            find "$dest_dir" -type d -name "node_modules" -prune -exec rm -rf {} +
-            find "$dest_dir" -type f -name "pnpm-lock.yaml" -delete
+            mkdir -p "$dest_dir"
+            cp -R "$src_dir"/* "$dest_dir/"
+            rm -rf "$dest_dir/node_modules" \
+                   "$dest_dir/web-src/node_modules" \
+                   "$dest_dir/_ir/frontend/web-src/node_modules"
+            rm -f "$dest_dir/pnpm-lock.yaml" \
+                  "$dest_dir/web-src/pnpm-lock.yaml" \
+                  "$dest_dir/_ir/frontend/web-src/pnpm-lock.yaml"
         fi
         print_success "$template_id 已内置到 sidecar: $dest_dir"
     done

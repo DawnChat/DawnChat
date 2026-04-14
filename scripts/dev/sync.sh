@@ -131,10 +131,12 @@ ensure_assistant_workspace_deps() {
         print_error "缺少 assistant workspace 配置: $ASSISTANT_WORKSPACE_DIR/package.json"
         return 1
     fi
+    local bun_dir
+    bun_dir="$(cd "$(dirname "$bun_bin")" && pwd)"
     print_info "安装 assistant workspace 依赖..."
-    if ! (cd "$ASSISTANT_WORKSPACE_DIR" && "$bun_bin" install --frozen-lockfile); then
+    if ! (cd "$ASSISTANT_WORKSPACE_DIR" && PATH="$bun_dir:${PATH:-}" "$bun_bin" install --frozen-lockfile); then
         print_warning "bun --frozen-lockfile 失败（多为 package.json/workspaces 与 bun.lock 不一致），回退到 bun install 以更新 lockfile；请提交 dawnchat-plugins/assistant-workspace/bun.lock"
-        (cd "$ASSISTANT_WORKSPACE_DIR" && "$bun_bin" install) || return 1
+        (cd "$ASSISTANT_WORKSPACE_DIR" && PATH="$bun_dir:${PATH:-}" "$bun_bin" install) || return 1
     fi
     ASSISTANT_WORKSPACE_READY=true
 }
@@ -149,7 +151,9 @@ run_assistant_workspace_script() {
     fi
     ensure_assistant_workspace_deps || return 1
     print_info "执行 assistant workspace 脚本: $script_name"
-    (cd "$ASSISTANT_WORKSPACE_DIR" && "$bun_bin" run "$script_name")
+    local bun_dir
+    bun_dir="$(cd "$(dirname "$bun_bin")" && pwd)"
+    (cd "$ASSISTANT_WORKSPACE_DIR" && PATH="$bun_dir:${PATH:-}" "$bun_bin" run "$script_name")
 }
 
 build_plugin_frontend() {
@@ -512,6 +516,7 @@ sync_builtin_desktop_template() {
     local template_dest=""
     local web_src=""
     local bun_bin
+    local bun_dir
     bun_bin="$(resolve_bun_binary || true)"
     local template_ids=("desktop-starter" "desktop-hello-world" "desktop-ai-assistant" "web-starter-vue" "web-ai-assistant" "mobile-starter-ionic" "mobile-ai-assistant")
 
@@ -538,7 +543,8 @@ sync_builtin_desktop_template() {
                 fi
             else
                 print_info "构建 $template_id 前端产物..."
-                (cd "$web_src" && "$bun_bin" install && "$bun_bin" run build)
+                bun_dir="$(cd "$(dirname "$bun_bin")" && pwd)" || return 1
+                (cd "$web_src" && export PATH="$bun_dir:${PATH:-}" && "$bun_bin" install && "$bun_bin" run build)
             fi
         fi
 
