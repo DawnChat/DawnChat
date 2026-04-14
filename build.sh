@@ -1406,6 +1406,31 @@ ensure_assistant_template_dist_ready() {
     ASSISTANT_TEMPLATE_DIST_READY=true
 }
 
+# 无 rsync 时（如 Windows GHA）复制官方模板树；排除项与下方 rsync 一致。勿用 cp -R 整棵复制 node_modules：Windows 上 Bun 的 .bin 易出现重复路径导致 cp: File exists。
+copy_official_template_tree_without_rsync() {
+    local src_dir="$1"
+    local dest_dir="$2"
+    if [[ ! -d "$src_dir" ]]; then
+        print_error "copy_official_template_tree_without_rsync: 源目录不存在: $src_dir"
+        return 1
+    fi
+    mkdir -p "$dest_dir"
+    (
+        cd "$src_dir" || exit 1
+        tar -cf - \
+            --exclude='node_modules' \
+            --exclude='__pycache__' \
+            --exclude='*.pyc' \
+            --exclude='.pytest_cache' \
+            --exclude='pnpm-lock.yaml' \
+            --exclude='.dawnchat-preview' \
+            .
+    ) | ( cd "$dest_dir" && tar -xf - ) || {
+        print_error "复制模板目录失败（tar）: $src_dir -> $dest_dir"
+        return 1
+    }
+}
+
 # ============ 构建并内置 starter 模板（source + dist，不内置 node_modules） ============
 prepare_builtin_desktop_template() {
     print_step "构建并内置 starter 模板 (source + dist)"
@@ -1464,14 +1489,7 @@ prepare_builtin_desktop_template() {
                 --exclude '.dawnchat-preview' \
                 "$src_dir/" "$dest_dir/"
         else
-            mkdir -p "$dest_dir"
-            cp -R "$src_dir"/* "$dest_dir/"
-            rm -rf "$dest_dir/node_modules" \
-                   "$dest_dir/web-src/node_modules" \
-                   "$dest_dir/_ir/frontend/web-src/node_modules"
-            rm -f "$dest_dir/pnpm-lock.yaml" \
-                  "$dest_dir/web-src/pnpm-lock.yaml" \
-                  "$dest_dir/_ir/frontend/web-src/pnpm-lock.yaml"
+            copy_official_template_tree_without_rsync "$src_dir" "$dest_dir" || exit 1
         fi
         print_success "$template_id 已内置到 sidecar: $dest_dir"
     done

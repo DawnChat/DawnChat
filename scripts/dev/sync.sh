@@ -512,6 +512,31 @@ sync_assistant_sdk_bundle() {
     print_success "Assistant SDK runtime bundle 同步完成: $dest_root"
 }
 
+# 无 rsync 时复制官方模板树；排除项与 rsync 分支一致（勿 cp -R 含 node_modules，Windows 上易触发 .bin File exists）
+copy_official_template_tree_without_rsync() {
+    local src_dir="$1"
+    local dest_dir="$2"
+    if [[ ! -d "$src_dir" ]]; then
+        print_error "copy_official_template_tree_without_rsync: 源目录不存在: $src_dir"
+        return 1
+    fi
+    mkdir -p "$dest_dir"
+    (
+        cd "$src_dir" || exit 1
+        tar -cf - \
+            --exclude='node_modules' \
+            --exclude='__pycache__' \
+            --exclude='*.pyc' \
+            --exclude='.pytest_cache' \
+            --exclude='pnpm-lock.yaml' \
+            --exclude='.dawnchat-preview' \
+            .
+    ) | ( cd "$dest_dir" && tar -xf - ) || {
+        print_error "复制模板目录失败（tar）: $src_dir -> $dest_dir"
+        return 1
+    }
+}
+
 sync_builtin_desktop_template() {
     print_step "同步内置 starter 模板"
 
@@ -566,13 +591,7 @@ sync_builtin_desktop_template() {
         else
             rm -rf "$template_dest"
             mkdir -p "$template_dest"
-            cp -R "$template_src"/* "$template_dest/"
-            rm -rf "$template_dest/node_modules" \
-                   "$template_dest/web-src/node_modules" \
-                   "$template_dest/_ir/frontend/web-src/node_modules"
-            rm -f "$template_dest/pnpm-lock.yaml" \
-                  "$template_dest/web-src/pnpm-lock.yaml" \
-                  "$template_dest/_ir/frontend/web-src/pnpm-lock.yaml"
+            copy_official_template_tree_without_rsync "$template_src" "$template_dest" || return 1
         fi
         print_success "$template_id 模板同步完成: $template_dest"
     done
