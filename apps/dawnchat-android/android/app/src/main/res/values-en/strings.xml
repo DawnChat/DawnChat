@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="splash_app_name">DawnChat</string>
+    <string name="splash_app_subtitle">DawnChat is built for apps that keep evolving.</string>
     <string name="app_name">DawnChat Mobile Host</string>
     <string name="title_activity_main">DawnChat Mobile Host</string>
-    <string name="package_name">com.dawnchat.dev</string>
-    <string name="custom_url_scheme">com.dawnchat.dev</string>
+    <string name="package_name">com.dawnchat.app</string>
+    <string name="custom_url_scheme">com.dawnchat.app</string>
     <string name="tab_home">Home</string>
     <string name="tab_mine">Mine</string>
     <string name="action_scan">Scan</string>
@@ -26,9 +28,29 @@
     <string name="setting_dark">Dark</string>
     <string name="setting_zh">Simplified Chinese</string>
     <string name="setting_en">English</string>
+    <string name="setting_mobile_assistant">AI assistant</string>
+    <string name="setting_auto_open_mobile_assistant">Auto-open built-in Mobile AI Assistant from Home (once per embedded version)</string>
     <string name="settings_applied">Settings applied</string>
     <string name="about_description">DawnChat Mobile Host supports HMR preview and offline plugin loading.</string>
     <string name="about_version">Version: %1$s</string>
     <string name="mine_settings">Settings</string>
     <string name="mine_about">About</string>
+    <string name="mine_logout">Log out</string>
+    <string name="auth_native_title">Sign in to DawnChat</string>
+    <string name="auth_native_subtitle">Use your DawnChat account (system browser)</string>
+    <string name="auth_open_browser_login">Open browser to sign in</string>
+    <string name="auth_waiting_browser_return">Complete sign-in in the browser…</string>
+    <string name="auth_missing_supabase_config">Supabase not configured: set dawnchat_supabase_url and dawnchat_supabase_anon_key in auth_config.xml (or debug overlay)</string>
+    <string name="auth_bridge_url_failed">Could not build sign-in link</string>
+    <string name="mine_profile">Profile</string>
+    <string name="mine_user_fallback">User</string>
+    <string name="mine_avatar_content_description">Profile picture</string>
+    <string name="profile_title">Profile</string>
+    <string name="profile_field_email">Email</string>
+    <string name="profile_field_user_id">User ID</string>
+    <string name="profile_field_phone">Phone</string>
+    <string name="profile_field_display_name">Display name</string>
+    <string name="profile_field_created_at">Created at</string>
+    <string name="profile_field_last_sign_in">Last sign-in</string>
+    <string name="profile_value_empty">—</string>
 </resources>

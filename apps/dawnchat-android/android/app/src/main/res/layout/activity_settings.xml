@@ -57,6 +57,20 @@
                 android:text="@string/setting_language"
                 android:textStyle="bold" />
 
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:text="@string/setting_mobile_assistant"
+                android:textStyle="bold" />
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/switchAutoOpenAssistant"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/setting_auto_open_mobile_assistant" />
+
             <RadioGroup
                 android:id="@+id/groupLanguage"
                 android:layout_width="match_parent"

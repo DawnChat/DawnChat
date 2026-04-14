@@ -35,6 +35,30 @@ const FULL_STREAM_LOG_KEY = 'codingAgent:opencode:logFullStream'
 const STREAM_STALE_TIMEOUT_MS = 30000
 const STREAM_STALE_CHECK_INTERVAL_MS = 5000
 
+/**
+ * Cold-start / transient browser fetch failures to OpenCode localhost.
+ * @opencode-ai/sdk `event.subscribe` uses GET `{baseUrl}/event` (SSE); health uses DawnChat `/api/opencode/health`.
+ */
+const OPENCODE_EVENT_SUBSCRIBE_MAX_ATTEMPTS = 3
+const OPENCODE_EVENT_SUBSCRIBE_BACKOFF_MS = [200, 400, 800] as const
+
+function isAbortError(err: unknown): boolean {
+  if (err instanceof DOMException && err.name === 'AbortError') return true
+  if (err && typeof err === 'object' && 'name' in err && (err as { name: unknown }).name === 'AbortError') return true
+  return false
+}
+
+function isRetryableOpenCodeSubscribeError(err: unknown): boolean {
+  if (isAbortError(err)) return false
+  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase()
+  if (msg.includes('failed to fetch')) return true
+  if (msg.includes('networkerror')) return true
+  if (msg.includes('load failed')) return true
+  if (msg.includes('network request failed')) return true
+  if (err instanceof TypeError) return true
+  return false
+}
+
 export async function fetchOpenCodeHealthSnapshot(): Promise<OpenCodeHealthSnapshot> {
   const healthUrl = buildBackendUrl('/api/opencode/health')
   const healthResp = await fetch(healthUrl)
@@ -430,6 +454,8 @@ class OpenCodeAdapter implements EngineAdapter {
     })
     let cancelled = false
     let staleTriggered = false
+    let closedBySdkSseErrorAbort = false
+    let sseErrorAbortIssued = false
     let staleMonitor: number | null = null
     let lastEventAt = Date.now()
     const transportInstanceId = `opencode-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
@@ -483,21 +509,95 @@ class OpenCodeAdapter implements EngineAdapter {
         // Refresh client per subscription to avoid stale SSE handlers after reconnect/restart.
         this.sdkClient = null
         const client = this.getSdkClient()
-        const streamResp = await client.event.subscribe({
-          signal: this.eventController?.signal,
-          onSseError: (err: unknown) => {
-            if (cancelled) return
-            // The SDK already retries SSE internally. We only surface the transport
-            // state for diagnostics and UI hints instead of driving recovery here.
-            logger.warn('[OpenCodeAdapter] onSseError', {
-              error: err instanceof Error ? err.message : String(err)
+
+        const onSseError = (err: unknown) => {
+          if (cancelled) return
+          logger.warn('[OpenCodeAdapter] onSseError', {
+            error: err instanceof Error ? err.message : String(err)
+          })
+          emitStatus('reconnecting', {
+            error: err instanceof Error ? err.message : String(err),
+            recover_reason: 'sdk_sse_error'
+          })
+          // subscribe() often resolves before SSE fails; P0 Promise retries never run. Abort so
+          // finally emits closed → store scheduleResubscribe (runtimeEventTransport).
+          if (sseErrorAbortIssued) return
+          if (!isRetryableOpenCodeSubscribeError(err)) return
+          sseErrorAbortIssued = true
+          closedBySdkSseErrorAbort = true
+          logger.info('[OpenCodeAdapter] onSseError aborting transport for resubscribe', {
+            transport_instance_id: transportInstanceId,
+            recover_reason: 'sdk_sse_error_abort'
+          })
+          this.eventController?.abort()
+        }
+
+        let streamResp: Awaited<ReturnType<OpencodeSdkClient['event']['subscribe']>> | null = null
+        let lastSubscribeError: unknown = null
+        for (let attempt = 0; attempt < OPENCODE_EVENT_SUBSCRIBE_MAX_ATTEMPTS; attempt++) {
+          if (cancelled) break
+          if (attempt > 0) {
+            const backoffMs =
+              OPENCODE_EVENT_SUBSCRIBE_BACKOFF_MS[attempt - 1] ??
+              OPENCODE_EVENT_SUBSCRIBE_BACKOFF_MS[OPENCODE_EVENT_SUBSCRIBE_BACKOFF_MS.length - 1]
+            await new Promise<void>((resolve) => {
+              window.setTimeout(resolve, backoffMs)
+            })
+            if (cancelled) break
+            this.eventController?.abort()
+            this.eventController = new AbortController()
+            logger.info('[OpenCodeAdapter] subscribe retry', {
+              transport_instance_id: transportInstanceId,
+              attempt: attempt + 1,
+              max_attempts: OPENCODE_EVENT_SUBSCRIBE_MAX_ATTEMPTS,
+              backoff_ms: backoffMs
             })
             emitStatus('reconnecting', {
-              error: err instanceof Error ? err.message : String(err),
-              recover_reason: 'sdk_sse_error'
+              recover_reason: 'subscribe_retry',
+              attempt: attempt + 1,
+              max_attempts: OPENCODE_EVENT_SUBSCRIBE_MAX_ATTEMPTS
             })
           }
-        })
+          lastEventAt = Date.now()
+          touchEventAt()
+          try {
+            streamResp = await client.event.subscribe({
+              signal: this.eventController?.signal,
+              onSseError
+            })
+            if (attempt > 0) {
+              logger.info('[OpenCodeAdapter] subscribe established after retry', {
+                transport_instance_id: transportInstanceId,
+                attempt: attempt + 1
+              })
+            }
+            break
+          } catch (err) {
+            lastSubscribeError = err
+            const retryable = isRetryableOpenCodeSubscribeError(err)
+            const lastAttempt = attempt >= OPENCODE_EVENT_SUBSCRIBE_MAX_ATTEMPTS - 1
+            logger.warn('[OpenCodeAdapter] subscribe attempt failed', {
+              transport_instance_id: transportInstanceId,
+              attempt: attempt + 1,
+              max_attempts: OPENCODE_EVENT_SUBSCRIBE_MAX_ATTEMPTS,
+              retryable,
+              error: err instanceof Error ? err.message : String(err)
+            })
+            if (!retryable || lastAttempt) {
+              throw err
+            }
+          }
+        }
+
+        if (cancelled) {
+          return
+        }
+        if (!streamResp) {
+          throw lastSubscribeError instanceof Error
+            ? lastSubscribeError
+            : new Error(String(lastSubscribeError || 'OpenCode event subscribe failed'))
+        }
+
         logger.info('[OpenCodeAdapter] subscribe established')
         emitStatus('streaming')
         for await (const raw of streamResp.stream as AsyncIterable<unknown>) {
@@ -554,7 +654,11 @@ class OpenCodeAdapter implements EngineAdapter {
         clearStaleMonitor()
         logger.info('[OpenCodeAdapter] subscribe closed')
         emitStatus('closed', {
-          recover_reason: staleTriggered ? 'stale_timeout' : 'stream_closed'
+          recover_reason: staleTriggered
+            ? 'stale_timeout'
+            : closedBySdkSseErrorAbort
+              ? 'sdk_sse_error_abort'
+              : 'stream_closed'
         })
       }
     })().catch((err) => {

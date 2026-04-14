@@ -19,3 +19,14 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# Supabase / Ktor / kotlinx.serialization (when minifyEnabled true)
+-keepattributes *Annotation*, InnerClasses
+-dontnote kotlinx.serialization.**
+-keepclassmembers class kotlinx.serialization.json.** { *; }
+-keepclassmembers @kotlinx.serialization.Serializable class * {
+    *** Companion;
+}
+-keepclasseswithmembers class * {
+    @kotlinx.serialization.SerialName <fields>;
+}

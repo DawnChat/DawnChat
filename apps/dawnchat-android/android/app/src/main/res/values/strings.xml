@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="splash_app_name">DawnChat</string>
+    <string name="splash_app_subtitle">构建可持续进化的 App。</string>
     <string name="app_name">DawnChat Mobile Host</string>
     <string name="title_activity_main">DawnChat Mobile Host</string>
-    <string name="package_name">com.dawnchat.dev</string>
-    <string name="custom_url_scheme">com.dawnchat.dev</string>
+    <string name="package_name">com.dawnchat.app</string>
+    <string name="custom_url_scheme">com.dawnchat.app</string>
     <string name="tab_home">首页</string>
     <string name="tab_mine">我的</string>
     <string name="action_scan">扫码</string>
@@ -26,9 +28,29 @@
     <string name="setting_dark">深色</string>
     <string name="setting_zh">简体中文</string>
     <string name="setting_en">English</string>
+    <string name="setting_mobile_assistant">AI 助手</string>
+    <string name="setting_auto_open_mobile_assistant">进入首页时自动打开内置 Mobile AI Assistant（每个内置版本首次）</string>
     <string name="settings_applied">设置已应用</string>
     <string name="about_description">DawnChat 移动端插件开发宿主，支持扫码 HMR 与离线包加载。</string>
     <string name="about_version">版本：%1$s</string>
     <string name="mine_settings">设置</string>
     <string name="mine_about">关于</string>
+    <string name="auth_native_title">登录 DawnChat</string>
+    <string name="auth_native_subtitle">使用官网账号登录（系统浏览器）</string>
+    <string name="auth_open_browser_login">打开浏览器登录</string>
+    <string name="auth_waiting_browser_return">请在浏览器中完成登录…</string>
+    <string name="auth_missing_supabase_config">未配置 Supabase：请在 auth_config.xml（或 debug 覆盖）填写 dawnchat_supabase_url 与 dawnchat_supabase_anon_key</string>
+    <string name="auth_bridge_url_failed">无法生成登录链接</string>
+    <string name="mine_logout">退出登录</string>
+    <string name="mine_profile">个人资料</string>
+    <string name="mine_user_fallback">用户</string>
+    <string name="mine_avatar_content_description">用户头像</string>
+    <string name="profile_title">个人资料</string>
+    <string name="profile_field_email">邮箱</string>
+    <string name="profile_field_user_id">用户 ID</string>
+    <string name="profile_field_phone">手机号</string>
+    <string name="profile_field_display_name">显示名称</string>
+    <string name="profile_field_created_at">注册时间</string>
+    <string name="profile_field_last_sign_in">上次登录</string>
+    <string name="profile_value_empty">—</string>
 </resources>

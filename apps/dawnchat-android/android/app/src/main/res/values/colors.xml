@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <color name="splash_background">#FFFFFF</color>
+    <color name="splash_title">#111827</color>
+    <color name="splash_subtitle">#6B7280</color>
     <color name="colorPrimary">#2563EB</color>
     <color name="colorPrimaryDark">#1D4ED8</color>
     <color name="colorAccent">#22C55E</color>
+    <!-- Hairline for cards / dividers (MaterialComponents theme has no colorOutline*) -->
+    <color name="dawnchat_divider">#1F000000</color>
+    <color name="dawnchat_card_stroke">#33000000</color>
 </resources>

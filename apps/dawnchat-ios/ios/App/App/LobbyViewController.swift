@@ -45,6 +45,31 @@ final class LobbyViewController: UIViewController {
         reloadPlugins()
     }
 
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        Task {
+            await BuiltinPluginSeeder.seedIfNeeded()
+            await MainActor.run {
+                reloadPlugins()
+                maybeAutoLaunchBuiltinAssistant()
+            }
+        }
+    }
+
+    private func maybeAutoLaunchBuiltinAssistant() {
+        guard HostBuiltinAssistantPrefs.isAutoOpenEnabled else { return }
+        let catalogVersion = BuiltinPluginSeeder.embeddedCatalogVersion()
+        if HostBuiltinAssistantPrefs.autoOpenedEmbeddedVersion == catalogVersion { return }
+        guard let meta = PluginStorageService.shared.readPluginMetadata(pluginId: BuiltinMobileAssistant.pluginId) else { return }
+        guard meta.currentVersion == catalogVersion else { return }
+        let entryURL = PluginStorageService.shared.versionDirectoryURL(pluginId: meta.pluginId, version: meta.currentVersion)
+            .appendingPathComponent(meta.entry)
+        guard FileManager.default.fileExists(atPath: entryURL.path) else { return }
+        HostBuiltinAssistantPrefs.autoOpenedEmbeddedVersion = catalogVersion
+        guard let summary = PluginStorageService.shared.installedPlugins().first(where: { $0.pluginId == meta.pluginId && $0.version == meta.currentVersion }) else { return }
+        presentSandbox(.offline(config: storage.makeOfflineLaunch(for: summary)))
+    }
+
     private func setupNavigationBar() {
         let scanItem = UIBarButtonItem(
             image: UIImage(systemName: "qrcode.viewfinder"),
@@ -115,6 +140,7 @@ final class LobbyViewController: UIViewController {
                         let summary = try await installer.install(payload: payload)
                         await MainActor.run {
                             loadingOverlay.hide()
+                            HostBuiltinAssistantPrefs.markExternalInstall(pluginId: summary.pluginId)
                             reloadPlugins()
                             let launch = storage.makeOfflineLaunch(for: summary)
                             presentSandbox(.offline(config: launch))
@@ -537,6 +563,30 @@ final class PluginStorageService {
             )
         }
         .sorted(by: { $0.updatedAt > $1.updatedAt })
+    }
+
+    func pluginDirectoryURL(pluginId: String) -> URL {
+        ensureRootDirectory()
+        return rootDirectory.appendingPathComponent(safePluginId(pluginId), isDirectory: true)
+    }
+
+    func versionDirectoryURL(pluginId: String, version: String) -> URL {
+        pluginDirectoryURL(pluginId: pluginId).appendingPathComponent("versions/\(version)", isDirectory: true)
+    }
+
+    func readPluginMetadata(pluginId: String) -> PluginMetadata? {
+        let metadataURL = pluginDirectoryURL(pluginId: pluginId).appendingPathComponent("metadata.json")
+        guard let data = try? Data(contentsOf: metadataURL) else { return nil }
+        return try? JSONDecoder().decode(PluginMetadata.self, from: data)
+    }
+
+    func writePluginMetadata(_ meta: PluginMetadata) throws {
+        ensureRootDirectory()
+        let pluginDir = pluginDirectoryURL(pluginId: meta.pluginId)
+        try fileManager.createDirectory(at: pluginDir, withIntermediateDirectories: true)
+        let metadataURL = pluginDir.appendingPathComponent("metadata.json")
+        let data = try JSONEncoder().encode(meta)
+        try data.write(to: metadataURL, options: .atomic)
     }
 
     func makeOfflineLaunch(for summary: InstalledPluginSummary) -> OfflinePluginLaunch {

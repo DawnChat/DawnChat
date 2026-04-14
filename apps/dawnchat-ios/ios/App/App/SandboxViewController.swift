@@ -1,6 +1,7 @@
 import UIKit
 import Capacitor
 
+/// Plugin WebView only; OAuth / ticket exchange is implemented in the native shell ([NativeLoginViewController], [MobileAuthRepository]).
 enum SandboxLaunchTarget {
     case hmr(url: URL)
     case offline(config: OfflinePluginLaunch)
@@ -15,7 +16,7 @@ struct OfflinePluginLaunch {
     let entry: String
 }
 
-final class SandboxViewController: CAPBridgeViewController {
+class SandboxViewController: CAPBridgeViewController {
     var launchTarget: SandboxLaunchTarget = .hmr(url: URL(string: "https://example.com")!)
     private let closeButton: UIButton = {
         var config = UIButton.Configuration.filled()
@@ -32,6 +33,10 @@ final class SandboxViewController: CAPBridgeViewController {
         button.accessibilityHint = "关闭当前插件沙箱页面"
         return button
     }()
+
+    override open func capacitorDidLoad() {
+        bridge?.registerPluginInstance(DawnTtsPlugin())
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()

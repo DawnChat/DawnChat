@@ -4,12 +4,29 @@ import pytest
 
 from app.plugins.scaffolding.base import TemplateScaffoldRequest
 from app.plugins.scaffolding.desktop_scaffolder import DesktopTemplateScaffolder
+from app.plugins.scaffolding.mobile_scaffolder import MobileTemplateScaffolder
 from app.plugins.scaffolding.web_scaffolder import WebTemplateScaffolder
 
 
 def _write_json(path, payload) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _create_capacitor_source_package(path, name: str) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+    _write_json(
+        path / "package.json",
+        {
+            "name": name,
+            "version": "0.0.0",
+            "type": "module",
+            "main": "./dawn-tts.ts",
+            "exports": {".": "./dawn-tts.ts"},
+            "peerDependencies": {"@capacitor/core": ">=8.0.0"},
+        },
+    )
+    (path / "dawn-tts.ts").write_text("export {};\n", encoding="utf-8")
 
 
 def _create_sdk_package(path, name: str, *, package_json: dict | None = None) -> None:
@@ -290,6 +307,175 @@ async def test_web_scaffolder_rewrites_workspace_assistant_sdk_to_dev_file_depen
         package_json["dependencies"]["@dawnchat/host-orchestration-sdk"]
         == f"file:{host_sdk_dir.resolve().as_posix()}"
     )
+
+
+@pytest.mark.asyncio
+async def test_mobile_scaffolder_rewrites_capacitor_workspace_to_dev_file_dependency(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    template_source = tmp_path / "mobile-template"
+    target_dir = tmp_path / "com.demo.mobile"
+    assistant_core_dir = tmp_path / "sidecar" / "assistant-sdk" / "assistant-core"
+    host_sdk_dir = tmp_path / "sidecar" / "assistant-sdk" / "host-orchestration-sdk"
+    app_sdk_dir = tmp_path / "sidecar" / "assistant-sdk" / "assistant-app-sdk"
+    chat_ui_dir = tmp_path / "sidecar" / "assistant-sdk" / "assistant-chat-ui"
+    capacitor_tts_dir = tmp_path / "sidecar" / "capacitor-plugins-sdk" / "capacitor-dawn-tts"
+    _create_sdk_package(assistant_core_dir, "@dawnchat/assistant-core")
+    _create_sdk_package(host_sdk_dir, "@dawnchat/host-orchestration-sdk")
+    _create_sdk_package(app_sdk_dir, "@dawnchat/assistant-app-sdk")
+    _create_sdk_package(chat_ui_dir, "@dawnchat/assistant-chat-ui")
+    _create_capacitor_source_package(capacitor_tts_dir, "@dawnchat/capacitor-dawn-tts")
+
+    _write_json(
+        template_source / "manifest.json",
+        {
+            "id": "com.template.mobile",
+            "name": "Mobile Template",
+            "description": "template",
+            "author": "template@example.com",
+        },
+    )
+    _write_json(
+        template_source / "web-src" / "package.json",
+        {
+            "name": "mobile-template",
+            "version": "0.1.0",
+            "dependencies": {
+                "@dawnchat/assistant-app-sdk": "workspace:*",
+                "@dawnchat/assistant-chat-ui": "workspace:*",
+                "@dawnchat/assistant-core": "workspace:*",
+                "@dawnchat/host-orchestration-sdk": "workspace:*",
+                "@dawnchat/capacitor-dawn-tts": "workspace:*",
+                "vue": "^3.5.0",
+            },
+        },
+    )
+
+    monkeypatch.setattr(
+        "app.plugins.scaffolding.base.Config.get_runtime_distribution_mode",
+        lambda: "dev",
+    )
+    monkeypatch.setattr(
+        "app.plugins.scaffolding.base.Config.get_assistant_sdk_package_dirs",
+        lambda allow_dev_fallback=False: {
+            "@dawnchat/assistant-app-sdk": app_sdk_dir,
+            "@dawnchat/assistant-chat-ui": chat_ui_dir,
+            "@dawnchat/assistant-core": assistant_core_dir,
+            "@dawnchat/host-orchestration-sdk": host_sdk_dir,
+        },
+    )
+    monkeypatch.setattr(
+        "app.plugins.scaffolding.base.Config.get_capacitor_plugins_sdk_package_dirs",
+        lambda allow_dev_fallback=False: {
+            "@dawnchat/capacitor-dawn-tts": capacitor_tts_dir,
+        },
+    )
+
+    await MobileTemplateScaffolder().scaffold(
+        TemplateScaffoldRequest(
+            template_id="com.template.mobile",
+            app_type="mobile",
+            plugin_id="com.demo.mobile",
+            app_name="Demo Mobile",
+            app_description="demo",
+            owner_email="demo@example.com",
+            owner_user_id="u1",
+            template_source=template_source,
+            target_dir=target_dir,
+        )
+    )
+
+    package_json = json.loads((target_dir / "web-src" / "package.json").read_text(encoding="utf-8"))
+    assert package_json["dependencies"]["@dawnchat/capacitor-dawn-tts"] == (
+        f"file:{capacitor_tts_dir.resolve().as_posix()}"
+    )
+    assert "workspace:*" not in json.dumps(package_json)
+
+
+@pytest.mark.asyncio
+async def test_mobile_scaffolder_vendors_capacitor_sdk_for_release_runtime(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    template_source = tmp_path / "mobile-template"
+    target_dir = tmp_path / "com.demo.mobile"
+    bundle_root = tmp_path / "bundle"
+    assistant_core_dir = bundle_root / "assistant-sdk" / "assistant-core"
+    host_sdk_dir = bundle_root / "assistant-sdk" / "host-orchestration-sdk"
+    app_sdk_dir = bundle_root / "assistant-sdk" / "assistant-app-sdk"
+    chat_ui_dir = bundle_root / "assistant-sdk" / "assistant-chat-ui"
+    capacitor_tts_dir = bundle_root / "capacitor-plugins-sdk" / "capacitor-dawn-tts"
+    _create_sdk_package(assistant_core_dir, "@dawnchat/assistant-core")
+    _create_sdk_package(host_sdk_dir, "@dawnchat/host-orchestration-sdk")
+    _create_sdk_package(app_sdk_dir, "@dawnchat/assistant-app-sdk")
+    _create_sdk_package(chat_ui_dir, "@dawnchat/assistant-chat-ui")
+    _create_capacitor_source_package(capacitor_tts_dir, "@dawnchat/capacitor-dawn-tts")
+
+    _write_json(
+        template_source / "manifest.json",
+        {
+            "id": "com.template.mobile",
+            "name": "Mobile Template",
+            "description": "template",
+            "author": "template@example.com",
+        },
+    )
+    _write_json(
+        template_source / "web-src" / "package.json",
+        {
+            "name": "mobile-template",
+            "version": "0.1.0",
+            "dependencies": {
+                "@dawnchat/assistant-core": "workspace:*",
+                "@dawnchat/capacitor-dawn-tts": "workspace:*",
+            },
+        },
+    )
+
+    monkeypatch.setattr(
+        "app.plugins.scaffolding.base.Config.get_runtime_distribution_mode",
+        lambda: "release",
+    )
+    monkeypatch.setattr(
+        "app.plugins.scaffolding.base.Config.get_assistant_sdk_package_dirs",
+        lambda allow_dev_fallback=False: {
+            "@dawnchat/assistant-app-sdk": app_sdk_dir,
+            "@dawnchat/assistant-chat-ui": chat_ui_dir,
+            "@dawnchat/assistant-core": assistant_core_dir,
+            "@dawnchat/host-orchestration-sdk": host_sdk_dir,
+        },
+    )
+    monkeypatch.setattr(
+        "app.plugins.scaffolding.base.Config.get_capacitor_plugins_sdk_package_dirs",
+        lambda allow_dev_fallback=False: {
+            "@dawnchat/capacitor-dawn-tts": capacitor_tts_dir,
+        },
+    )
+
+    await MobileTemplateScaffolder().scaffold(
+        TemplateScaffoldRequest(
+            template_id="com.template.mobile",
+            app_type="mobile",
+            plugin_id="com.demo.mobile",
+            app_name="Demo Mobile",
+            app_description="demo",
+            owner_email="demo@example.com",
+            owner_user_id="u1",
+            template_source=template_source,
+            target_dir=target_dir,
+        )
+    )
+
+    package_json = json.loads((target_dir / "web-src" / "package.json").read_text(encoding="utf-8"))
+    assert (
+        package_json["dependencies"]["@dawnchat/capacitor-dawn-tts"]
+        == "file:../vendor/capacitor-plugins-sdk/capacitor-dawn-tts"
+    )
+    assert package_json["dependencies"]["@dawnchat/assistant-core"] == "file:../vendor/assistant-sdk/assistant-core"
+    vendored_tts = target_dir / "vendor" / "capacitor-plugins-sdk" / "capacitor-dawn-tts"
+    assert (vendored_tts / "package.json").exists()
+    assert (vendored_tts / "dawn-tts.ts").exists()
 
 
 def test_rewrite_frontend_sdk_dependencies_accepts_legacy_repo_local_file_reference(

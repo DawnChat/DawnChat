@@ -83,6 +83,7 @@ DEV_RUNTIME_DIR="${DAWNCHAT_DEV_RUNTIME_DIR:-$PROJECT_ROOT/.dev-runtime/dawnchat
 SIDECAR_DIR="$DEV_RUNTIME_DIR"
 SDK_DIR="$PROJECT_ROOT/dawnchat-plugins/sdk"
 ASSISTANT_SDK_DIR="$PROJECT_ROOT/dawnchat-plugins/assistant-sdk"
+CAPACITOR_PLUGINS_SDK_DIR="$PROJECT_ROOT/dawnchat-plugins/capacitor-plugins-sdk"
 ASSISTANT_WORKSPACE_DIR="$PROJECT_ROOT/dawnchat-plugins/assistant-workspace"
 PLUGINS_DIR="$PROJECT_ROOT/dawnchat-plugins/official-plugins"
 WEB_AUTH_DIR="$PROJECT_ROOT/DawnChatWeb"

@@ -177,6 +177,11 @@ class UiToolService:
                     code="invalid_arguments",
                     message=f"steps[{index}].action.payload must be an object",
                 )
+            if action_type == "view.capability.invoke":
+                cls._assert_view_capability_invoke_payload_shape(
+                    action_payload,
+                    context=f"session.start steps[{index}] action view.capability.invoke",
+                )
             normalized_step: Dict[str, Any] = {
                 "action": {
                     "type": action_type,
@@ -681,6 +686,27 @@ class UiToolService:
         return {item.name: item for item in defs}
 
     @staticmethod
+    def _assert_view_capability_invoke_payload_shape(
+        payload: Dict[str, Any],
+        *,
+        context: str,
+    ) -> None:
+        """Reject common Agent mistake: capability_id / view_id nested inside input."""
+        inner = payload.get("input")
+        if not isinstance(inner, dict):
+            return
+        misplaced = [key for key in ("capability_id", "view_id") if key in inner]
+        if misplaced:
+            raise PluginUIBridgeError(
+                code="invalid_arguments",
+                message=(
+                    f"{context}: use payload shape {{view_id, capability_id, input}} with only "
+                    "business fields inside input; do not put view_id or capability_id inside input. "
+                    f"Found under input: {', '.join(misplaced)}."
+                ),
+            )
+
+    @staticmethod
     def _validate_and_normalize_arguments(op: BridgeOperation, arguments: Dict[str, Any]) -> Dict[str, Any]:
         payload = {k: v for k, v in arguments.items() if k != "plugin_id"}
         description = UiToolService._normalize_description(
@@ -819,6 +845,11 @@ class UiToolService:
                 normalized_payload = {str(key): value for key, value in raw_payload.items()}
             else:
                 raise PluginUIBridgeError(code="invalid_arguments", message="payload must be an object")
+            if function_name == "view.capability.invoke":
+                UiToolService._assert_view_capability_invoke_payload_shape(
+                    normalized_payload,
+                    context="dawnchat.ui.capability.invoke(function=view.capability.invoke)",
+                )
             normalized = {
                 "function": function_name,
                 "payload": normalized_payload,

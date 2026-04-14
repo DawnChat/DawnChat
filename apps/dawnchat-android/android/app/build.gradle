@@ -1,11 +1,12 @@
 apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
+apply plugin: 'org.jetbrains.kotlin.plugin.serialization'
 
 android {
-    namespace = "com.dawnchat.dev"
+    namespace = "com.dawnchat.app"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.dawnchat.dev"
+        applicationId "com.dawnchat.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
@@ -52,11 +53,19 @@ dependencies {
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0"
     implementation project(':capacitor-android')
     testImplementation "junit:junit:$junitVersion"
+    testImplementation "com.squareup.okhttp3:mockwebserver:5.3.2"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')
 
-    implementation "com.squareup.okhttp3:okhttp:4.12.0"
+    implementation "androidx.browser:browser:1.8.0"
+    implementation "androidx.security:security-crypto:1.0.0"
+    implementation "com.squareup.okhttp3:okhttp:5.3.2"
+    implementation platform("io.github.jan-tennert.supabase:bom:3.5.0")
+    implementation "io.github.jan-tennert.supabase:auth-kt"
+    implementation "io.ktor:ktor-client-okhttp:3.4.2"
+    implementation "org.jetbrains.kotlinx:kotlinx-serialization-json:1.10.0"
+    implementation "io.coil-kt:coil:2.7.0"
     implementation "net.lingala.zip4j:zip4j:2.11.5"
     implementation 'com.journeyapps:zxing-android-embedded:4.3.0'
 }
@@ -71,4 +80,14 @@ try {
     }
 } catch(Exception e) {
     logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}
+
+// Optional: ./gradlew :app:bundleBuiltinMobileAssistant (requires dawnchat-plugins + bun)
+def repoRootForScripts = rootProject.projectDir.parentFile.parentFile.parentFile
+def bundleBuiltinMobileAssistantScript = new File(repoRootForScripts, "scripts/mobile/build-builtin-mobile-assistant.sh")
+tasks.register("bundleBuiltinMobileAssistant", Exec) {
+    group = "dawnchat"
+    description = "Build mobile-ai-assistant web-src and sync into Android assets + iOS BuiltinPlugins"
+    onlyIf { bundleBuiltinMobileAssistantScript.exists() }
+    commandLine "bash", bundleBuiltinMobileAssistantScript.absolutePath
 }

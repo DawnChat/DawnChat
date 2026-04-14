@@ -537,6 +537,65 @@ async def test_capability_invoke_preserves_view_capability_id_payload(monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_capability_invoke_rejects_capability_id_nested_in_input(monkeypatch: pytest.MonkeyPatch) -> None:
+    bridge = _BridgeStub()
+    service = UiToolService(bridge_service=bridge, artifact_store=_ArtifactStoreStub())
+    monkeypatch.setattr(resolver_module, "get_plugin_manager", lambda: _ManagerStub())
+
+    with pytest.raises(PluginUIBridgeError) as exc:
+        await service.execute(
+            "dawnchat.ui.capability.invoke",
+            {
+                "plugin_id": "com.demo.plugin",
+                "function": "view.capability.invoke",
+                "payload": {
+                    "view_id": "tictactoe.main",
+                    "input": {
+                        "capability_id": "game.place_mark",
+                        "index": 6,
+                    },
+                },
+            },
+        )
+
+    assert exc.value.code == "invalid_arguments"
+    assert "capability_id" in exc.value.message.lower()
+    assert "inside input" in exc.value.message.lower()
+
+
+@pytest.mark.asyncio
+async def test_session_start_rejects_view_capability_invoke_with_ids_in_input(monkeypatch: pytest.MonkeyPatch) -> None:
+    bridge = _BridgeStub()
+    service = UiToolService(bridge_service=bridge, artifact_store=_ArtifactStoreStub())
+    monkeypatch.setattr(resolver_module, "get_plugin_manager", lambda: _ManagerStub())
+
+    with pytest.raises(PluginUIBridgeError) as exc:
+        await service.execute(
+            "dawnchat.ui.session.start",
+            {
+                "plugin_id": "com.demo.plugin",
+                "steps": [
+                    {
+                        "action": {
+                            "type": "view.capability.invoke",
+                            "payload": {
+                                "view_id": "tictactoe.main",
+                                "input": {
+                                    "capability_id": "game.place_mark",
+                                    "index": 0,
+                                },
+                            },
+                        },
+                    }
+                ],
+            },
+        )
+
+    assert exc.value.code == "invalid_arguments"
+    assert "inside input" in exc.value.message.lower()
+
+
+@pytest.mark.asyncio
 async def test_capability_invoke_preserves_top_level_view_open_payload(monkeypatch: pytest.MonkeyPatch) -> None:
     bridge = _BridgeStub()
     service = UiToolService(bridge_service=bridge, artifact_store=_ArtifactStoreStub())

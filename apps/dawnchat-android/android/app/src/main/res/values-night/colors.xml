@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="dawnchat_divider">#33FFFFFF</color>
+    <color name="dawnchat_card_stroke">#33FFFFFF</color>
+</resources>

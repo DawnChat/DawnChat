@@ -77,7 +77,7 @@ class PluginPreviewManager:
                 f"Preview package.json is unreadable: {package_json_path}"
             ) from exc
 
-        assistant_deps: dict[str, str] = {}
+        internal_sdk_deps: dict[str, str] = {}
         for section in ("dependencies", "devDependencies"):
             deps = payload.get(section)
             if not isinstance(deps, dict):
@@ -85,22 +85,26 @@ class PluginPreviewManager:
             for package_name in Config.ASSISTANT_SDK_PACKAGE_DIRS:
                 version = str(deps.get(package_name) or "").strip()
                 if version:
-                    assistant_deps[package_name] = version
+                    internal_sdk_deps[package_name] = version
+            for package_name in Config.CAPACITOR_PLUGINS_SDK_PACKAGE_DIRS:
+                version = str(deps.get(package_name) or "").strip()
+                if version:
+                    internal_sdk_deps[package_name] = version
 
         unresolved = [
             f"{package_name}={version}"
-            for package_name, version in assistant_deps.items()
+            for package_name, version in internal_sdk_deps.items()
             if version == "workspace:*"
         ]
         if unresolved:
             raise RuntimeError(
-                "Assistant SDK dependencies were not rewritten before preview install: "
+                "Assistant/Capacitor SDK dependencies were not rewritten before preview install: "
                 + ", ".join(unresolved)
                 + ". runtime bundle missing or scaffold rewrite not applied."
             )
 
         missing_targets: list[str] = []
-        for package_name, version in assistant_deps.items():
+        for package_name, version in internal_sdk_deps.items():
             if not version.startswith("file:"):
                 continue
             raw_target = version[5:].strip()
@@ -119,7 +123,7 @@ class PluginPreviewManager:
                 missing_targets.append(f"{package_name} dist incomplete -> {formatted}")
         if missing_targets:
             raise RuntimeError(
-                "Assistant SDK file dependencies point to missing or incomplete dist bundles: "
+                "Assistant/Capacitor SDK file dependencies point to missing or incomplete bundles: "
                 + ", ".join(missing_targets)
             )
 

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Override via app/src/debug/res/values/auth_config.xml (gitignored) or set in release pipeline. -->
+    <string name="dawnchat_auth_bridge_base_url" translatable="false">https://dawnchat.com/desktop-auth/bridge</string>
+    <string name="dawnchat_supabase_url" translatable="false">https://kgijmcqlakksjhxssxbb.supabase.co</string>
+    <string name="dawnchat_supabase_anon_key" translatable="false">eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtnaWptY3FsYWtrc2poeHNzeGJiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI3MzQ4MzAsImV4cCI6MjA3ODMxMDgzMH0.-4A6vaGo9RG_jCw6KeiCll_655dpmyU3L11Xhrfuwbk</string>
+    <string name="dawnchat_mobile_auth_redirect_uri" translatable="false">com.dawnchat.app://auth/callback</string>
+</resources>

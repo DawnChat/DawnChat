@@ -272,6 +272,23 @@ def test_apply_preview_runtime_fields_syncs_frontend_probe_state_with_namespace(
     assert plugin.preview.frontend_last_probe_at == "2026-04-03T06:54:27Z"
 
 
+def test_validate_assistant_sdk_dependencies_rejects_capacitor_workspace_specifier(tmp_path: Path) -> None:
+    package_json = tmp_path / "package.json"
+    package_json.write_text(
+        """
+        {
+          "dependencies": {
+            "@dawnchat/capacitor-dawn-tts": "workspace:*"
+          }
+        }
+        """.strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError, match="not rewritten before preview install"):
+        PluginPreviewManager._validate_assistant_sdk_dependencies(package_json)
+
+
 def test_validate_assistant_sdk_dependencies_rejects_workspace_specifier(tmp_path: Path) -> None:
     package_json = tmp_path / "package.json"
     package_json.write_text(
@@ -302,7 +319,7 @@ def test_validate_assistant_sdk_dependencies_rejects_missing_file_target(tmp_pat
         encoding="utf-8",
     )
 
-    with pytest.raises(RuntimeError, match="missing or incomplete dist bundles"):
+    with pytest.raises(RuntimeError, match="missing or incomplete bundles"):
         PluginPreviewManager._validate_assistant_sdk_dependencies(package_json)
 
 

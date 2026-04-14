@@ -331,6 +331,12 @@ class Config:
     }
     ASSISTANT_SDK_BUNDLE_DIR = SIDECAR_DIR / "dawnchat-plugins" / ASSISTANT_SDK_DIRNAME
 
+    CAPACITOR_PLUGINS_SDK_DIRNAME = "capacitor-plugins-sdk"
+    CAPACITOR_PLUGINS_SDK_PACKAGE_DIRS = {
+        "@dawnchat/capacitor-dawn-tts": "capacitor-dawn-tts",
+    }
+    CAPACITOR_PLUGINS_SDK_BUNDLE_DIR = SIDECAR_DIR / "dawnchat-plugins" / CAPACITOR_PLUGINS_SDK_DIRNAME
+
     # 向后兼容：历史代码把插件源码目录命名为 PLUGIN_DIR
     PLUGIN_DIR = PLUGIN_SOURCES_DIR
 
@@ -515,6 +521,36 @@ class Config:
             fallback = {
                 package_name: dev_root / package_dir
                 for package_name, package_dir in cls.ASSISTANT_SDK_PACKAGE_DIRS.items()
+            }
+            if all(path.exists() for path in fallback.values()):
+                return fallback
+        return resolved
+
+    @classmethod
+    def get_capacitor_plugins_sdk_bundle_dir(cls) -> Path:
+        raw = str(os.getenv("DAWNCHAT_CAPACITOR_PLUGINS_SDK_BUNDLE_DIR", "")).strip()
+        if raw:
+            return Path(raw).expanduser()
+        return cls.CAPACITOR_PLUGINS_SDK_BUNDLE_DIR
+
+    @classmethod
+    def get_capacitor_plugins_sdk_package_dirs(
+        cls,
+        *,
+        allow_dev_fallback: bool = False,
+    ) -> dict[str, Path]:
+        bundle_root = cls.get_capacitor_plugins_sdk_bundle_dir()
+        resolved = {
+            package_name: bundle_root / package_dir
+            for package_name, package_dir in cls.CAPACITOR_PLUGINS_SDK_PACKAGE_DIRS.items()
+        }
+        if all(path.exists() for path in resolved.values()):
+            return resolved
+        if allow_dev_fallback:
+            dev_root = cls.PROJECT_ROOT / "dawnchat-plugins" / cls.CAPACITOR_PLUGINS_SDK_DIRNAME
+            fallback = {
+                package_name: dev_root / package_dir
+                for package_name, package_dir in cls.CAPACITOR_PLUGINS_SDK_PACKAGE_DIRS.items()
             }
             if all(path.exists() for path in fallback.values()):
                 return fallback

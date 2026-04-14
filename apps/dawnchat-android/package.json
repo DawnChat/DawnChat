@@ -11,6 +11,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@dawnchat/capacitor-dawn-tts": "file:../../dawnchat-plugins/capacitor-plugins-sdk/capacitor-dawn-tts",
     "@capacitor-community/sqlite": "^8.0.1",
     "@capacitor-community/text-to-speech": "^8.0.0",
     "@capacitor/android": "^8.2.0",

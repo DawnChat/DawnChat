@@ -11,19 +11,34 @@
 		2FAD9763203C412B000D30F8 /* config.xml in Resources */ = {isa = PBXBuildFile; fileRef = 2FAD9762203C412B000D30F8 /* config.xml */; };
 		3C8239692F62E5C300732672 /* LobbyViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C8239682F62E5C000732672 /* LobbyViewController.swift */; };
 		3C82396B2F62E5DC00732672 /* SandboxViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C82396A2F62E5DB00732672 /* SandboxViewController.swift */; };
+		B2F1A0012F62E60000732601 /* DawnTtsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2F1A0002F62E60000732601 /* DawnTtsPlugin.swift */; };
+		8A31E0112F90000100732601 /* MobileAuthBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A31E0012F90000100732601 /* MobileAuthBridge.swift */; };
+		8A31E0122F90000100732602 /* MobileAuthRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A31E0022F90000100732602 /* MobileAuthRepository.swift */; };
+		8A31E0132F90000100732603 /* NativeLoginViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A31E0032F90000100732603 /* NativeLoginViewController.swift */; };
+		B3F1E0142F90000100732604 /* ProfileViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3F1E0042F90000100732604 /* ProfileViewController.swift */; };
 		4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */ = {isa = PBXBuildFile; productRef = 4D22ABE82AF431CB00220026 /* CapApp-SPM */; };
+		DC2A1B022AF431CB00220028 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = DC2A1B012AF431CB00220027 /* Supabase */; };
 		50379B232058CBB4000EE86E /* capacitor.config.json in Resources */ = {isa = PBXBuildFile; fileRef = 50379B222058CBB4000EE86E /* capacitor.config.json */; };
 		504EC3081FED79650016851F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504EC3071FED79650016851F /* AppDelegate.swift */; };
 		504EC30D1FED79650016851F /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30B1FED79650016851F /* Main.storyboard */; };
 		504EC30F1FED79650016851F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30E1FED79650016851F /* Assets.xcassets */; };
 		504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
+		B70121052FAA000100732605 /* BuiltinMobileAssistant.swift in Sources */ = {isa = PBXBuildFile; fileRef = B70121012FAA000100732601 /* BuiltinMobileAssistant.swift */; };
+		B70121062FAA000100732606 /* HostBuiltinAssistantPrefs.swift in Sources */ = {isa = PBXBuildFile; fileRef = B70121022FAA000100732602 /* HostBuiltinAssistantPrefs.swift */; };
+		B70121072FAA000100732607 /* BuiltinPluginSeeder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B70121032FAA000100732603 /* BuiltinPluginSeeder.swift */; };
+		B70121082FAA000100732608 /* BuiltinPlugins in Resources */ = {isa = PBXBuildFile; fileRef = B70121042FAA000100732604 /* BuiltinPlugins */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		2FAD9762203C412B000D30F8 /* config.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = config.xml; sourceTree = "<group>"; };
 		3C8239682F62E5C000732672 /* LobbyViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LobbyViewController.swift; sourceTree = "<group>"; };
 		3C82396A2F62E5DB00732672 /* SandboxViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SandboxViewController.swift; sourceTree = "<group>"; };
+		B2F1A0002F62E60000732601 /* DawnTtsPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DawnTtsPlugin.swift; sourceTree = "<group>"; };
+		8A31E0012F90000100732601 /* MobileAuthBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileAuthBridge.swift; sourceTree = "<group>"; };
+		8A31E0022F90000100732602 /* MobileAuthRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileAuthRepository.swift; sourceTree = "<group>"; };
+		8A31E0032F90000100732603 /* NativeLoginViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeLoginViewController.swift; sourceTree = "<group>"; };
+		B3F1E0042F90000100732604 /* ProfileViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileViewController.swift; sourceTree = "<group>"; };
 		50379B222058CBB4000EE86E /* capacitor.config.json */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.json; path = capacitor.config.json; sourceTree = "<group>"; };
 		504EC3041FED79650016851F /* App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = App.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		504EC3071FED79650016851F /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
@@ -32,6 +47,10 @@
 		504EC3111FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		504EC3131FED79650016851F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		50B271D01FEDC1A000F3C39B /* public */ = {isa = PBXFileReference; lastKnownFileType = folder; path = public; sourceTree = "<group>"; };
+		B70121012FAA000100732601 /* BuiltinMobileAssistant.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuiltinMobileAssistant.swift; sourceTree = "<group>"; };
+		B70121022FAA000100732602 /* HostBuiltinAssistantPrefs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostBuiltinAssistantPrefs.swift; sourceTree = "<group>"; };
+		B70121032FAA000100732603 /* BuiltinPluginSeeder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuiltinPluginSeeder.swift; sourceTree = "<group>"; };
+		B70121042FAA000100732604 /* BuiltinPlugins */ = {isa = PBXFileReference; lastKnownFileType = folder; path = BuiltinPlugins; sourceTree = "<group>"; };
 		74762454A5204597D86F2259 /* Pods_App.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_App.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		958DCC722DB07C7200EA8C5F /* debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = debug.xcconfig; path = ../debug.xcconfig; sourceTree = SOURCE_ROOT; };
 		C62BC8E31EF472E1E07B5A6C /* Pods-App.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-App.debug.xcconfig"; path = "Target Support Files/Pods-App/Pods-App.debug.xcconfig"; sourceTree = "<group>"; };
@@ -44,6 +63,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */,
+				DC2A1B022AF431CB00220028 /* Supabase in Frameworks */,
 				1773AA5F2D204C6CBF31DCD7 /* Pods_App.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -90,7 +110,12 @@
 		504EC3061FED79650016851F /* App */ = {
 			isa = PBXGroup;
 			children = (
+				8A31E0012F90000100732601 /* MobileAuthBridge.swift */,
+				8A31E0022F90000100732602 /* MobileAuthRepository.swift */,
+				8A31E0032F90000100732603 /* NativeLoginViewController.swift */,
+				B3F1E0042F90000100732604 /* ProfileViewController.swift */,
 				3C82396A2F62E5DB00732672 /* SandboxViewController.swift */,
+				B2F1A0002F62E60000732601 /* DawnTtsPlugin.swift */,
 				3C8239682F62E5C000732672 /* LobbyViewController.swift */,
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
@@ -100,6 +125,10 @@
 				504EC3131FED79650016851F /* Info.plist */,
 				2FAD9762203C412B000D30F8 /* config.xml */,
 				50B271D01FEDC1A000F3C39B /* public */,
+				B70121042FAA000100732604 /* BuiltinPlugins */,
+				B70121012FAA000100732601 /* BuiltinMobileAssistant.swift */,
+				B70121022FAA000100732602 /* HostBuiltinAssistantPrefs.swift */,
+				B70121032FAA000100732603 /* BuiltinPluginSeeder.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -124,6 +153,7 @@
 			name = App;
 			packageProductDependencies = (
 				4D22ABE82AF431CB00220026 /* CapApp-SPM */,
+				DC2A1B012AF431CB00220027 /* Supabase */,
 			);
 			productName = App;
 			productReference = 504EC3041FED79650016851F /* App.app */;
@@ -156,6 +186,7 @@
 			mainGroup = 504EC2FB1FED79650016851F;
 			packageReferences = (
 				D4C12C0A2AAA248700AAC8A2 /* XCLocalSwiftPackageReference "CapApp-SPM" */,
+				DC2A1B002AAA248700AAC8A3 /* XCRemoteSwiftPackageReference "supabase-swift" */,
 			);
 			productRefGroup = 504EC3051FED79650016851F /* Products */;
 			projectDirPath = "";
@@ -177,6 +208,7 @@
 				50379B232058CBB4000EE86E /* capacitor.config.json in Resources */,
 				504EC30D1FED79650016851F /* Main.storyboard in Resources */,
 				2FAD9763203C412B000D30F8 /* config.xml in Resources */,
+				B70121082FAA000100732608 /* BuiltinPlugins in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -228,8 +260,16 @@
 			buildActionMask = 2147483647;
 			files = (
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
+				8A31E0112F90000100732601 /* MobileAuthBridge.swift in Sources */,
+				8A31E0122F90000100732602 /* MobileAuthRepository.swift in Sources */,
+				8A31E0132F90000100732603 /* NativeLoginViewController.swift in Sources */,
+				B3F1E0142F90000100732604 /* ProfileViewController.swift in Sources */,
 				3C8239692F62E5C300732672 /* LobbyViewController.swift in Sources */,
 				3C82396B2F62E5DC00732672 /* SandboxViewController.swift in Sources */,
+				B2F1A0012F62E60000732601 /* DawnTtsPlugin.swift in Sources */,
+				B70121052FAA000100732605 /* BuiltinMobileAssistant.swift in Sources */,
+				B70121062FAA000100732606 /* HostBuiltinAssistantPrefs.swift in Sources */,
+				B70121072FAA000100732607 /* BuiltinPluginSeeder.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -380,7 +420,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				OTHER_SWIFT_FLAGS = "$(inherited) \"-D\" \"COCOAPODS\" \"-DDEBUG\"";
-				PRODUCT_BUNDLE_IDENTIFIER = com.dawnchat.dev.ios;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dawnchat.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_VERSION = 5.0;
@@ -403,7 +443,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.dawnchat.dev.ios;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dawnchat.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
 				SWIFT_VERSION = 5.0;
@@ -441,11 +481,27 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		DC2A1B002AAA248700AAC8A3 /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift.git";
+			requirement = {
+				kind = exactVersion;
+				version = 2.43.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		4D22ABE82AF431CB00220026 /* CapApp-SPM */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = D4C12C0A2AAA248700AAC8A2 /* XCLocalSwiftPackageReference "CapApp-SPM" */;
 			productName = "CapApp-SPM";
+		};
+		DC2A1B012AF431CB00220027 /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DC2A1B002AAA248700AAC8A3 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

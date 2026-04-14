@@ -27,7 +27,7 @@
     "lint:boundaries": "node ./scripts/check-boundaries.mjs"
   },
   "dependencies": {
-    "@dawnchat/auth-bridge": "npm:@dawnchat/auth-bridge@^0.2.0",
+    "@dawnchat/auth-bridge": "npm:@dawnchat/auth-bridge@^0.2.1",
     "@dawnchat/assistant-chat-ui": "workspace:*",
     "@dawnchat/host-orchestration-sdk": "workspace:*",
     "@dawnchat/shared-protocol": "npm:@dawnchat/shared-protocol@^0.6.0",

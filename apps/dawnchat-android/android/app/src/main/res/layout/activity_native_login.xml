@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:paddingHorizontal="24dp"
+        android:paddingTop="32dp"
+        android:paddingBottom="32dp">
+
+        <ImageView
+            android:id="@+id/imageLoginBrand"
+            android:layout_width="140dp"
+            android:layout_height="140dp"
+            android:contentDescription="@string/splash_app_name"
+            android:importantForAccessibility="yes"
+            android:scaleType="fitCenter"
+            android:src="@drawable/splash_logo" />
+
+        <TextView
+            android:id="@+id/textAuthTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:gravity="center"
+            android:text="@string/auth_native_title"
+            android:textAppearance="?attr/textAppearanceHeadline5"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/textAuthStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:gravity="center"
+            android:text="@string/auth_native_subtitle"
+            android:textColor="?android:attr/textColorSecondary"
+            android:textSize="14sp" />
+
+        <com.google.android.material.progressindicator.LinearProgressIndicator
+            android:id="@+id/progressAuth"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:visibility="gone"
+            app:indicatorColor="?attr/colorPrimary"
+            app:trackCornerRadius="4dp"
+            app:trackThickness="4dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/buttonStartWebLogin"
+            style="@style/Widget.MaterialComponents.Button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="28dp"
+            android:minHeight="52dp"
+            android:text="@string/auth_open_browser_login"
+            app:cornerRadius="12dp" />
+    </LinearLayout>
+</ScrollView>

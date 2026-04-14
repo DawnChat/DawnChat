@@ -105,6 +105,14 @@ class TemplateScaffolder(ABC):
         dist_dir = source_dir / "dist"
         if dist_dir.exists():
             shutil.copytree(dist_dir, target_dir / "dist")
+        else:
+            for path in Config.get_assistant_sdk_required_files(source_dir):
+                if path.name == "package.json" or not path.is_file():
+                    continue
+                rel = path.relative_to(source_dir)
+                dest = target_dir / rel
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(path, dest)
 
     @staticmethod
     def _format_file_dependency_target(target_dir: Path, *, relative_to: Path | None = None) -> str:
@@ -126,6 +134,21 @@ class TemplateScaffolder(ABC):
                 continue
             for package_name in deps:
                 if package_name in Config.ASSISTANT_SDK_PACKAGE_DIRS:
+                    internal_dependencies.add(package_name)
+        return internal_dependencies
+
+    @classmethod
+    def _collect_internal_frontend_sdk_dependencies(cls, package_json: dict[str, Any]) -> set[str]:
+        internal_dependencies: set[str] = set()
+        for section in cls._iter_assistant_sdk_dependency_sections():
+            deps = package_json.get(section)
+            if not isinstance(deps, dict):
+                continue
+            for package_name in deps:
+                if (
+                    package_name in Config.ASSISTANT_SDK_PACKAGE_DIRS
+                    or package_name in Config.CAPACITOR_PLUGINS_SDK_PACKAGE_DIRS
+                ):
                     internal_dependencies.add(package_name)
         return internal_dependencies
 
@@ -161,7 +184,10 @@ class TemplateScaffolder(ABC):
             if not isinstance(deps, dict):
                 continue
             for package_name in list(deps):
-                if package_name in Config.ASSISTANT_SDK_PACKAGE_DIRS:
+                if (
+                    package_name in Config.ASSISTANT_SDK_PACKAGE_DIRS
+                    or package_name in Config.CAPACITOR_PLUGINS_SDK_PACKAGE_DIRS
+                ):
                     deps.pop(package_name, None)
             if not deps:
                 sanitized.pop(section, None)
@@ -181,7 +207,10 @@ class TemplateScaffolder(ABC):
                     raise RuntimeError(
                         f"Assistant SDK dist package still contains workspace dependency: {package_name}"
                     )
-                if normalized.startswith("file:") and package_name not in Config.ASSISTANT_SDK_PACKAGE_DIRS:
+                if normalized.startswith("file:") and (
+                    package_name not in Config.ASSISTANT_SDK_PACKAGE_DIRS
+                    and package_name not in Config.CAPACITOR_PLUGINS_SDK_PACKAGE_DIRS
+                ):
                     raise RuntimeError(
                         f"Assistant SDK dist package contains unsupported local dependency: {package_name} -> {normalized}"
                     )
@@ -203,7 +232,7 @@ class TemplateScaffolder(ABC):
             package_json_path = package_dir / "package.json"
             if not package_json_path.exists():
                 continue
-            internal_dependencies = cls._collect_internal_assistant_sdk_dependencies(
+            internal_dependencies = cls._collect_internal_frontend_sdk_dependencies(
                 cls.load_json(package_json_path)
             )
             for dependency_name in internal_dependencies:
@@ -213,13 +242,33 @@ class TemplateScaffolder(ABC):
         return collected
 
     @classmethod
-    def _is_source_assistant_sdk_dependency(
+    def _expected_monorepo_frontend_package_dir(cls, package_name: str) -> Path | None:
+        if package_name in Config.ASSISTANT_SDK_PACKAGE_DIRS:
+            dirname = Config.ASSISTANT_SDK_PACKAGE_DIRS[package_name]
+            return (
+                Config.PROJECT_ROOT / "dawnchat-plugins" / Config.ASSISTANT_SDK_DIRNAME / dirname
+            ).resolve()
+        if package_name in Config.CAPACITOR_PLUGINS_SDK_PACKAGE_DIRS:
+            dirname = Config.CAPACITOR_PLUGINS_SDK_PACKAGE_DIRS[package_name]
+            return (
+                Config.PROJECT_ROOT
+                / "dawnchat-plugins"
+                / Config.CAPACITOR_PLUGINS_SDK_DIRNAME
+                / dirname
+            ).resolve()
+        return None
+
+    @classmethod
+    def _is_source_frontend_sdk_dependency(
         cls,
         version: str,
         *,
         package_name: str,
         package_json_path: Path,
     ) -> bool:
+        expected = cls._expected_monorepo_frontend_package_dir(package_name)
+        if expected is None:
+            return False
         normalized = str(version or "").strip()
         if normalized == "workspace:*":
             return True
@@ -231,12 +280,7 @@ class TemplateScaffolder(ABC):
         target_path = Path(raw_target)
         if not target_path.is_absolute():
             target_path = (package_json_path.parent / target_path).resolve()
-        package_dirname = Config.ASSISTANT_SDK_PACKAGE_DIRS.get(package_name)
-        if not package_dirname:
-            return False
-        assistant_sdk_root = (Config.PROJECT_ROOT / "dawnchat-plugins" / Config.ASSISTANT_SDK_DIRNAME).resolve()
-        expected_target = (assistant_sdk_root / package_dirname).resolve()
-        return target_path == expected_target
+        return target_path == expected
 
     @classmethod
     def rewrite_frontend_sdk_dependencies(
@@ -256,7 +300,15 @@ class TemplateScaffolder(ABC):
                 continue
             for package_name in Config.ASSISTANT_SDK_PACKAGE_DIRS:
                 version = str(deps.get(package_name) or "").strip()
-                if cls._is_source_assistant_sdk_dependency(
+                if cls._is_source_frontend_sdk_dependency(
+                    version,
+                    package_name=package_name,
+                    package_json_path=package_json_path,
+                ):
+                    matched[package_name] = section
+            for package_name in Config.CAPACITOR_PLUGINS_SDK_PACKAGE_DIRS:
+                version = str(deps.get(package_name) or "").strip()
+                if cls._is_source_frontend_sdk_dependency(
                     version,
                     package_name=package_name,
                     package_json_path=package_json_path,
@@ -266,31 +318,44 @@ class TemplateScaffolder(ABC):
             return False
 
         runtime_mode = Config.get_runtime_distribution_mode()
-        sdk_mapping = Config.get_assistant_sdk_package_dirs(
-            allow_dev_fallback=runtime_mode == "dev",
+        allow_dev = runtime_mode == "dev"
+        assistant_mapping = Config.get_assistant_sdk_package_dirs(allow_dev_fallback=allow_dev)
+        capacitor_mapping = Config.get_capacitor_plugins_sdk_package_dirs(
+            allow_dev_fallback=allow_dev,
         )
-        missing = [
-            f"{package_name} -> {sdk_mapping[package_name]}"
-            for package_name in matched
-            if Config.get_assistant_sdk_missing_files(sdk_mapping[package_name])
-        ]
+        sdk_mapping: dict[str, Path] = {**assistant_mapping, **capacitor_mapping}
+
+        missing: list[str] = []
+        for package_name in matched:
+            path = sdk_mapping.get(package_name)
+            if path is None:
+                missing.append(f"{package_name} -> <unmapped>")
+                continue
+            if Config.get_assistant_sdk_missing_files(path):
+                missing.append(f"{package_name} -> {path}")
         if missing:
             raise RuntimeError(
-                "Assistant SDK dist-ready bundle missing for scaffold rewrite: "
+                "Assistant/Capacitor SDK dist-ready bundle missing for scaffold rewrite: "
                 + ", ".join(missing)
             )
 
         relative_base = package_json_path.parent
         if runtime_mode == "release":
-            vendor_root = plugin_root / "vendor" / Config.ASSISTANT_SDK_DIRNAME
             packages_to_vendor = cls._collect_transitive_assistant_sdk_packages(
                 set(matched),
                 sdk_mapping=sdk_mapping,
             )
-            for package_name, package_dirname in Config.ASSISTANT_SDK_PACKAGE_DIRS.items():
-                if package_name not in packages_to_vendor:
+            for package_name in sorted(packages_to_vendor):
+                if package_name in Config.ASSISTANT_SDK_PACKAGE_DIRS:
+                    vendor_dir = (
+                        plugin_root / "vendor" / Config.ASSISTANT_SDK_DIRNAME
+                    ) / Config.ASSISTANT_SDK_PACKAGE_DIRS[package_name]
+                elif package_name in Config.CAPACITOR_PLUGINS_SDK_PACKAGE_DIRS:
+                    vendor_dir = (
+                        plugin_root / "vendor" / Config.CAPACITOR_PLUGINS_SDK_DIRNAME
+                    ) / Config.CAPACITOR_PLUGINS_SDK_PACKAGE_DIRS[package_name]
+                else:
                     continue
-                vendor_dir = vendor_root / package_dirname
                 cls._copy_dist_ready_package(sdk_mapping[package_name], vendor_dir)
                 section = matched.get(package_name)
                 if section is not None:

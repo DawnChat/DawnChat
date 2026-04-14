@@ -76,5 +76,24 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.dawnchat.app.auth</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.dawnchat.app</string>
+			</array>
+		</dict>
+	</array>
+	<key>DawnChatAuthBridgeBaseURL</key>
+	<string>https://dawnchat.com/desktop-auth/bridge</string>
+	<key>DawnChatMobileAuthRedirectURI</key>
+	<string>com.dawnchat.app://auth/callback</string>
+	<key>DawnChatSupabaseURL</key>
+	<string>https://kgijmcqlakksjhxssxbb.supabase.co</string>
+	<key>DawnChatSupabaseAnonKey</key>
+	<string>eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtnaWptY3FsYWtrc2poeHNzeGJiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI3MzQ4MzAsImV4cCI6MjA3ODMxMDgzMH0.-4A6vaGo9RG_jCw6KeiCll_655dpmyU3L11Xhrfuwbk</string>
 </dict>
 </plist>

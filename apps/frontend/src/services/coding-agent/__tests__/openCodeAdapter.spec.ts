@@ -152,6 +152,82 @@ describe('openCodeAdapter', () => {
     expect(events.some((evt) => evt?.type === 'server.connected')).toBe(true)
   })
 
+  it('subscribeEvents 对 Failed to fetch 会重试直至成功', async () => {
+    let calls = 0
+    const subscribe = vi.fn(async () => {
+      calls += 1
+      if (calls < 3) {
+        throw new Error('Failed to fetch')
+      }
+      return {
+        stream: (async function* () {
+          yield { type: 'server.connected', properties: {} }
+        })()
+      }
+    })
+    mockCreateClient.mockReturnValue({
+      event: {
+        subscribe
+      }
+    })
+
+    const unsubscribe = await openCodeAdapter.subscribeEvents(() => {})
+    await new Promise((r) => setTimeout(r, 1600))
+    unsubscribe()
+
+    expect(subscribe).toHaveBeenCalledTimes(3)
+  }, 5000)
+
+  it('subscribeEvents 对非网络错误不重试', async () => {
+    const subscribe = vi.fn(async () => {
+      throw new Error('Internal Server Error')
+    })
+    mockCreateClient.mockReturnValue({
+      event: {
+        subscribe
+      }
+    })
+
+    const unsubscribe = await openCodeAdapter.subscribeEvents(() => {})
+    await new Promise((r) => setTimeout(r, 50))
+    unsubscribe()
+
+    expect(subscribe).toHaveBeenCalledTimes(1)
+  })
+
+  it('onSseError Failed to fetch 会 abort 并 emit closed sdk_sse_error_abort', async () => {
+    let capturedSignal: AbortSignal | undefined
+    const subscribe = vi.fn(async (opts: any) => {
+      capturedSignal = opts?.signal
+      opts?.onSseError?.(new Error('Failed to fetch'))
+      return {
+        stream: (async function* () {
+          // empty — for-await exits; abort already issued from onSseError
+        })()
+      }
+    })
+    mockCreateClient.mockReturnValue({
+      event: { subscribe }
+    })
+
+    const events: unknown[] = []
+    const unsubscribe = await openCodeAdapter.subscribeEvents((evt) => {
+      events.push(evt)
+    })
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(capturedSignal?.aborted).toBe(true)
+    expect(
+      events.some(
+        (evt) =>
+          (evt as { type?: string })?.type === 'stream.status' &&
+          (evt as { properties?: { status?: string; recover_reason?: string } })?.properties?.status === 'closed' &&
+          (evt as { properties?: { recover_reason?: string } })?.properties?.recover_reason === 'sdk_sse_error_abort'
+      )
+    ).toBe(true)
+    unsubscribe()
+  })
+
   it('SDK onSseError 会映射为 reconnecting 状态事件', async () => {
     const subscribe = vi.fn(async (opts: any) => {
       opts?.onSseError?.(new Error('net down'))

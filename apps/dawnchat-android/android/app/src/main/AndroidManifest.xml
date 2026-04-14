@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <queries>
+        <intent>
+            <action android:name="android.support.customtabs.action.CustomTabsService" />
+        </intent>
+    </queries>
+
     <!-- ======================================================= -->
     <!-- 1. 硬件特征柔性声明 (合规策略：防 Google Play/应用商店 屏蔽下架) -->
     <!-- ======================================================= -->
@@ -16,6 +22,7 @@
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
     <application
+        android:name=".DawnChatApp"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
@@ -39,6 +46,22 @@
 
         </activity>
 
+        <activity
+            android:name=".auth.NativeLoginActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:theme="@style/AppTheme.NoActionBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="com.dawnchat.app"
+                    android:host="auth"
+                    android:path="/callback" />
+            </intent-filter>
+        </activity>
+
         <!-- 沙箱：SandboxActivity (配置防屏幕旋转等重建动作) -->
         <activity
             android:name=".SandboxActivity"
@@ -59,6 +82,10 @@
             android:theme="@style/AppTheme.NoActionBar" />
         <activity
             android:name=".ui.about.AboutActivity"
+            android:parentActivityName=".MainActivity"
+            android:theme="@style/AppTheme.NoActionBar" />
+        <activity
+            android:name=".ui.profile.ProfileActivity"
             android:parentActivityName=".MainActivity"
             android:theme="@style/AppTheme.NoActionBar" />
 

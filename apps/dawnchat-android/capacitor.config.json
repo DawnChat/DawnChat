@@ -1,6 +1,6 @@
 {
-  "appId": "com.dawnchat.dev",
-  "appName": "DawnChatDev",
+  "appId": "com.dawnchat.app",
+  "appName": "DawnChat",
   "webDir": "www",
   "server": {
     "allowNavigation": [
