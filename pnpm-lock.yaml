@@ -334,7 +334,7 @@ importers:
   dawnchat-plugins/assistant-sdk/assistant-app-sdk:
     dependencies:
       '@dawnchat/host-orchestration-sdk':
-        specifier: file:../host-orchestration-sdk
+        specifier: workspace:*
         version: link:../host-orchestration-sdk
     devDependencies:
       '@types/node':
