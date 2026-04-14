@@ -44,6 +44,11 @@ jobs:
           node-version: "20"
           cache: "pnpm"
       - run: pnpm install --frozen-lockfile
+      # 插件侧只维护 bun.lock：在 assistant-workspace 用 bun 装依赖并构建 dist，再 vue-tsc
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.10
+      - run: pnpm run build:assistant-sdk-for-host
       - run: pnpm --filter @dawnchat/frontend run typecheck
       - run: pnpm --filter @dawnchat/frontend run test:run src/composables/__tests__/useBackendStatus.spec.ts
 

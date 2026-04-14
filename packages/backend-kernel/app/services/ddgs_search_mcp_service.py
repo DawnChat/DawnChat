@@ -18,7 +18,7 @@ from app.utils.logger import get_logger
 try:
     from ddgs import DDGS
 except Exception:  # pragma: no cover - runtime dependency fallback
-    DDGS = None  # type: ignore[assignment]
+    DDGS = None
 
 logger = get_logger("ddgs_search_mcp_service")
 
@@ -213,7 +213,8 @@ class DdgsSearchMcpService:
                     err,
                 )
             else:
-                items_raw = edge.get("items") if isinstance(edge.get("items"), list) else []
+                edge_items = edge.get("items")
+                items_raw: List[Any] = edge_items if isinstance(edge_items, list) else []
                 items = [self._merge_unsplash_image_item(row) for row in items_raw if isinstance(row, dict)]
                 result_payload: Dict[str, Any] = {
                     "tool": "dawnchat.search.image",

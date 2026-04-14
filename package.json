@@ -12,6 +12,7 @@
     "//--- 构建 ---": "",
     "build": "./build.sh",
     "build:assistant-sdk": "bun --cwd ./dawnchat-plugins/assistant-workspace run build:sdk",
+    "build:assistant-sdk-for-host": "cd dawnchat-plugins/assistant-workspace && bun install --frozen-lockfile && bun run --filter @dawnchat/host-orchestration-sdk build && bun run --filter @dawnchat/assistant-chat-ui build",
     "build:frontend": "pnpm --filter @dawnchat/frontend build",
     "build:backend": "cd packages/backend-kernel && poetry run pyinstaller dawnchat-backend.spec --distpath ../../apps/desktop/src-tauri/sidecars --clean",
     "build:tauri": "cd apps/desktop && pnpm tauri build",

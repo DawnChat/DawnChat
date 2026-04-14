@@ -850,14 +850,14 @@ class UiToolService:
                     normalized_payload,
                     context="dawnchat.ui.capability.invoke(function=view.capability.invoke)",
                 )
-            normalized = {
+            normalized_invoke: Dict[str, Any] = {
                 "function": function_name,
                 "payload": normalized_payload,
                 "options": options if isinstance(options, dict) else {},
             }
             if description:
-                normalized["description"] = description
-            return normalized
+                normalized_invoke["description"] = description
+            return normalized_invoke
         return payload
 
     @staticmethod

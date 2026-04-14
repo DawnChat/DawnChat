@@ -28,7 +28,6 @@ from app.config import Config
 from app.plugins.opencode_rules_service import get_opencode_rules_service
 from app.services.network_service import NetworkService
 from app.services.opencode_baseline_config_composer import OpenCodeBaselineConfigComposer
-from app.storage import storage_manager
 from app.utils.logger import get_logger
 
 logger = get_logger("opencode_manager")

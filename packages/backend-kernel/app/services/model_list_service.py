@@ -15,7 +15,7 @@ from app.storage import storage_manager
 logger = logging.getLogger("dawnchat.model_list_service")
 
 # 支持的云端厂商配置
-SUPPORTED_PROVIDERS = {
+SUPPORTED_PROVIDERS: Dict[str, Dict[str, Any]] = {
     "siliconflow": {
         "name": "SiliconFlow",
         "openai_compatible": True,

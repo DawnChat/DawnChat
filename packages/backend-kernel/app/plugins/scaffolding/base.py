@@ -357,9 +357,9 @@ class TemplateScaffolder(ABC):
                 else:
                     continue
                 cls._copy_dist_ready_package(sdk_mapping[package_name], vendor_dir)
-                section = matched.get(package_name)
-                if section is not None:
-                    deps = package_json.get(section)
+                deps_section = matched.get(package_name)
+                if deps_section is not None:
+                    deps = package_json.get(deps_section)
                     if isinstance(deps, dict):
                         deps[package_name] = cls._format_file_dependency_target(
                             vendor_dir,
