@@ -133,16 +133,20 @@ ensure_assistant_workspace_deps() {
     fi
     local bun_dir
     bun_dir="$(cd "$(dirname "$bun_bin")" && pwd)"
-    # Windows（Git Bash/Cygwin）上 workspace 默认 symlink 易 ENOENT，曾用 hoisted 收拢依赖；
-    # hoisted 下子包常缺少 vite.config 可解析的 node_modules/vite，故改用 isolated（与 build.sh ensure_assistant_workspace_deps 一致）。
+    # Windows：hoisted 避免 workspace symlink ENOENT；子包 vite 解析由 ensure-windows-assistant-vite-modules.py 补齐（与 build.sh 一致）。
     local bun_install_linker=()
     if [[ "$OSTYPE" == msys* || "$OSTYPE" == cygwin* ]]; then
-        bun_install_linker=(--linker isolated)
+        bun_install_linker=(--linker hoisted)
     fi
     print_info "安装 assistant workspace 依赖..."
     if ! (cd "$ASSISTANT_WORKSPACE_DIR" && PATH="$bun_dir:${PATH:-}" "$bun_bin" install --frozen-lockfile "${bun_install_linker[@]}"); then
         print_warning "bun --frozen-lockfile 失败（多为 package.json/workspaces 与 bun.lock 不一致），回退到 bun install 以更新 lockfile；请提交 dawnchat-plugins/assistant-workspace/bun.lock"
         (cd "$ASSISTANT_WORKSPACE_DIR" && PATH="$bun_dir:${PATH:-}" "$bun_bin" install "${bun_install_linker[@]}") || return 1
+    fi
+    if [[ "$OSTYPE" == msys* || "$OSTYPE" == cygwin* ]]; then
+        print_info "Windows: 补齐 assistant 模板 web-src 内 vite 解析路径（hoisted 布局）..."
+        local official_plugins_dir="${OFFICIAL_PLUGINS_DIR:-$PROJECT_ROOT/dawnchat-plugins/official-plugins}"
+        python3 "$PROJECT_ROOT/scripts/dev/ensure-windows-assistant-vite-modules.py" "$ASSISTANT_WORKSPACE_DIR" "$official_plugins_dir" || return 1
     fi
     ASSISTANT_WORKSPACE_READY=true
 }
