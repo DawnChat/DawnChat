@@ -2,15 +2,15 @@
 """
 Windows + Bun --linker hoisted: assistant-workspace/node_modules 与 official-plugins/.../web-src
 非父子关系，vite.config.* 内 import 无法解析到 store 中的 vite。
-在子包 node_modules 中复制 vite 与 @vitejs/plugin-vue（不依赖顶层 node_modules 是否铺平）。
+在子包 node_modules 中复制 vite 与 @vitejs/plugin-vue（不依赖 symlink 权限）。
 """
 from __future__ import annotations
 
-import glob
 import json
 import os
 import shutil
 import sys
+from pathlib import Path
 
 
 def _copytree(src: str, dst: str) -> None:
@@ -28,17 +28,60 @@ def _vite_major_from_pkg(path: str) -> int | None:
         return None
 
 
-def _resolve_vite_src(ws_nm: str, *, want_major: int) -> str | None:
-    root = os.path.join(ws_nm, "vite")
+def _resolve_vite_src_in_root(nm_root: str, *, want_major: int) -> str | None:
+    """在某一 node_modules 根下解析指定 major 的 vite 包目录。"""
+    root = os.path.join(nm_root, "vite")
     if os.path.isfile(os.path.join(root, "package.json")):
         mj = _vite_major_from_pkg(root)
         if mj == want_major:
             return root
-    pat = os.path.join(ws_nm, ".bun", f"vite@{want_major}*", "node_modules", "vite")
-    hits = sorted(glob.glob(pat))
-    for p in reversed(hits):
-        if os.path.isfile(os.path.join(p, "package.json")):
-            return p
+    candidates: list[str] = []
+    bun = os.path.join(nm_root, ".bun")
+    if os.path.isdir(bun):
+        try:
+            for name in os.listdir(bun):
+                if not name.startswith("vite@"):
+                    continue
+                candidate = os.path.join(bun, name, "node_modules", "vite")
+                if not os.path.isfile(os.path.join(candidate, "package.json")):
+                    continue
+                mj = _vite_major_from_pkg(candidate)
+                if mj == want_major:
+                    candidates.append(candidate)
+        except OSError:
+            pass
+    if candidates:
+        return sorted(candidates)[-1]
+    return None
+
+
+def _resolve_vite_src(
+    ws_nm: str, *, want_major: int, extra_nm_roots: list[str] | None = None
+) -> str | None:
+    for nm_root in [ws_nm, *(extra_nm_roots or [])]:
+        if not nm_root or not os.path.isdir(nm_root):
+            continue
+        found = _resolve_vite_src_in_root(nm_root, want_major=want_major)
+        if found:
+            return found
+    return None
+
+
+def _walk_find_vite_major(search_root: str, want_major: int) -> str | None:
+    """递归查找 **/vite/package.json，匹配 major（兜底 Windows hoisted 非常规目录名）。"""
+    root = Path(search_root)
+    if not root.is_dir():
+        return None
+    matches: list[str] = []
+    try:
+        for pkg_json in root.rglob("vite/package.json"):
+            vite_dir = str(pkg_json.parent)
+            if _vite_major_from_pkg(vite_dir) == want_major:
+                matches.append(vite_dir)
+    except OSError:
+        return None
+    if matches:
+        return sorted(matches)[-1]
     return None
 
 
@@ -46,11 +89,22 @@ def _resolve_plugin_vue_src(ws_nm: str) -> str | None:
     scoped = os.path.join(ws_nm, "@vitejs", "plugin-vue")
     if os.path.isfile(os.path.join(scoped, "package.json")):
         return scoped
-    pat = os.path.join(ws_nm, ".bun", "@vitejs+plugin-vue@*", "node_modules", "@vitejs", "plugin-vue")
-    hits = sorted(glob.glob(pat))
-    for p in reversed(hits):
-        if os.path.isfile(os.path.join(p, "package.json")):
-            return p
+    bun = os.path.join(ws_nm, ".bun")
+    if not os.path.isdir(bun):
+        return None
+    candidates: list[str] = []
+    try:
+        for name in os.listdir(bun):
+            if name.startswith("@vitejs+plugin-vue@"):
+                candidate = os.path.join(
+                    bun, name, "node_modules", "@vitejs", "plugin-vue"
+                )
+                if os.path.isfile(os.path.join(candidate, "package.json")):
+                    candidates.append(candidate)
+    except OSError:
+        return None
+    if candidates:
+        return sorted(candidates)[-1]
     return None
 
 
@@ -86,7 +140,14 @@ def main() -> int:
 
         is_mobile = "mobile-ai-assistant" in dest.replace("\\", "/")
         want_major = 8 if is_mobile else 7
-        vite_src = _resolve_vite_src(ws_nm, want_major=want_major)
+        extra_roots = [os.path.join(dest, "node_modules")] if is_mobile else None
+        vite_src = _resolve_vite_src(
+            ws_nm, want_major=want_major, extra_nm_roots=extra_roots
+        )
+        if not vite_src:
+            vite_src = _walk_find_vite_major(ws, want_major)
+        if not vite_src and is_mobile:
+            vite_src = _walk_find_vite_major(dest, want_major)
         if not vite_src:
             print(
                 f"error: could not resolve vite major {want_major} for {dest}",
