@@ -512,6 +512,116 @@ sync_assistant_sdk_bundle() {
     print_success "Assistant SDK runtime bundle 同步完成: $dest_root"
 }
 
+copy_capacitor_sdk_payload_without_dist() {
+    local src_dir="$1"
+    local dest_dir="$2"
+    python3 - "$src_dir" "$dest_dir" <<'PY'
+import json
+import shutil
+import sys
+from pathlib import Path
+
+src = Path(sys.argv[1])
+dst = Path(sys.argv[2])
+
+
+def collect(value: object, targets: set[str]) -> None:
+    if isinstance(value, str):
+        if value.startswith("./"):
+            targets.add(value[2:])
+        return
+    if isinstance(value, dict):
+        for nested in value.values():
+            collect(nested, targets)
+        return
+    if isinstance(value, list):
+        for nested in value:
+            collect(nested, targets)
+
+payload = json.loads((src / "package.json").read_text(encoding="utf-8"))
+targets: set[str] = set()
+for key in ("main", "types"):
+    collect(payload.get(key), targets)
+collect(payload.get("exports"), targets)
+
+for rel in sorted(targets):
+    sp = src / rel
+    if not sp.is_file():
+        continue
+    dp = dst / rel
+    dp.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(sp, dp)
+PY
+}
+
+copy_dist_ready_capacitor_sdk_package() {
+    local src_dir="$1"
+    local dest_dir="$2"
+    local missing_files=""
+
+    missing_files="$(assistant_sdk_missing_files "$src_dir")"
+    if [[ -n "$missing_files" ]]; then
+        print_error "Capacitor plugins SDK 包不完整:"
+        printf '%s\n' "$missing_files"
+        return 1
+    fi
+
+    rm -rf "$dest_dir"
+    mkdir -p "$dest_dir"
+    write_sanitized_assistant_sdk_package_json "$src_dir" "$dest_dir" || return 1
+    if [[ -f "$src_dir/README.md" ]]; then
+        cp "$src_dir/README.md" "$dest_dir/README.md"
+    fi
+
+    if [[ -d "$src_dir/dist" ]]; then
+        mkdir -p "$dest_dir"
+        if command -v rsync &> /dev/null; then
+            rsync -a --delete "$src_dir/dist/" "$dest_dir/dist/"
+        else
+            cp -R "$src_dir/dist" "$dest_dir/dist"
+        fi
+    else
+        copy_capacitor_sdk_payload_without_dist "$src_dir" "$dest_dir"
+    fi
+}
+
+sync_capacitor_plugins_sdk_bundle() {
+    print_step "同步 Capacitor plugins SDK runtime bundle"
+
+    local cap_root="${CAPACITOR_PLUGINS_SDK_DIR:-$PROJECT_ROOT/dawnchat-plugins/capacitor-plugins-sdk}"
+    if [[ ! -d "$cap_root" ]]; then
+        print_warning "Capacitor plugins SDK 目录不存在，跳过: $cap_root"
+        return 0
+    fi
+
+    local dest_root="$SIDECAR_DIR/dawnchat-plugins/capacitor-plugins-sdk"
+    mkdir -p "$SIDECAR_DIR/dawnchat-plugins"
+    rm -rf "$dest_root"
+    mkdir -p "$dest_root"
+
+    local package_name=""
+    local package_src=""
+    local package_dest=""
+    for package_name in capacitor-dawn-tts; do
+        package_src="$cap_root/$package_name"
+        package_dest="$dest_root/$package_name"
+        if [[ ! -d "$package_src" ]]; then
+            print_error "Capacitor SDK 包目录不存在: $package_src"
+            return 1
+        fi
+        copy_dist_ready_capacitor_sdk_package "$package_src" "$package_dest" || return 1
+    done
+
+    missing_files="$(assistant_sdk_missing_files "$dest_root/capacitor-dawn-tts")"
+    if [[ -n "$missing_files" ]]; then
+        print_error "Capacitor SDK runtime bundle 校验失败:"
+        printf '%s\n' "$missing_files"
+        return 1
+    fi
+
+    print_success "Capacitor plugins SDK runtime bundle 同步完成: $dest_root"
+}
+
 # 无 rsync 时复制官方模板树；排除项与 rsync 分支一致（勿 cp -R 含 node_modules，Windows 上易触发 .bin File exists）
 copy_official_template_tree_without_rsync() {
     local src_dir="$1"
@@ -669,6 +779,7 @@ sync_all() {
     sync_sdk || return 1
     build_assistant_sdk_packages || return 1
     sync_assistant_sdk_bundle || return 1
+    sync_capacitor_plugins_sdk_bundle || return 1
     sync_builtin_desktop_template || return 1
     sync_tts_kokoro_model || return 1
     

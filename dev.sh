@@ -30,6 +30,7 @@
 #      - 官方插件: dawnchat-plugins/official-plugins → sidecar/official-plugins
 #      - Python SDK: dawnchat-plugins/sdk → PBS site-packages（可编辑模式）
 #      - Assistant SDK: dawnchat-plugins/assistant-sdk → sidecar/dawnchat-plugins/assistant-sdk
+#      - Capacitor plugins SDK: dawnchat-plugins/capacitor-plugins-sdk → sidecar/dawnchat-plugins/capacitor-plugins-sdk
 #   4. 启动 Python 后端（优先使用 PBS，回退到系统 Python）
 #   5. 启动 Vue 开发服务器
 #

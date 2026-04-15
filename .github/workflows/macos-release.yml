@@ -40,6 +40,7 @@ jobs:
         run: |
           test -d dawnchat-plugins/sdk
           test -d dawnchat-plugins/official-plugins
+          test -d dawnchat-plugins/capacitor-plugins-sdk
 
       - name: Ensure signing is available for tag builds
         if: env.IS_TAG_PUSH == 'true' && env.SHOULD_SIGN != 'true'
