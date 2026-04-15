@@ -31,10 +31,12 @@ class DesktopTemplateScaffolder(TemplateScaffolder):
                 description=request.app_description.strip(),
             )
 
+        web_package_json = request.target_dir / "_ir" / "frontend" / "web-src" / "package.json"
         self.rewrite_frontend_sdk_dependencies(
-            request.target_dir / "_ir" / "frontend" / "web-src" / "package.json",
+            web_package_json,
             plugin_root=request.target_dir,
         )
+        self.rewrite_monorepo_assistant_vite_scripts(web_package_json)
 
         self.replace_plugin_id_references(request.target_dir, old_plugin_id, request.plugin_id)
 

@@ -377,6 +377,51 @@ class TemplateScaffolder(ABC):
         return True
 
     @staticmethod
+    def _is_monorepo_assistant_vite_script(val: str) -> bool:
+        v = val.strip()
+        if "assistant-workspace" not in v:
+            return False
+        if "official-plugins" in v:
+            return True
+        if "bun run template:" in v:
+            return True
+        return False
+
+    @classmethod
+    def rewrite_monorepo_assistant_vite_scripts(cls, package_json_path: Path) -> bool:
+        """官方 assistant 模板在仓库内用 assistant-workspace 为 cwd 调 Vite；拷贝到用户插件后需改回在 web-src 内直接执行。"""
+        if not package_json_path.exists():
+            return False
+        package_json = cls.load_json(package_json_path)
+        scripts = package_json.get("scripts")
+        if not isinstance(scripts, dict):
+            return False
+        changed = False
+        for key in ("dev", "build", "preview"):
+            raw = scripts.get(key)
+            if not isinstance(raw, str):
+                continue
+            val = raw.strip()
+            if not cls._is_monorepo_assistant_vite_script(val):
+                continue
+            if key == "dev":
+                scripts[key] = "bun x vite --configLoader runner"
+                changed = True
+            elif key == "preview":
+                scripts[key] = "bun x vite preview --configLoader runner"
+                changed = True
+            elif key == "build":
+                is_mobile = val.startswith("vue-tsc -b &&") or "template:mobile:build" in val
+                if is_mobile:
+                    scripts[key] = "vue-tsc -b && bun x vite build --configLoader runner"
+                else:
+                    scripts[key] = "bun x vite build --configLoader runner"
+                changed = True
+        if changed:
+            cls.write_json(package_json_path, package_json)
+        return changed
+
+    @staticmethod
     def normalize_package_name(plugin_id: str) -> str:
         return plugin_id.replace(".", "-")
 

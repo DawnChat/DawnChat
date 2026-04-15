@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from app.plugins.scaffolding.base import TemplateScaffoldRequest
+from app.plugins.scaffolding.base import TemplateScaffoldRequest, TemplateScaffolder
 from app.plugins.scaffolding.desktop_scaffolder import DesktopTemplateScaffolder
 from app.plugins.scaffolding.mobile_scaffolder import MobileTemplateScaffolder
 from app.plugins.scaffolding.web_scaffolder import WebTemplateScaffolder
@@ -476,6 +476,74 @@ async def test_mobile_scaffolder_vendors_capacitor_sdk_for_release_runtime(
     vendored_tts = target_dir / "vendor" / "capacitor-plugins-sdk" / "capacitor-dawn-tts"
     assert (vendored_tts / "package.json").exists()
     assert (vendored_tts / "dawn-tts.ts").exists()
+
+
+def test_rewrite_monorepo_assistant_vite_scripts_web_style(tmp_path) -> None:
+    path = tmp_path / "package.json"
+    _write_json(
+        path,
+        {
+            "scripts": {
+                "dev": "cd ../../../assistant-workspace && bun x vite --configLoader runner --config ../official-plugins/web-ai-assistant/web-src/vite.config.ts ../official-plugins/web-ai-assistant/web-src",
+                "build": "cd ../../../assistant-workspace && bun x vite build --configLoader runner --config ../official-plugins/web-ai-assistant/web-src/vite.config.ts ../official-plugins/web-ai-assistant/web-src",
+                "preview": "cd ../../../assistant-workspace && bun x vite preview --configLoader runner --config ../official-plugins/web-ai-assistant/web-src/vite.config.ts ../official-plugins/web-ai-assistant/web-src",
+            }
+        },
+    )
+    assert TemplateScaffolder.rewrite_monorepo_assistant_vite_scripts(path) is True
+    pkg = json.loads(path.read_text(encoding="utf-8"))
+    assert pkg["scripts"]["dev"] == "bun x vite --configLoader runner"
+    assert pkg["scripts"]["build"] == "bun x vite build --configLoader runner"
+    assert pkg["scripts"]["preview"] == "bun x vite preview --configLoader runner"
+
+
+def test_rewrite_monorepo_assistant_vite_scripts_mobile_build_with_vue_tsc(tmp_path) -> None:
+    path = tmp_path / "package.json"
+    _write_json(
+        path,
+        {
+            "scripts": {
+                "build": "vue-tsc -b && cd ../../../assistant-workspace && bun x vite build --configLoader runner --config ../official-plugins/mobile-ai-assistant/web-src/vite.config.ts ../official-plugins/mobile-ai-assistant/web-src",
+            }
+        },
+    )
+    assert TemplateScaffolder.rewrite_monorepo_assistant_vite_scripts(path) is True
+    pkg = json.loads(path.read_text(encoding="utf-8"))
+    assert pkg["scripts"]["build"] == "vue-tsc -b && bun x vite build --configLoader runner"
+
+
+def test_rewrite_monorepo_assistant_vite_scripts_thin_workspace_wrappers(tmp_path) -> None:
+    path = tmp_path / "package.json"
+    _write_json(
+        path,
+        {
+            "scripts": {
+                "dev": "cd ../../../assistant-workspace && bun run template:web:dev",
+                "build": "cd ../../../assistant-workspace && bun run template:web:build",
+                "preview": "cd ../../../assistant-workspace && bun run template:web:preview",
+            }
+        },
+    )
+    assert TemplateScaffolder.rewrite_monorepo_assistant_vite_scripts(path) is True
+    pkg = json.loads(path.read_text(encoding="utf-8"))
+    assert pkg["scripts"]["dev"] == "bun x vite --configLoader runner"
+    assert pkg["scripts"]["build"] == "bun x vite build --configLoader runner"
+    assert pkg["scripts"]["preview"] == "bun x vite preview --configLoader runner"
+
+
+def test_rewrite_monorepo_assistant_vite_scripts_thin_mobile_build(tmp_path) -> None:
+    path = tmp_path / "package.json"
+    _write_json(
+        path,
+        {
+            "scripts": {
+                "build": "cd ../../../assistant-workspace && bun run template:mobile:build",
+            }
+        },
+    )
+    assert TemplateScaffolder.rewrite_monorepo_assistant_vite_scripts(path) is True
+    pkg = json.loads(path.read_text(encoding="utf-8"))
+    assert pkg["scripts"]["build"] == "vue-tsc -b && bun x vite build --configLoader runner"
 
 
 def test_rewrite_frontend_sdk_dependencies_accepts_legacy_repo_local_file_reference(
