@@ -23,23 +23,16 @@
         >
 
         <template v-if="platformOptions.length > 0">
-          <label class="label" for="assistant-platform-select">{{ platformLabel }}</label>
-          <select
-            id="assistant-platform-select"
-            v-model="platform"
-            class="input select-input"
-            :disabled="submitting"
-          >
-            <option
-              v-for="option in platformOptions"
-              :key="option.value"
-              :value="option.value"
-              :disabled="option.disabled"
-            >
-              {{ option.label }}
-            </option>
-          </select>
-          <p v-if="selectedPlatformDescription" class="platform-description">{{ selectedPlatformDescription }}</p>
+          <label class="label">{{ platformLabel }}</label>
+          <div class="platform-inline-select">
+            <PluginDevInlineSelect
+              v-model="platform"
+              :options="platformInlineSelectOptions"
+              :label="platformLabel"
+              :disabled="submitting"
+              :menu-z-index="10025"
+            />
+          </div>
         </template>
 
         <label v-if="showOpenAfterCreate" class="checkbox-row">
@@ -62,6 +55,8 @@
 
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
+import PluginDevInlineSelect from '@/features/coding-agent/components/plugin-dev-chat/PluginDevInlineSelect.vue'
+import type { PluginDevInlineSelectOption } from '@/features/coding-agent/components/plugin-dev-chat/PluginDevInlineSelect.vue'
 
 const props = withDefaults(defineProps<{
   visible: boolean
@@ -106,9 +101,14 @@ const openAfterCreate = ref(true)
 const nameInputRef = ref<HTMLInputElement | null>(null)
 
 const confirmDisabled = computed(() => props.submitting || !String(name.value || '').trim())
-const selectedPlatformDescription = computed(() => {
-  const selected = props.platformOptions.find((option) => option.value === platform.value)
-  return String(selected?.description || '').trim()
+
+const platformInlineSelectOptions = computed<PluginDevInlineSelectOption[]>(() => {
+  return props.platformOptions
+    .filter((option) => !option.disabled)
+    .map((option) => ({
+      value: option.value,
+      label: option.label,
+    }))
 })
 
 const handleConfirm = () => {
@@ -126,7 +126,9 @@ watch(
   async (nextVisible) => {
     if (!nextVisible) return
     name.value = String(props.defaultName || '').trim()
-    platform.value = String(props.defaultPlatform || 'desktop').trim() || 'desktop'
+    const nextPlatform = String(props.defaultPlatform || 'desktop').trim() || 'desktop'
+    const allowed = props.platformOptions.filter((option) => !option.disabled).map((option) => option.value)
+    platform.value = allowed.includes(nextPlatform) ? nextPlatform : (allowed[0] ?? nextPlatform)
     openAfterCreate.value = Boolean(props.defaultOpenAfterCreate)
     await nextTick()
     nameInputRef.value?.focus()
@@ -223,15 +225,9 @@ watch(
   padding: 0 0.75rem;
 }
 
-.select-input {
-  padding-right: 2.2rem;
-}
-
-.platform-description {
-  margin: -0.2rem 0 0;
-  font-size: 0.74rem;
-  line-height: 1.45;
-  color: var(--color-text-secondary);
+.platform-inline-select :deep(.inline-select-trigger) {
+  height: 2.3rem;
+  border-radius: 8px;
 }
 
 .checkbox-row {

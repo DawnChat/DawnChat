@@ -94,7 +94,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onActivated, onUnmounted } from 'vue'
 import { useI18n } from '@/composables/useI18n'
 import { useCloudKeychainPrompt } from '@/composables/useCloudKeychainPrompt'
 import ConfirmDialog from '@/shared/ui/ConfirmDialog.vue'
@@ -114,6 +114,10 @@ import {
   EyeOff, 
   Lightbulb 
 } from 'lucide-vue-next'
+import {
+  SETTINGS_SECTION_RESELECTED,
+  type SettingsSectionReselectedDetail,
+} from '@/features/settings/settingsNavigationEvents'
 
 const { t } = useI18n()
 const modelStore = useLlmSelectionStore()
@@ -291,8 +295,24 @@ const deleteProviderConfig = async (providerId: string) => {
   }
 }
 
+const onSettingsSectionReselected = (event: Event) => {
+  const detail = (event as CustomEvent<SettingsSectionReselectedDetail>).detail
+  if (detail?.section === 'cloud-models') {
+    void loadProviders()
+  }
+}
+
 onMounted(() => {
-  loadProviders()
+  void loadProviders()
+  window.addEventListener(SETTINGS_SECTION_RESELECTED, onSettingsSectionReselected)
+})
+
+onActivated(() => {
+  void loadProviders()
+})
+
+onUnmounted(() => {
+  window.removeEventListener(SETTINGS_SECTION_RESELECTED, onSettingsSectionReselected)
 })
 </script>
 

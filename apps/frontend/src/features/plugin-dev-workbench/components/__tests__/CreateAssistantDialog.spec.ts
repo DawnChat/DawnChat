@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import CreateAssistantDialog from '@/features/plugin-dev-workbench/components/CreateAssistantDialog.vue'
+import PluginDevInlineSelect from '@/features/coding-agent/components/plugin-dev-chat/PluginDevInlineSelect.vue'
 
 describe('CreateAssistantDialog', () => {
   it('emits selected platform when confirming', async () => {
@@ -24,7 +25,8 @@ describe('CreateAssistantDialog', () => {
     })
 
     await wrapper.get('#assistant-name-input').setValue('My Web Assistant')
-    await wrapper.get('#assistant-platform-select').setValue('web')
+    const inline = wrapper.findComponent(PluginDevInlineSelect)
+    await inline.vm.$emit('update:modelValue', 'web')
     await wrapper.get('.btn-primary').trigger('click')
 
     expect(wrapper.emitted('confirm')?.[0]).toEqual([{

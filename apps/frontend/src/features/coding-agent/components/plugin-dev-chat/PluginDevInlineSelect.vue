@@ -96,11 +96,14 @@ const props = withDefaults(defineProps<{
   disabled?: boolean
   selectedStatus?: 'checking' | 'healthy' | 'unhealthy' | null
   selectedStatusTitle?: string
+  /** 下拉层 z-index（Teleport 到 body 时需高于宿主弹窗） */
+  menuZIndex?: number
 }>(), {
   placeholder: '',
   disabled: false,
   selectedStatus: null,
-  selectedStatusTitle: ''
+  selectedStatusTitle: '',
+  menuZIndex: undefined,
 })
 
 const emit = defineEmits<{
@@ -280,7 +283,7 @@ const updateMenuPosition = () => {
     width: `${rect.width}px`,
     maxHeight: `${maxHeight}px`,
     overflowY: 'auto',
-    zIndex: '1300',
+    zIndex: String(props.menuZIndex ?? 1300),
   }
 }
 

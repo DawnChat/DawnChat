@@ -1,6 +1,6 @@
 <template>
   <div class="settings-view">
-    <component :is="currentSettingComponent" />
+    <component :is="currentSettingComponent" :key="String(props.section || 'general')" />
   </div>
 </template>
 

@@ -76,6 +76,10 @@ import { getSpaceDefaultSection, getSpaceManifest } from '@/app/router/manifest'
 import { goToSection, goToSpace } from '@/app/router/navigation'
 import { APPS_HUB_PATH } from '@/app/router/paths'
 import { useRecentDevSession } from '@/features/plugin/composables/useRecentDevSession'
+import {
+  SETTINGS_SECTION_RESELECTED,
+  type SettingsSectionReselectedDetail,
+} from '@/features/settings/settingsNavigationEvents'
 
 const router = useRouter()
 const route = useRoute()
@@ -159,6 +163,17 @@ const handleSectionChange = (section: string) => {
       params: { section: 'hub' },
       query: nextQuery
     })
+    return
+  }
+  if (
+    currentSpace.value === 'settings' &&
+    String(section || '') === String(currentSection.value || '')
+  ) {
+    window.dispatchEvent(
+      new CustomEvent<SettingsSectionReselectedDetail>(SETTINGS_SECTION_RESELECTED, {
+        detail: { section: String(section || '') },
+      })
+    )
     return
   }
   goToSection(router, currentSpace.value, section, selectedRoomId.value)

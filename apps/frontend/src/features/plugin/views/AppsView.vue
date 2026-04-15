@@ -256,21 +256,9 @@ const createCards = computed(() => [
 
 const recentQuickList = computed(() => visibleRecentApps.value.slice(0, 6))
 const assistantPlatformOptions = computed(() => [
-  {
-    value: 'desktop',
-    label: t.value.apps.workbenchCreateAssistantPlatformDesktop,
-    description: t.value.apps.workbenchCreateAssistantPlatformDesktopDescription
-  },
-  {
-    value: 'web',
-    label: t.value.apps.workbenchCreateAssistantPlatformWeb,
-    description: t.value.apps.workbenchCreateAssistantPlatformWebDescription
-  },
-  {
-    value: 'mobile',
-    label: t.value.apps.workbenchCreateAssistantPlatformMobile,
-    description: t.value.apps.workbenchCreateAssistantPlatformMobileDescription
-  }
+  { value: 'desktop', label: t.value.apps.workbenchCreateAssistantPlatformDesktop },
+  { value: 'web', label: t.value.apps.workbenchCreateAssistantPlatformWeb },
+  { value: 'mobile', label: t.value.apps.workbenchCreateAssistantPlatformMobile },
 ])
 
 const resolveAppTypeIcon = (appType?: string) => {

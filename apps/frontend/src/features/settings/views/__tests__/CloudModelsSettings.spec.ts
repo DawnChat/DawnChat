@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils'
 import { ref } from 'vue'
 
 import CloudModelsSettings from '../CloudModelsSettings.vue'
+import { SETTINGS_SECTION_RESELECTED } from '../../settingsNavigationEvents'
 
 const loadModels = vi.fn()
 
@@ -124,4 +125,46 @@ describe('CloudModelsSettings', () => {
     expect(loadModels).toHaveBeenCalledWith(true)
     wrapper.unmount()
   })
+  it('再次选中云端模型设置时分发事件会重新拉取厂商列表', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url === '/api/cloud/providers' && !init) {
+        return {
+          ok: true,
+          json: async () => ({
+            providers: [
+              {
+                id: 'openai',
+                name: 'OpenAI',
+                is_configured: false,
+                model_count: 0,
+              },
+            ],
+          }),
+        } as Response
+      }
+      throw new Error(`Unexpected fetch: ${url}`)
+    })
+
+    const wrapper = mount(CloudModelsSettings, { attachTo: document.body })
+    await flushPromises()
+
+    const listCallsBefore = vi.mocked(window.fetch).mock.calls.filter(
+      ([url, init]) => String(url) === '/api/cloud/providers' && !init
+    ).length
+    expect(listCallsBefore).toBeGreaterThanOrEqual(1)
+
+    window.dispatchEvent(
+      new CustomEvent(SETTINGS_SECTION_RESELECTED, { detail: { section: 'cloud-models' } })
+    )
+    await flushPromises()
+
+    const listCallsAfter = vi.mocked(window.fetch).mock.calls.filter(
+      ([url, init]) => String(url) === '/api/cloud/providers' && !init
+    ).length
+    expect(listCallsAfter).toBeGreaterThan(listCallsBefore)
+
+    wrapper.unmount()
+  })
+
 })
