@@ -1199,22 +1199,7 @@ run_assistant_workspace_script() {
     # assistant-workspace 的 package.json 脚本里会再调用裸命令 bun；仅传绝对路径时子 shell 无 PATH，需把 bun 所在目录前置
     local bun_dir
     bun_dir="$(cd "$(dirname "$bun_bin")" && pwd)"
-    local ws_root
-    ws_root="$(cd "$ASSISTANT_WORKSPACE_DIR" && pwd)"
-    # Windows + Bun --linker hoisted：vite 用 Node 从子包 node_modules/.vite-temp 解析不到提升到 workspace 根的 vite；--filter 仍不足以修复，需 NODE_PATH（Windows 用 ;）
-    if [[ "$OSTYPE" == msys* || "$OSTYPE" == cygwin* ]] && [[ -d "$ws_root/node_modules" ]]; then
-        (
-            cd "$ASSISTANT_WORKSPACE_DIR" || exit 1
-            if [[ -n "${NODE_PATH:-}" ]]; then
-                export NODE_PATH="${ws_root}/node_modules;${NODE_PATH}"
-            else
-                export NODE_PATH="${ws_root}/node_modules"
-            fi
-            PATH="$bun_dir:${PATH:-}" "$bun_bin" run "$script_name"
-        ) || exit 1
-    else
-        (cd "$ASSISTANT_WORKSPACE_DIR" && PATH="$bun_dir:${PATH:-}" "$bun_bin" run "$script_name")
-    fi
+    (cd "$ASSISTANT_WORKSPACE_DIR" && PATH="$bun_dir:${PATH:-}" "$bun_bin" run "$script_name")
 }
 
 build_assistant_sdk_bundle() {

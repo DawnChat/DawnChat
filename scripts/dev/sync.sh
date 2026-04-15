@@ -158,21 +158,7 @@ run_assistant_workspace_script() {
     print_info "执行 assistant workspace 脚本: $script_name"
     local bun_dir
     bun_dir="$(cd "$(dirname "$bun_bin")" && pwd)"
-    local ws_root
-    ws_root="$(cd "$ASSISTANT_WORKSPACE_DIR" && pwd)"
-    if [[ "$OSTYPE" == msys* || "$OSTYPE" == cygwin* ]] && [[ -d "$ws_root/node_modules" ]]; then
-        (
-            cd "$ASSISTANT_WORKSPACE_DIR" || exit 1
-            if [[ -n "${NODE_PATH:-}" ]]; then
-                export NODE_PATH="${ws_root}/node_modules;${NODE_PATH}"
-            else
-                export NODE_PATH="${ws_root}/node_modules"
-            fi
-            PATH="$bun_dir:${PATH:-}" "$bun_bin" run "$script_name"
-        ) || return 1
-    else
-        (cd "$ASSISTANT_WORKSPACE_DIR" && PATH="$bun_dir:${PATH:-}" "$bun_bin" run "$script_name")
-    fi
+    (cd "$ASSISTANT_WORKSPACE_DIR" && PATH="$bun_dir:${PATH:-}" "$bun_bin" run "$script_name")
 }
 
 build_plugin_frontend() {
