@@ -197,6 +197,7 @@ FRONTEND_DIR="$PROJECT_ROOT/apps/frontend"
 TAURI_DIR="$PROJECT_ROOT/apps/desktop/src-tauri"
 SIDECAR_DIR="$TAURI_DIR/sidecars/dawnchat-backend"
 MACOS_ENTITLEMENTS_FILE="${MACOS_ENTITLEMENTS_FILE:-$TAURI_DIR/Entitlements.plist}"
+MACOS_OPENCODE_ENTITLEMENTS_FILE="${MACOS_OPENCODE_ENTITLEMENTS_FILE:-$TAURI_DIR/entitlements/opencode-sidecar.entitlements}"
 CACHE_DIR="$PROJECT_ROOT/.cache/pbs"
 OFFICIAL_PLUGINS_DIR="$PROJECT_ROOT/dawnchat-plugins/official-plugins"
 RUNTIME_ASSETS_DIR="${DAWNCHAT_RUNTIME_ASSETS_DIR:-$PROJECT_ROOT/runtime-assets}"
@@ -1845,10 +1846,15 @@ sign_macos_sidecar_binaries() {
     check_macos_signing_identity "$identity"
     local entitlements_file
     entitlements_file="$(resolve_macos_entitlements_file)"
+    local opencode_entitlements_file
+    opencode_entitlements_file="$(resolve_macos_opencode_entitlements_file)"
     if [[ -n "$entitlements_file" ]]; then
         print_info "sidecar 可执行文件将注入 entitlements: $entitlements_file"
     else
         print_warning "未找到 macOS entitlements 文件，sidecar 将仅使用 hardened runtime 签名"
+    fi
+    if [[ -n "$opencode_entitlements_file" ]]; then
+        print_info "opencode 侧车将使用 JIT entitlements: $opencode_entitlements_file"
     fi
     print_step "签名 sidecar Mach-O 二进制"
     local signed_count=0
@@ -1860,7 +1866,11 @@ sign_macos_sidecar_binaries() {
                 --timestamp
                 --options runtime
             )
-            if [[ -n "$entitlements_file" && "$candidate" != *.dylib && "$candidate" != *.so && "$candidate" != *.node ]]; then
+            if [[ "$candidate" == *"/opencode-bin/opencode" && "$candidate" != *.exe ]]; then
+                if [[ -n "$opencode_entitlements_file" ]]; then
+                    sign_args+=(--entitlements "$opencode_entitlements_file")
+                fi
+            elif [[ -n "$entitlements_file" && "$candidate" != *.dylib && "$candidate" != *.so && "$candidate" != *.node ]]; then
                 sign_args+=(--entitlements "$entitlements_file")
             fi
             codesign "${sign_args[@]}" "$candidate"
@@ -1890,6 +1900,20 @@ resolve_macos_entitlements_file() {
         echo "$candidate"
         return
     fi
+    echo ""
+}
+
+resolve_macos_opencode_entitlements_file() {
+    if [[ "$OSTYPE" != "darwin"* ]]; then
+        echo ""
+        return
+    fi
+    local candidate="$MACOS_OPENCODE_ENTITLEMENTS_FILE"
+    if [[ -f "$candidate" ]]; then
+        echo "$candidate"
+        return
+    fi
+    print_warning "未找到 OpenCode 侧车 entitlements 文件: $candidate（Bun/JIT 可能需要 com.apple.security.cs.allow-jit）"
     echo ""
 }
 
