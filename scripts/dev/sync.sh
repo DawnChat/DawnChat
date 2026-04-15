@@ -143,6 +143,10 @@ ensure_assistant_workspace_deps() {
         print_warning "bun --frozen-lockfile 失败（多为 package.json/workspaces 与 bun.lock 不一致），回退到 bun install 以更新 lockfile；请提交 dawnchat-plugins/assistant-workspace/bun.lock"
         (cd "$ASSISTANT_WORKSPACE_DIR" && PATH="$bun_dir:${PATH:-}" "$bun_bin" install "${bun_install_linker[@]}") || return 1
     fi
+    if [[ "$OSTYPE" == msys* || "$OSTYPE" == cygwin* ]]; then
+        print_info "Windows: 链接 assistant-workspace 的 vite 到各 assistant 模板 web-src（供 vite.config ESM 解析）..."
+        (cd "$ASSISTANT_WORKSPACE_DIR" && PATH="$bun_dir:${PATH:-}" "$bun_bin" run link:template-vite-modules) || return 1
+    fi
     ASSISTANT_WORKSPACE_READY=true
 }
 

@@ -1192,6 +1192,11 @@ ensure_assistant_workspace_deps() {
         print_warning "bun --frozen-lockfile 失败，回退到 bun install；请提交 dawnchat-plugins/assistant-workspace/bun.lock"
         (cd "$ASSISTANT_WORKSPACE_DIR" && PATH="$bun_dir:${PATH:-}" "$bun_bin" install "${bun_install_linker[@]}") || exit 1
     fi
+    # Windows：Node ESM 不使用 NODE_PATH；Vite 在 web-src/.vite-temp 中 import "vite" 需在 web-src/node_modules 下存在包。hoisted 时部分模板可能缺链，用 junction 指向 workspace。
+    if [[ "$OSTYPE" == msys* || "$OSTYPE" == cygwin* ]]; then
+        print_info "Windows: 链接 assistant-workspace 的 vite 到各 assistant 模板 web-src（供 vite.config ESM 解析）..."
+        (cd "$ASSISTANT_WORKSPACE_DIR" && PATH="$bun_dir:${PATH:-}" "$bun_bin" run link:template-vite-modules) || exit 1
+    fi
     ASSISTANT_WORKSPACE_READY=true
 }
 
