@@ -16,6 +16,7 @@ from datetime import datetime
 from enum import Enum
 import json
 import os
+import signal
 from pathlib import Path
 import platform
 import shutil
@@ -78,6 +79,8 @@ class OpenCodeManager:
         self._baseline_config_composer = OpenCodeBaselineConfigComposer()
         self._last_start_failure: Optional[Dict[str, Any]] = None
         self._runtime_port: Optional[int] = None
+        self._server_out_open_mode = "w"
+        self._server_err_open_mode = "w"
 
     @property
     def status(self) -> OpenCodeStatus:
@@ -238,16 +241,28 @@ class OpenCodeManager:
                     models_size = -1
                 logger.info(
                     "OpenCode spawn env（models.dev）: OPENCODE_MODELS_PATH=%s exists=%s size_bytes=%s "
-                    "OPENCODE_DISABLE_MODELS_FETCH=%s；子进程 stderr 见 %s；可与该条时间戳对照 server.err.log 判断是否为新包",
+                    "OPENCODE_DISABLE_MODELS_FETCH=%s OPENCODE_HOME=%s XDG_STATE_HOME=%s；子进程 stderr 见 %s；"
+                    "可与该条时间戳对照 server.err.log 判断是否为新包",
                     models_path_resolved,
                     models_exists,
                     models_size,
                     env.get("OPENCODE_DISABLE_MODELS_FETCH"),
+                    env.get("OPENCODE_HOME"),
+                    env.get("XDG_STATE_HOME"),
                     Config.OPENCODE_LOGS_DIR / "server.err.log",
                 )
 
-                stdout_log = open(Config.OPENCODE_LOGS_DIR / "server.out.log", "a", encoding="utf-8")
-                stderr_log = open(Config.OPENCODE_LOGS_DIR / "server.err.log", "a", encoding="utf-8")
+                self._rotate_opencode_session_server_logs()
+                stdout_log = open(
+                    Config.OPENCODE_LOGS_DIR / "server.out.log",
+                    self._server_out_open_mode,
+                    encoding="utf-8",
+                )
+                stderr_log = open(
+                    Config.OPENCODE_LOGS_DIR / "server.err.log",
+                    self._server_err_open_mode,
+                    encoding="utf-8",
+                )
 
                 cmd = [
                     str(binary),
@@ -284,19 +299,36 @@ class OpenCodeManager:
                 ready = await self._wait_until_ready(timeout=Config.OPENCODE_START_TIMEOUT)
                 if not ready.ready:
                     process_returncode = self._process.returncode if self._process else None
+                    rc_diag = self._format_process_returncode(process_returncode)
                     logger.error(
-                        "OpenCode 启动失败: reason=%s process_returncode=%s listener_pid=%s port=%s",
+                        "OpenCode 启动失败: reason=%s process_returncode=%s listener_pid=%s port=%s %s",
                         ready.reason or "health_timeout",
                         process_returncode,
                         ready.listener_pid,
                         self.port,
+                        rc_diag,
                     )
                     err_hint = self._read_startup_error_hint()
                     if err_hint:
                         logger.error("OpenCode 启动失败详情(最近 stderr):\n%s", err_hint)
+                    runtime_log = self._resolve_latest_runtime_log_path()
+                    if runtime_log:
+                        if (ready.reason == "process_exited") or (not err_hint.strip()):
+                            logger.error(
+                                "OpenCode 启动失败(次级线索): runtime 日志目录内最新文件 mtime=%s path=%s",
+                                datetime.fromtimestamp(runtime_log.stat().st_mtime).isoformat(),
+                                runtime_log,
+                            )
+                        else:
+                            logger.info(
+                                "OpenCode 启动失败(参考): runtime 日志 path=%s",
+                                runtime_log,
+                            )
                     self._last_start_failure = {
                         "reason": ready.reason or "health_timeout",
                         "hint": err_hint,
+                        "returncode_diagnosis": rc_diag,
+                        "runtime_log_hint": str(runtime_log) if runtime_log else "",
                         "workspace_path": str(target_workspace),
                         "port": self.port,
                         "pid": self._process.pid if self._process else None,
@@ -321,21 +353,28 @@ class OpenCodeManager:
                 return True
             except Exception as e:
                 process_returncode = self._process.returncode if self._process else None
+                rc_diag = self._format_process_returncode(process_returncode)
                 logger.error(
-                    "启动 OpenCode 失败: %s (type=%s, returncode=%s)",
+                    "启动 OpenCode 失败: %s (type=%s, returncode=%s %s)",
                     e,
                     type(e).__name__,
                     process_returncode,
+                    rc_diag,
                     exc_info=True,
                 )
                 err_hint = self._read_startup_error_hint()
                 if err_hint:
                     logger.error("OpenCode 启动失败详情(最近 stderr):\n%s", err_hint)
+                runtime_log = self._resolve_latest_runtime_log_path()
+                if runtime_log:
+                    logger.info("OpenCode 启动异常(参考): runtime 日志 path=%s", runtime_log)
                 self._last_start_failure = {
                     "reason": "startup_exception",
                     "error_type": type(e).__name__,
                     "error_message": str(e),
                     "hint": err_hint,
+                    "returncode_diagnosis": rc_diag,
+                    "runtime_log_hint": str(runtime_log) if runtime_log else "",
                     "workspace_path": str(target_workspace),
                     "port": self.port,
                     "pid": self._process.pid if self._process else None,
@@ -660,6 +699,102 @@ class OpenCodeManager:
             logger.info("OpenCode models.dev 快照：已写入空 JSON 占位 %s", dest)
         except OSError as err:
             logger.error("无法写入 OpenCode models 占位文件 %s: %s", dest, err)
+
+    _ROTATED_SERVER_LOG_KEEP = 20
+
+    def _rotate_opencode_session_server_logs(self) -> None:
+        """将累积的 server.out/err 轮转为带时间戳备份，再以 'w' 打开当次会话（失败则对该文件退化为 'a'）。"""
+        logs_dir = Config.OPENCODE_LOGS_DIR
+        try:
+            logs_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as err:
+            logger.warning("OpenCode 日志目录不可用，跳过轮转: %s err=%s", logs_dir, err)
+            self._server_out_open_mode = "w"
+            self._server_err_open_mode = "w"
+            return
+
+        out_mode = OpenCodeManager._try_rotate_session_server_log(logs_dir, "server.out.log")
+        err_mode = OpenCodeManager._try_rotate_session_server_log(logs_dir, "server.err.log")
+        self._server_out_open_mode = out_mode
+        self._server_err_open_mode = err_mode
+
+    @staticmethod
+    def _try_rotate_session_server_log(logs_dir: Path, filename: str) -> str:
+        """若日志文件不存在则返回 'w'；若存在且轮转成功返回 'w'；轮转失败返回 'a' 以免截断丢失未备份内容。"""
+        path = logs_dir / filename
+        try:
+            exists = path.exists()
+        except OSError:
+            return "a"
+        if not exists:
+            return "w"
+        try:
+            if not path.is_file():
+                return "a"
+        except OSError:
+            return "a"
+        stem = path.stem
+        ts = datetime.now().strftime("%Y%m%dT%H%M%S_%f")
+        backup = logs_dir / f"{stem}.{ts}.log"
+        try:
+            path.rename(backup)
+        except OSError as err:
+            logger.warning(
+                "OpenCode 日志轮转失败，本会话对该文件使用追加写: path=%s err=%s",
+                path,
+                err,
+            )
+            return "a"
+        try:
+            OpenCodeManager._prune_rotated_server_log_backups(
+                logs_dir,
+                stem,
+                keep=OpenCodeManager._ROTATED_SERVER_LOG_KEEP,
+            )
+        except Exception as err:
+            logger.debug("OpenCode 日志轮转清理跳过: %s", err)
+        return "w"
+
+    @staticmethod
+    def _prune_rotated_server_log_backups(logs_dir: Path, stem: str, keep: int) -> None:
+        """删除过旧的轮转备份，仅保留 stem 前缀下最近 keep 个（按 mtime）。"""
+        primary = f"{stem}.log"
+        candidates: List[Path] = []
+        try:
+            for p in logs_dir.iterdir():
+                if not p.is_file():
+                    continue
+                if p.name == primary:
+                    continue
+                if not (p.name.startswith(f"{stem}.") and p.name.endswith(".log")):
+                    continue
+                candidates.append(p)
+        except OSError:
+            return
+        if len(candidates) <= keep:
+            return
+        candidates.sort(key=lambda item: item.stat().st_mtime)
+        for victim in candidates[: max(0, len(candidates) - keep)]:
+            try:
+                victim.unlink()
+            except OSError:
+                pass
+
+    @staticmethod
+    def _format_process_returncode(rc: Optional[int]) -> str:
+        if rc is None:
+            return "returncode_diagnosis=n/a"
+        if rc < 0:
+            sig = -rc
+            label = ""
+            try:
+                label = signal.strsignal(sig) or ""
+            except (ValueError, OSError):
+                label = ""
+            if label:
+                return f"returncode_diagnosis=signal {sig} ({label})"
+            return f"returncode_diagnosis=signal {sig}"
+        return f"returncode_diagnosis=exit_status {rc}"
 
     @staticmethod
     def _read_startup_error_hint(max_lines: int = 40) -> str:
