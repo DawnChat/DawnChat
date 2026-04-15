@@ -16,10 +16,10 @@ from datetime import datetime
 from enum import Enum
 import json
 import os
-import signal
 from pathlib import Path
 import platform
 import shutil
+import signal
 import socket
 import subprocess
 from typing import Any, Dict, List, Optional
