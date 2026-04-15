@@ -182,6 +182,7 @@ jobs:
           ASC_API_KEY_P8_B64: ${{ secrets.ASC_API_KEY_P8_B64 }}
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
         run: |
+          # notarytool 403「A required agreement is missing」: Apple Developer / App Store Connect 上团队需签署生效中的法律协议，与仓库代码无关。
           KEY_PATH="$RUNNER_TEMP/AuthKey_${ASC_KEY_ID}.p8"
           python - <<'PY'
           import base64
