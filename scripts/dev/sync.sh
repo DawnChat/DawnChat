@@ -133,10 +133,11 @@ ensure_assistant_workspace_deps() {
     fi
     local bun_dir
     bun_dir="$(cd "$(dirname "$bun_bin")" && pwd)"
-    # Windows（Git Bash/Cygwin）上 workspace 默认 symlink 易 ENOENT；宿主为 Windows 时用 hoisted（勿用全局 bunfig，Darwin 会与 lockfile 组合出问题）
+    # Windows（Git Bash/Cygwin）上 workspace 默认 symlink 易 ENOENT，曾用 hoisted 收拢依赖；
+    # hoisted 下子包常缺少 vite.config 可解析的 node_modules/vite，故改用 isolated（与 build.sh ensure_assistant_workspace_deps 一致）。
     local bun_install_linker=()
     if [[ "$OSTYPE" == msys* || "$OSTYPE" == cygwin* ]]; then
-        bun_install_linker=(--linker hoisted)
+        bun_install_linker=(--linker isolated)
     fi
     print_info "安装 assistant workspace 依赖..."
     if ! (cd "$ASSISTANT_WORKSPACE_DIR" && PATH="$bun_dir:${PATH:-}" "$bun_bin" install --frozen-lockfile "${bun_install_linker[@]}"); then
