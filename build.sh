@@ -197,6 +197,7 @@ FRONTEND_DIR="$PROJECT_ROOT/apps/frontend"
 TAURI_DIR="$PROJECT_ROOT/apps/desktop/src-tauri"
 SIDECAR_DIR="$TAURI_DIR/sidecars/dawnchat-backend"
 MACOS_ENTITLEMENTS_FILE="${MACOS_ENTITLEMENTS_FILE:-$TAURI_DIR/Entitlements.plist}"
+# OpenCode / Bun 等需 JIT 的侧车 Mach-O 共用（见 sign_macos_sidecar_binaries）；可用 MACOS_OPENCODE_ENTITLEMENTS_FILE 覆盖路径以保持兼容
 MACOS_OPENCODE_ENTITLEMENTS_FILE="${MACOS_OPENCODE_ENTITLEMENTS_FILE:-$TAURI_DIR/entitlements/opencode-sidecar.entitlements}"
 CACHE_DIR="$PROJECT_ROOT/.cache/pbs"
 OFFICIAL_PLUGINS_DIR="$PROJECT_ROOT/dawnchat-plugins/official-plugins"
@@ -1854,7 +1855,7 @@ sign_macos_sidecar_binaries() {
         print_warning "未找到 macOS entitlements 文件，sidecar 将仅使用 hardened runtime 签名"
     fi
     if [[ -n "$opencode_entitlements_file" ]]; then
-        print_info "opencode 侧车将使用 JIT entitlements: $opencode_entitlements_file"
+        print_info "OpenCode / Bun 侧车将使用 JIT entitlements: $opencode_entitlements_file"
     fi
     print_step "签名 sidecar Mach-O 二进制"
     local signed_count=0
@@ -1866,7 +1867,9 @@ sign_macos_sidecar_binaries() {
                 --timestamp
                 --options runtime
             )
-            if [[ "$candidate" == *"/opencode-bin/opencode" && "$candidate" != *.exe ]]; then
+            if [[ "$candidate" != *.exe ]] && {
+                [[ "$candidate" == *"/opencode-bin/opencode" ]] || [[ "$candidate" == *"/bun-bin/bun" ]]
+            }; then
                 if [[ -n "$opencode_entitlements_file" ]]; then
                     sign_args+=(--entitlements "$opencode_entitlements_file")
                 fi
@@ -1913,7 +1916,7 @@ resolve_macos_opencode_entitlements_file() {
         echo "$candidate"
         return
     fi
-    print_warning "未找到 OpenCode 侧车 entitlements 文件: $candidate（Bun/JIT 可能需要 com.apple.security.cs.allow-jit）"
+    print_warning "未找到 OpenCode/Bun 侧车 JIT entitlements 文件: $candidate（com.apple.security.cs.allow-jit）"
     echo ""
 }
 
