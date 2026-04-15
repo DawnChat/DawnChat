@@ -229,6 +229,23 @@ class OpenCodeManager:
                 if isinstance(rules_dir, str) and rules_dir.strip():
                     env["OPENCODE_CONFIG_DIR"] = rules_dir.strip()
 
+                models_path_resolved = Path(env["OPENCODE_MODELS_PATH"])
+                try:
+                    models_exists = models_path_resolved.is_file()
+                    models_size = models_path_resolved.stat().st_size if models_exists else 0
+                except OSError:
+                    models_exists = False
+                    models_size = -1
+                logger.info(
+                    "OpenCode spawn env（models.dev）: OPENCODE_MODELS_PATH=%s exists=%s size_bytes=%s "
+                    "OPENCODE_DISABLE_MODELS_FETCH=%s；子进程 stderr 见 %s；可与该条时间戳对照 server.err.log 判断是否为新包",
+                    models_path_resolved,
+                    models_exists,
+                    models_size,
+                    env.get("OPENCODE_DISABLE_MODELS_FETCH"),
+                    Config.OPENCODE_LOGS_DIR / "server.err.log",
+                )
+
                 stdout_log = open(Config.OPENCODE_LOGS_DIR / "server.out.log", "a", encoding="utf-8")
                 stderr_log = open(Config.OPENCODE_LOGS_DIR / "server.err.log", "a", encoding="utf-8")
 
