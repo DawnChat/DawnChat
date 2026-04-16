@@ -202,6 +202,11 @@ MACOS_ENTITLEMENTS_FILE="${MACOS_ENTITLEMENTS_FILE:-$TAURI_DIR/Entitlements.plis
 MACOS_OPENCODE_ENTITLEMENTS_FILE="${MACOS_OPENCODE_ENTITLEMENTS_FILE:-$TAURI_DIR/entitlements/opencode-sidecar.entitlements}"
 CACHE_DIR="$PROJECT_ROOT/.cache/pbs"
 OFFICIAL_PLUGINS_DIR="$PROJECT_ROOT/dawnchat-plugins/official-plugins"
+
+# 当从 GitHub Release 拉取 sidecar embed（含 dist + SDK）时由 download-dawnchat-plugins.sh 写入
+sidecar_embed_ready() {
+    [[ -f "$PROJECT_ROOT/dawnchat-plugins/.sidecar-embed-bundled" ]]
+}
 RUNTIME_ASSETS_DIR="${DAWNCHAT_RUNTIME_ASSETS_DIR:-$PROJECT_ROOT/runtime-assets}"
 LLAMACPP_ASSETS_DIR="$RUNTIME_ASSETS_DIR/llamacpp"
 TTS_MODELS_ASSETS_DIR="$RUNTIME_ASSETS_DIR/tts-models"
@@ -1214,6 +1219,11 @@ run_assistant_workspace_script() {
 build_assistant_sdk_bundle() {
     print_step "构建 Assistant SDK dist 包"
 
+    if sidecar_embed_ready; then
+        print_info "侧车 embed 已预构建 (.sidecar-embed-bundled)，跳过 assistant-workspace build:sdk"
+        return 0
+    fi
+
     if [[ ! -d "$ASSISTANT_SDK_DIR" ]]; then
         print_warning "Assistant SDK 目录不存在，跳过: $ASSISTANT_SDK_DIR"
         return 0
@@ -1559,9 +1569,11 @@ prepare_builtin_desktop_template() {
     if [[ "$TARGET_PLATFORM" == *"windows"* || "$OSTYPE" == msys* || "$OSTYPE" == cygwin* ]]; then
         bun_bin="$SIDECAR_DIR/bun-bin/bun.exe"
     fi
-    if [[ ! -x "$bun_bin" ]]; then
-        print_error "缺少 bun 二进制，无法构建 starter 模板: $bun_bin"
-        exit 1
+    if ! sidecar_embed_ready; then
+        if [[ ! -x "$bun_bin" ]]; then
+            print_error "缺少 bun 二进制，无法构建 starter 模板: $bun_bin"
+            exit 1
+        fi
     fi
     local bun_dir
     bun_dir="$(cd "$(dirname "$bun_bin")" && pwd)"
@@ -1571,28 +1583,41 @@ prepare_builtin_desktop_template() {
     local dest_dir=""
     local web_src=""
     local template_ids=("desktop-starter" "desktop-hello-world" "desktop-ai-assistant" "web-starter-vue" "web-ai-assistant" "mobile-starter-ionic" "mobile-ai-assistant")
+
+    if sidecar_embed_ready; then
+        print_info "侧车 embed 已预构建 (.sidecar-embed-bundled)，跳过内置模板前端构建（build:templates / web-src build）"
+    else
+        for template_id in "${template_ids[@]}"; do
+            src_dir="$OFFICIAL_PLUGINS_DIR/$template_id"
+            if [[ ! -d "$src_dir" ]]; then
+                continue
+            fi
+
+            # 与 manifest.preview.frontend_dir + runtime.root 一致：桌面插件多为 _ir/frontend/web-src
+            web_src="$src_dir/web-src"
+            if [[ "$template_id" == desktop-* ]] && [[ -f "$src_dir/_ir/frontend/web-src/package.json" ]]; then
+                web_src="$src_dir/_ir/frontend/web-src"
+            fi
+            if [[ -f "$web_src/package.json" ]]; then
+                if template_uses_assistant_sdk "$web_src/package.json"; then
+                    print_info "检测到 assistant-sdk workspace 依赖，改由 assistant workspace 统一构建 $template_id 前端产物"
+                    ensure_assistant_template_dist_ready "$bun_bin"
+                else
+                    print_info "安装 $template_id 前端依赖..."
+                    (cd "$web_src" && PATH="$bun_dir:${PATH:-}" "$bun_bin" install)
+                    print_info "构建 $template_id 前端产物..."
+                    (cd "$web_src" && PATH="$bun_dir:${PATH:-}" "$bun_bin" run build)
+                fi
+            fi
+        done
+    fi
+
     for template_id in "${template_ids[@]}"; do
         src_dir="$OFFICIAL_PLUGINS_DIR/$template_id"
         dest_dir="$dest_root/$template_id"
         if [[ ! -d "$src_dir" ]]; then
             print_warning "未找到内置模板目录，跳过: $src_dir"
             continue
-        fi
-
-        web_src="$src_dir/web-src"
-        if [[ "$template_id" == "desktop-starter" ]]; then
-            web_src="$src_dir/_ir/frontend/web-src"
-        fi
-        if [[ -f "$web_src/package.json" ]]; then
-            if template_uses_assistant_sdk "$web_src/package.json"; then
-                print_info "检测到 assistant-sdk workspace 依赖，改由 assistant workspace 统一构建 $template_id 前端产物"
-                ensure_assistant_template_dist_ready "$bun_bin"
-            else
-                print_info "安装 $template_id 前端依赖..."
-                (cd "$web_src" && PATH="$bun_dir:${PATH:-}" "$bun_bin" install)
-                print_info "构建 $template_id 前端产物..."
-                (cd "$web_src" && PATH="$bun_dir:${PATH:-}" "$bun_bin" run build)
-            fi
         fi
 
         mkdir -p "$dest_root"

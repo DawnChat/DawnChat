@@ -22,8 +22,9 @@ jobs:
 
       - name: Fetch plugin workspace
         shell: bash
-        run: |
-          git clone --depth 1 --branch main https://github.com/chaxiu/dawnchat-plugins.git dawnchat-plugins
+        run: ./scripts/download-dawnchat-plugins.sh
+        env:
+          DAWNCHAT_PLUGINS_DOWNLOAD_FALLBACK: "0"
 
       - name: Verify plugin workspace
         shell: bash

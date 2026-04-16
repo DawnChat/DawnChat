@@ -673,7 +673,7 @@ sync_builtin_desktop_template() {
         fi
 
         web_src="$template_src/web-src"
-        if [[ "$template_id" == "desktop-starter" ]]; then
+        if [[ "$template_id" == desktop-* ]] && [[ -f "$template_src/_ir/frontend/web-src/package.json" ]]; then
             web_src="$template_src/_ir/frontend/web-src"
         fi
         if [[ -n "$bun_bin" && -f "$web_src/package.json" ]]; then
