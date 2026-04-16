@@ -1,6 +1,6 @@
 {
   "repository": "chaxiu/dawnchat-plugins",
-  "release_tag": "plugins-v2026.04.16-test03",
-  "asset_name": "dawnchat-sidecar-embed-plugins-v2026.04.16-test03.tar.zst",
-  "sha256": "1ffdc14397d21c7e0f66cb61d99d2814a054ccd43e8af40712f8b60ab6b7e833"
+  "release_tag": "plugins-v2026.04.16-test04",
+  "asset_name": "dawnchat-sidecar-embed-plugins-v2026.04.16-test04.tar.zst",
+  "sha256": "499a5e053c968ca012485da507e86380492694816894f9a8a0237a7bc1bfce5b"
 }
