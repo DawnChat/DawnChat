@@ -37,9 +37,6 @@ vi.mock('@/composables/useI18n', () => ({
         cloudModels: {
           title: 'Cloud Models',
           desc: 'Configure provider keys',
-          keychainPermissionTitle: 'Allow Keychain Access',
-          keychainPermissionHint: 'Choose Always Allow in Keychain prompt.',
-          keychainPermissionConfirm: 'Got it',
           apiKeyPlaceholder: 'Enter API key',
           apiKeyPlaceholderConfigured: 'Configured, enter to update',
           securityNote: 'Security note',
@@ -63,10 +60,6 @@ const flushPromises = async () => {
 describe('CloudModelsContent', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
-    Object.defineProperty(window.navigator, 'platform', {
-      configurable: true,
-      value: 'MacIntel',
-    })
   })
 
   it('保存时仅提交 API Key 且不再请求 models 接口', async () => {
@@ -105,9 +98,6 @@ describe('CloudModelsContent', () => {
     await wrapper.find('input.config-input').setValue('sk-test-openai-12345')
     await wrapper.find('button.save-btn').trigger('click')
     await flushPromises()
-    const confirmButton = document.body.querySelector('.dialog-btn-confirm') as HTMLButtonElement | null
-    expect(confirmButton).toBeTruthy()
-    confirmButton?.click()
     await flushPromises()
 
     const calls = vi.mocked(window.fetch).mock.calls.map(([url, init]) => ({

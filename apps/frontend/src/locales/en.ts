@@ -1296,10 +1296,8 @@ export default {
       desc: 'Configure API keys for cloud AI providers to enable their capabilities.',
       apiKey: 'API Key',
       enabledModels: 'Enabled Models',
-      securityNote: 'API keys are stored securely on your device and are never uploaded to any server.',
-      keychainPermissionTitle: 'Allow Keychain Access',
-      keychainPermissionHint: 'When saving an API key, macOS will show a Keychain authorization dialog. Please choose "Always Allow" to avoid repeated prompts.',
-      keychainPermissionConfirm: 'Got it',
+      securityNote:
+        'API keys are encrypted and stored in your local DawnChat data folder. They are not uploaded to our servers. This avoids casual inspection but does not protect against a fully compromised local machine.',
       confirmDelete: 'Are you sure you want to delete the configuration for {name}?',
       apiKeyPlaceholder: 'Enter API Key',
       apiKeyPlaceholderConfigured: 'Configured (enter new value to overwrite)',

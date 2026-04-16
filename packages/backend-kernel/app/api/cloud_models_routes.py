@@ -82,14 +82,9 @@ async def _check_provider_configs() -> None:
     注意：API Key 现在通过 LiteLLM Provider 动态获取，不再设置环境变量
     """
     try:
-        configured_providers = []
-        for provider in SUPPORTED_PROVIDERS.keys():
-            api_key = await storage_manager.get_api_key(provider)
-            if api_key:
-                configured_providers.append(provider)
-        
+        configured_providers = await storage_manager.list_providers_with_key_marker()
         if configured_providers:
-            logger.info(f"已配置的云端厂商: {', '.join(configured_providers)}")
+            logger.info(f"已配置的云端厂商(标记): {', '.join(configured_providers)}")
         else:
             logger.info("未配置任何云端厂商")
     except Exception as e:
@@ -160,9 +155,8 @@ async def list_providers():
         providers_list = []
         
         for provider_id, config in SUPPORTED_PROVIDERS.items():
-            # 检查是否已配置
-            api_key = await storage_manager.get_api_key(provider_id)
-            is_configured = bool(api_key)
+            # 仅读本地标记，避免列表页触发 keyring/解密
+            is_configured = await storage_manager.get_provider_has_key(provider_id)
             
             providers_list.append({
                 "id": provider_id,

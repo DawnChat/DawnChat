@@ -6,17 +6,17 @@ from app.storage import storage_manager
 
 @pytest.mark.asyncio
 async def test_list_providers_includes_openrouter(monkeypatch: pytest.MonkeyPatch) -> None:
-    async def _get_api_key(provider_id: str):
-        if provider_id == "openrouter":
-            return "or-key-123"
-        return None
+    async def _get_provider_has_key(provider_id: str) -> bool:
+        return provider_id == "openrouter"
 
-    monkeypatch.setattr(storage_manager, "get_api_key", _get_api_key)
+    monkeypatch.setattr(storage_manager, "get_provider_has_key", _get_provider_has_key)
 
     payload = await cloud_models_routes.list_providers()
     provider_ids = {item["id"] for item in payload["providers"]}
 
     assert "openrouter" in provider_ids
+    openrouter = next(p for p in payload["providers"] if p["id"] == "openrouter")
+    assert openrouter["is_configured"] is True
 
 
 @pytest.mark.asyncio

@@ -2,14 +2,26 @@
 安全存储实现
 
 用于存储敏感信息（API Keys、Token、密码等）。
-优先使用系统 keyring，当不可用时自动降级到内存存储。
+
+默认使用 DATA_DIR 下 Fernet 本地加密文件；可通过环境变量 DAWNCHAT_API_KEY_SECURE_BACKEND=keychain
+切换为系统 keyring（macOS Keychain 等）。keyring 不可用时回退到本地 Fernet。
 """
 
+from __future__ import annotations
+
 import asyncio
+import os
+from pathlib import Path
 from typing import Optional
 
 from ..utils.logger import get_logger
 from .base import BaseSecureStorage
+from .local_secrets_crypto import (
+    LocalSecretEnvelopeError,
+    LocalSecretMasterKeyError,
+    LocalSecretsCrypto,
+    secure_storage_key_to_filename,
+)
 
 logger = get_logger(__name__)
 
@@ -125,28 +137,133 @@ class MemorySecureStorage(BaseSecureStorage):
         logger.warning("所有内存数据已清空")
 
 
+class LocalEncryptedSecureStorage(BaseSecureStorage):
+    """
+    使用 Fernet 将敏感数据加密写入 DATA_DIR/secrets/api_keys/。
+
+    主密钥：DATA_DIR/secrets/fernet_master.key（0600，首次写入时生成）。
+    """
+
+    def __init__(self, namespace: str = "DawnChat"):
+        from ..config import Config
+
+        super().__init__(namespace)
+        Config.ensure_directories()
+        self._secrets_dir = Config.DATA_DIR / "secrets"
+        self._master_path = self._secrets_dir / "fernet_master.key"
+        self._api_keys_dir = self._secrets_dir / "api_keys"
+        self._crypto = LocalSecretsCrypto(self._master_path)
+        logger.info(
+            "本地 Fernet 安全存储已初始化: namespace=%s, keys_dir=%s",
+            namespace,
+            self._api_keys_dir,
+        )
+
+    def _path_for_key(self, key: str) -> Path:
+        return self._api_keys_dir / secure_storage_key_to_filename(key)
+
+    def _read_sync(self, path: Path) -> Optional[str]:
+        if not path.is_file():
+            return None
+        try:
+            raw = path.read_text(encoding="utf-8")
+            return self._crypto.decrypt_string(raw)
+        except LocalSecretMasterKeyError:
+            logger.error("主密钥无效，无法解密敏感数据，请检查: %s", self._master_path)
+            return None
+        except LocalSecretEnvelopeError as e:
+            logger.error("解密本地密文失败 [%s]: %s", path.name, e)
+            return None
+        except OSError as e:
+            logger.error("读取本地密文失败 [%s]: %s", path.name, e)
+            return None
+
+    def _write_sync(self, path: Path, content: str) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp.write_text(content, encoding="utf-8")
+        tmp.replace(path)
+
+    def _delete_sync(self, path: Path) -> bool:
+        try:
+            if path.is_file():
+                path.unlink()
+                return True
+        except OSError as e:
+            logger.warning("删除本地密文失败 [%s]: %s", path.name, e)
+        return False
+
+    async def get(self, key: str) -> Optional[str]:
+        path = self._path_for_key(key)
+
+        def _run() -> Optional[str]:
+            return self._read_sync(path)
+
+        try:
+            return await asyncio.to_thread(_run)
+        except Exception as e:
+            logger.error(f"获取敏感数据异常 [{key}]: {e}", exc_info=True)
+            return None
+
+    async def set(self, key: str, value: str) -> None:
+        path = self._path_for_key(key)
+
+        def _run() -> None:
+            payload = self._crypto.encrypt_string(value)
+            self._write_sync(path, payload)
+            logger.info("敏感数据已设置(本地加密): %s", key)
+
+        try:
+            await asyncio.to_thread(_run)
+        except LocalSecretMasterKeyError:
+            logger.error("主密钥无效，无法写入敏感数据: %s", self._master_path)
+            raise
+        except Exception as e:
+            logger.error(f"设置敏感数据异常 [{key}]: {e}", exc_info=True)
+            raise
+
+    async def delete(self, key: str) -> bool:
+        path = self._path_for_key(key)
+
+        def _run() -> bool:
+            ok = self._delete_sync(path)
+            if ok:
+                logger.info("敏感数据已删除(本地加密): %s", key)
+            return ok
+
+        try:
+            return await asyncio.to_thread(_run)
+        except Exception as e:
+            logger.error(f"删除敏感数据异常 [{key}]: {e}", exc_info=True)
+            return False
+
+    async def exists(self, key: str) -> bool:
+        path = self._path_for_key(key)
+        return await asyncio.to_thread(lambda: path.is_file())
+
+
 def create_secure_storage(namespace: str = "DawnChat") -> BaseSecureStorage:
     """
-    创建安全存储实例（自动选择最佳实现）
-    
-    优先级：
-    1. Keyring（系统密钥管理器）
-    2. Memory（仅开发/降级兜底）
-    
-    Args:
-        namespace: 命名空间
-        
-    Returns:
-        安全存储实例
+    创建安全存储实例。
+
+    环境变量 DAWNCHAT_API_KEY_SECURE_BACKEND：
+    - local_fernet（默认）：DATA_DIR/secrets 下 Fernet 加密文件
+    - keychain：Python keyring；初始化失败时回退到 local_fernet
     """
-    # 优先尝试使用 keyring（惰性可用性校验，避免启动阶段触发系统权限弹窗）
-    try:
-        storage: BaseSecureStorage = KeyringSecureStorage(namespace=namespace)
-        logger.info("使用 Keyring 安全存储")
-        return storage
-    except Exception as e:
-        logger.warning(f"Keyring 不可用: {e}")
-    
-    # 最后降级到内存存储
-    logger.error("所有安全存储都不可用，使用内存存储（不推荐）")
-    return MemorySecureStorage(namespace=namespace)
+    raw = os.environ.get("DAWNCHAT_API_KEY_SECURE_BACKEND", "local_fernet").strip().lower()
+    backend = raw or "local_fernet"
+    if backend not in ("local_fernet", "fernet", "keychain"):
+        logger.warning("未知的 DAWNCHAT_API_KEY_SECURE_BACKEND=%r，使用 local_fernet", raw)
+        backend = "local_fernet"
+
+    if backend == "keychain":
+        try:
+            storage: BaseSecureStorage = KeyringSecureStorage(namespace=namespace)
+            logger.info("使用 Keyring 安全存储 (DAWNCHAT_API_KEY_SECURE_BACKEND=keychain)")
+            return storage
+        except Exception as e:
+            logger.warning("Keyring 不可用，回退到本地 Fernet: %s", e)
+
+    storage = LocalEncryptedSecureStorage(namespace=namespace)
+    logger.info("使用本地 Fernet 安全存储 (DAWNCHAT_API_KEY_SECURE_BACKEND=%r)", raw or "local_fernet")
+    return storage

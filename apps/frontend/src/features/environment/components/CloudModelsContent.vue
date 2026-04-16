@@ -104,17 +104,6 @@
         {{ t.settings.cloudModels.securityNote }}
       </span>
     </div>
-
-    <ConfirmDialog
-      v-model:visible="dialogVisible"
-      icon="🔐"
-      :title="dialogTitle"
-      :message="dialogMessage"
-      :confirm-text="dialogConfirmText"
-      :cancel-text="dialogCancelText"
-      @confirm="handleDialogConfirm"
-      @cancel="handleDialogCancel"
-    />
   </div>
 </template>
 
@@ -122,9 +111,7 @@
 import { ref, reactive, computed, onMounted, onActivated } from 'vue'
 import { logger } from '@/utils/logger'
 import { useI18n } from '@/composables/useI18n'
-import { useCloudKeychainPrompt } from '@/composables/useCloudKeychainPrompt'
 import { buildBackendUrl } from '@/utils/backendUrl'
-import ConfirmDialog from '@/shared/ui/ConfirmDialog.vue'
 import { 
   Cloud, 
   CheckCircle2, 
@@ -165,17 +152,6 @@ const expandedProviders = ref<string[]>([])
 const showApiKey = reactive<Record<string, boolean>>({})
 const saving = reactive<Record<string, boolean>>({})
 const providerConfigs = reactive<Record<string, ProviderConfig>>({})
-const {
-  dialogVisible,
-  dialogTitle,
-  dialogMessage,
-  dialogConfirmText,
-  dialogCancelText,
-  shouldShowMacOsKeychainHint,
-  confirmMacOsKeychainHint,
-  handleDialogConfirm,
-  handleDialogCancel,
-} = useCloudKeychainPrompt()
 
 // 计算属性
 const hasConfiguredProviders = computed(() => providers.value.some((p: Provider) => p.is_configured))
@@ -253,10 +229,6 @@ const loadProviderConfig = async (providerId: string) => {
 
 // 保存厂商配置
 const saveProviderConfig = async (providerId: string) => {
-  if (shouldShowMacOsKeychainHint() && !(await confirmMacOsKeychainHint())) {
-    return
-  }
-
   saving[providerId] = true
   try {
     const config = providerConfigs[providerId]

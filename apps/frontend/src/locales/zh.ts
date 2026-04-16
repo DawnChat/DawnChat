@@ -1500,10 +1500,8 @@ export default {
       desc: '配置云端 AI 服务商的 API Key，配置后即可使用对应云端能力。',
       apiKey: 'API Key',
       enabledModels: '启用的模型',
-      securityNote: 'API Key 将安全地存储在本地，不会上传到任何服务器。',
-      keychainPermissionTitle: '允许访问系统钥匙串',
-      keychainPermissionHint: '保存 API Key 时，macOS 会弹出 Keychain 授权窗口。请选择“始终允许”以避免后续重复授权。',
-      keychainPermissionConfirm: '我知道了',
+      securityNote:
+        'API Key 会在本机 DawnChat 数据目录中以加密形式保存，不会上传到我们的服务器。这可避免被随意查看明文，但无法在整机被恶意控制时提供强防护。',
       confirmDelete: '确定要删除 {name} 的配置吗？',
       apiKeyPlaceholder: '请输入 API Key',
       apiKeyPlaceholderConfigured: '已配置（输入新值将覆盖）',

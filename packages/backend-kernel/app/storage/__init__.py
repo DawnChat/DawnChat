@@ -30,6 +30,7 @@ from .manager import StorageManager, storage_manager
 from .models import APIKey, User, UserPreference
 from .secure_storage import (
     KeyringSecureStorage,
+    LocalEncryptedSecureStorage,
     MemorySecureStorage,
     create_secure_storage,
 )
@@ -43,6 +44,7 @@ __all__ = [
     "SQLiteKVStorage",
     "TinyDBKVStorage",
     "KeyringSecureStorage",
+    "LocalEncryptedSecureStorage",
     "MemorySecureStorage",
     "create_secure_storage",
     "SQLModelDBStorage",
