@@ -128,6 +128,7 @@ rm -rf \
   "${DEST_DIR}/assistant-sdk" \
   "${DEST_DIR}/capacitor-plugins-sdk" \
   "${DEST_DIR}/assistant-workspace" \
+  "${DEST_DIR}/auth-bridge" \
   "${DEST_DIR}/.opencode"
 for tid in desktop-starter desktop-hello-world desktop-ai-assistant web-starter-vue web-ai-assistant mobile-starter-ionic mobile-ai-assistant; do
   rm -rf "${DEST_DIR}/official-plugins/${tid}"
