@@ -31,9 +31,10 @@ if [[ -d "$DEST_DIR" ]] && [[ -f "$DEST_DIR/.sidecar-embed-bundled" ]]; then
   exit 0
 fi
 
-read_lock() {
-  python3 - "$LOCK_PATH" <<'PY'
+# shlex.quote + eval avoids CRLF / stray newlines breaking the download URL (curl error 3).
+eval "$(python3 - "$LOCK_PATH" <<'PY'
 import json
+import shlex
 import sys
 from pathlib import Path
 
@@ -43,21 +44,26 @@ repo = str(data.get("repository") or "").strip()
 tag = str(data.get("release_tag") or "").strip()
 asset = str(data.get("asset_name") or "").strip()
 sha = str(data.get("sha256") or "").strip()
-print(repo or "")
-print(tag or "")
-print(asset or "")
-print(sha or "")
+print(f"LOCK_REPO={shlex.quote(repo)}")
+print(f"LOCK_TAG={shlex.quote(tag)}")
+print(f"LOCK_ASSET={shlex.quote(asset)}")
+print(f"LOCK_SHA={shlex.quote(sha)}")
 PY
-}
+)"
 
-mapfile -t LOCK_PARTS < <(read_lock)
-LOCK_REPO="${LOCK_PARTS[0]:-}"
-LOCK_TAG="${LOCK_PARTS[1]:-}"
-LOCK_ASSET="${LOCK_PARTS[2]:-}"
-LOCK_SHA="${LOCK_PARTS[3]:-}"
+_strip_crlf() {
+  local s="$1"
+  s="${s//$'\r'/}"
+  s="${s//$'\n'/}"
+  printf '%s' "$s"
+}
 
 REPO="${DAWNCHAT_PLUGINS_REPOSITORY:-$LOCK_REPO}"
 RELEASE_TAG="${DAWNCHAT_PLUGINS_RELEASE_TAG:-$LOCK_TAG}"
+REPO="$(_strip_crlf "$REPO")"
+RELEASE_TAG="$(_strip_crlf "$RELEASE_TAG")"
+LOCK_ASSET="$(_strip_crlf "${LOCK_ASSET:-}")"
+LOCK_SHA="$(_strip_crlf "${LOCK_SHA:-}")"
 
 if [[ -z "$REPO" ]]; then
   echo "error: lock file missing repository: $LOCK_PATH" >&2
